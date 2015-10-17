@@ -10,6 +10,8 @@ const (
 	contextMSB6
 	contextUTF8
 	contextSigned
+
+	numContextModes
 )
 
 // These LUTs are taken directly from section 7.1 of the RFC.
@@ -71,3 +73,53 @@ var (
 		6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7,
 	}
 )
+
+// These LUTs are dynamically computed from the LUTs in the specification.
+var (
+	contextP1LUT []uint8
+	contextP2LUT []uint8
+)
+
+// initContextLUTs computes LUTs so that context ID computation can be
+// efficiently without any branches.
+func initContextLUTs() {
+	contextP1LUT = make([]uint8, 256*numContextModes)
+	contextP2LUT = make([]uint8, 256*numContextModes)
+	for i := 0; i < 256; i++ {
+		for m := 0; m <= numContextModes; m++ {
+			base := m << 8
+
+			// Operations performed here are specified in RFC section 7.1.
+			switch m {
+			case contextLSB6:
+				contextP1LUT[base+i] = byte(i) & 0x3f
+				contextP2LUT[base+i] = 0
+			case contextMSB6:
+				contextP1LUT[base+i] = byte(i) >> 2
+				contextP2LUT[base+i] = 0
+			case contextUTF8:
+				contextP1LUT[base+i] = contextLUT0[byte(i)]
+				contextP2LUT[base+i] = contextLUT1[byte(i)]
+			case contextSigned:
+				contextP1LUT[base+i] = contextLUT2[byte(i)] << 3
+				contextP2LUT[base+i] = contextLUT2[byte(i)]
+			}
+		}
+	}
+}
+
+// getLitContextID computes the context ID for literals.
+// Bytes p1 and p2 are the last and second-to-last byte, respectively.
+func getLitContextID(p1, p2 byte, mode int) uint8 {
+	base := mode << 8
+	return contextP1LUT[base+int(p1)] | contextP2LUT[base+int(p2)]
+}
+
+// getDistContextID computes the context ID for distances using the copy length.
+func getDistContextID(l int) uint8 {
+	// Operation specified in RFC section 7.2.
+	if l > 4 {
+		return 3
+	}
+	return uint8(l - 2)
+}
