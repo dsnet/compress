@@ -4,7 +4,38 @@
 
 package brotli
 
+import "hash/crc32"
+import "bytes"
 import "testing"
+
+// TestTableCRC tests that the CRC of static tables matches those of the RFC.
+func TestTableCRC(t *testing.T) {
+	// Convert transformLUT to byte array according to Appendix B of RFC.
+	var transformBuf bytes.Buffer
+	for _, t := range transformLUT {
+		transformBuf.WriteString(t.prefix + "\x00")
+		transformBuf.WriteByte(byte(t.transform))
+		transformBuf.WriteString(t.suffix + "\x00")
+	}
+
+	var vectors = []struct {
+		crc uint32
+		buf []byte
+	}{
+		{crc: 0x5136cb04, buf: dictLUT},
+		{crc: 0x8e91efb7, buf: contextLUT0},
+		{crc: 0xd01a32f4, buf: contextLUT1},
+		{crc: 0x0dd7a0d6, buf: contextLUT2},
+		{crc: 0x3d965f81, buf: transformBuf.Bytes()},
+	}
+
+	for i, v := range vectors {
+		crc := crc32.ChecksumIEEE(v.buf)
+		if crc != v.crc {
+			t.Errorf("test %d, CRC-32 mismatch: got %08x, want %08x", i, crc, v.crc)
+		}
+	}
+}
 
 // This package relies on dynamic generation of LUTs to reduce the static
 // binary size. This benchmark attempts to measure the startup cost of init.
