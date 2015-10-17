@@ -4,6 +4,36 @@
 
 package brotli
 
+// These constants are defined in section 8 of the RFC.
+const (
+	minDictLen = 4
+	maxDictLen = 24
+)
+
+// Defined in Appendix A of the RFC as NDBITS.
+// This maps a word length to the log2 of the number of words of that length.
+var dictBitSizes = [maxDictLen + 1]int{
+	0, 0, 0, 0, 10, 10, 11, 11, 10, 10, 10, 10, 10, 9, 9, 8, 7, 7, 8, 7, 7, 6, 6, 5, 5,
+}
+
+// Defined in section 8 of the RFC as NWORDS.
+// This maps a word length to the number of words of that length.
+var dictSizes [maxDictLen + 1]int
+
+// Defined in section 8 of the RFC as DOFFSET.
+// This maps a word length to the starting offset in dictLUT for those words.
+var dictOffsets [maxDictLen + 1]int
+
+// We dynamically compute NWORDS and DOFFSET according to the algorithm
+// provided in section 8 of the RFC.
+func initDictLUTs() {
+	// Sweep from minDictLen to maxDictLen, inclusive.
+	for i := minDictLen; i <= maxDictLen; i++ {
+		dictSizes[i] = 1 << uint(dictBitSizes[i])
+		dictOffsets[i] = dictOffsets[i-1] + (i-1)*dictSizes[i-1]
+	}
+}
+
 // Defined in Appendix A of the RFC as DICT.
 // Static dictionary of words and phrases commonly found in web content.
 var dictLUT = []byte{
