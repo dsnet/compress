@@ -20,7 +20,7 @@ func TestReader(t *testing.T) {
 		outIdx int64  // Expected output offset after reading
 		err    error  // Expected error
 	}{{
-		desc: "empty string",
+		desc: "empty string (truncated)",
 		err:  io.ErrUnexpectedEOF,
 	}, {
 		desc:  "empty last block (WBITS is 16)",
@@ -61,6 +61,16 @@ func TestReader(t *testing.T) {
 		input: "2c0648656c6c6f2c20776f726c642103",
 		inIdx: 16,
 	}, {
+		desc:  "meta data block (truncated)",
+		input: "2c06",
+		inIdx: 2,
+		err:   io.ErrUnexpectedEOF,
+	}, {
+		desc:  "meta data block (use reserved bit)",
+		input: "3c0648656c6c6f2c20776f726c642103",
+		inIdx: 1,
+		err:   ErrCorrupt,
+	}, {
 		desc:  "meta data block (meta padding is non-zero)",
 		input: "2c8648656c6c6f2c20776f726c642103",
 		inIdx: 2,
@@ -83,6 +93,11 @@ func TestReader(t *testing.T) {
 		input:  "c0001048656c6c6f2c20776f726c642103",
 		output: "48656c6c6f2c20776f726c6421",
 		inIdx:  17, outIdx: 13,
+	}, {
+		desc:  "raw data block (truncated)",
+		input: "c00010",
+		inIdx: 3,
+		err:   io.ErrUnexpectedEOF,
 	}, {
 		desc:  "raw data block (raw padding is non-zero)",
 		input: "c000f048656c6c6f2c20776f726c642103",
