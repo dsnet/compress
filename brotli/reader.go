@@ -10,19 +10,14 @@ type Reader struct {
 	InputOffset  int64 // Total number of bytes read from underlying io.Reader
 	OutputOffset int64 // Total number of bytes emitted from Read
 
-	// Input source.
-	rd      bitReader
-	bufBits uint32 // Buffer of unprocessed bits
-	numBits uint   // Number of bits buffered
-
-	// Next step in the decompression, and decompression state.
-	step   func() // Single step of decompression work (can panic)
-	blkLen int    // Uncompressed bytes left to read in meta-block
-	wsize  int    // Sliding window size
-	wdict  []byte // Sliding window history, dynamically grown to match wsize
-	toRead []byte // Uncompressed data ready to be emitted from Read
-	last   bool   // Last block bit detected
-	err    error
+	rd     bitReader // Input source
+	step   func()    // Single step of decompression work (can panic)
+	blkLen int       // Uncompressed bytes left to read in meta-block
+	wsize  int       // Sliding window size
+	wdict  []byte    // Sliding window history, dynamically grown to match wsize
+	toRead []byte    // Uncompressed data ready to be emitted from Read
+	last   bool      // Last block bit detected
+	err    error     // Persistent error
 }
 
 func NewReader(r io.Reader) *Reader {
@@ -43,19 +38,22 @@ func (br *Reader) Read(buf []byte) (int, error) {
 			return 0, br.err
 		}
 
+		// Perform next step in decompression process.
 		func() {
 			defer errRecover(&br.err)
 			br.step()
-			br.InputOffset = br.rd.offset
 		}()
+		br.InputOffset = br.rd.offset
 	}
 }
 
 func (br *Reader) Close() error {
-	if br.err == io.EOF {
+	if br.err == io.EOF || br.err == io.ErrClosedPipe {
 		return nil
 	}
-	return br.err
+	err := br.err
+	br.err = io.ErrClosedPipe
+	return err
 }
 
 func (br *Reader) Reset(r io.Reader) error {
@@ -70,11 +68,11 @@ func (br *Reader) Reset(r io.Reader) error {
 // readStreamHeader reads the Brotli stream header according to RFC section 9.1.
 func (br *Reader) readStreamHeader() {
 	var wbits uint
-	if val := br.rd.ReadBits(1); val == 0 { // Code is "0"
+	if val := br.rd.ReadBits(1); val != 1 { // Code is "0"
 		wbits = 16
 		goto done
 	}
-	if val := br.rd.ReadBits(3); val == 0 { // Code is "1xxx"
+	if val := br.rd.ReadBits(3); val != 0 { // Code is "1xxx"
 		wbits = 18 + uint(val-1)
 		goto done
 	}
@@ -117,23 +115,47 @@ func (br *Reader) readBlockHeader() {
 		}
 	}
 
-	/*
-		read MNIBBLES
-		if MNIBBLES is zero
-			verify reserved bit is zero
-			read MSKIPLEN
-			skip any bits up to the next byte boundary
-			skip MSKIPLEN bytes
-			continue to the next meta-block
-		else
-			read MLEN
-		if not ISLAST
-			read ISUNCOMPRESSED bit
-			if ISUNCOMPRESSED
-				skip any bits up to the next byte boundary
-				copy MLEN bytes of compressed data as literals
-				continue to the next meta-block
-	*/
+	// Read MLEN and MNIBBLES and process meta data.
+	var blkLen int // Valid values are [1..1<<24]
+	if nibbles := br.rd.ReadBits(2) + 4; nibbles == 7 {
+		if reserved := br.rd.ReadBits(1) == 1; reserved {
+			panic(ErrCorrupt)
+		}
+
+		var skipLen int // Valid values are [0..1<<24]
+		if skipBytes := br.rd.ReadBits(2); skipBytes > 0 {
+			skipLen = int(br.rd.ReadBits(skipBytes * 8))
+			if skipBytes > 1 && skipLen>>((skipBytes-1)*8) == 0 {
+				panic(ErrCorrupt) // Shortest representation not used
+			}
+			skipLen++
+		}
+
+		if br.rd.ReadPads() > 0 {
+			panic(ErrCorrupt)
+		}
+		br.rd.ReadFull(make([]byte, skipLen)) // TODO(dsnet): Do anything with this data?
+		br.step = br.readBlockHeader
+		return
+	} else {
+		blkLen = int(br.rd.ReadBits(nibbles * 4))
+		if nibbles > 4 && blkLen>>((nibbles-1)*4) == 0 {
+			panic(ErrCorrupt) // Shortest representation not used
+		}
+		blkLen++
+	}
+	br.blkLen = blkLen
+
+	// Read ISUNCOMPRESSED and process uncompressed data.
+	if !br.last {
+		if uncompressed := br.rd.ReadBits(1) == 1; uncompressed {
+			if br.rd.ReadPads() > 0 {
+				panic(ErrCorrupt)
+			}
+			br.step = br.readRawData
+			return
+		}
+	}
 
 	br.readPrefixCodes()
 }
@@ -179,10 +201,14 @@ func (br *Reader) readRawData() {
 		return
 	}
 
-	/*
-		copy MLEN bytes of compressed data as literals
-	*/
-
+	// TODO(dsnet): Handle sliding windows properly.
+	if len(br.toRead) > 0 {
+		return
+	}
+	buf := make([]byte, br.blkLen)
+	br.rd.ReadFull(buf)
+	br.blkLen -= len(buf)
+	br.toRead = buf
 	br.step = br.readRawData
 }
 

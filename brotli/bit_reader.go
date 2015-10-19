@@ -33,7 +33,33 @@ func (br *bitReader) Reset(r io.Reader) {
 	}
 }
 
-// ReadBits reads nb bits from the underlying reader.
+// ReadFull reads len(buf) bytes into buf.
+// If an IO error occurs, then it panics.
+func (br *bitReader) ReadFull(buf []byte) {
+	if br.numBits%8 > 0 {
+		panic(Error("brotli: unaligned byte read"))
+	}
+
+	for len(buf) > 0 {
+		if br.numBits > 0 {
+			buf[0] = byte(br.numBits)
+			buf = buf[1:]
+		} else {
+			cnt, err := io.ReadFull(br.rd, buf)
+			buf = buf[cnt:]
+			br.offset += int64(cnt)
+			if err != nil {
+				if err == io.EOF {
+					err = io.ErrUnexpectedEOF
+				}
+				panic(err)
+			}
+		}
+	}
+	return
+}
+
+// ReadBits reads nb bits in LSB order from the underlying reader.
 // If an IO error occurs, then it panics.
 func (br *bitReader) ReadBits(nb uint) uint {
 	for br.numBits < nb {
