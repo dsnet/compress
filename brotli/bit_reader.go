@@ -191,10 +191,53 @@ func (br *bitReader) readSimplePrefixCode(pd *prefixDecoder, numSyms int) {
 
 // readComplexPrefixCode reads the prefix code according to RFC section 3.5.
 func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, numSyms, hskip int) {
-	// TODO(dsnet)
+	// Read the code-lengths prefix table.
+	var codeCLensArr [len(codeLens)]prefixCode // Sorted, but may have holes
+	sum := 32
+	for _, sym := range codeLens[hskip:] {
+		clen := uint8(br.ReadSymbol(&decCodeLens))
+		if clen > 0 {
+			codeCLensArr[sym] = prefixCode{sym: sym, len: clen}
+			if sum -= 32 >> clen; sum <= 0 {
+				break
+			}
+		}
+	}
+	codeCLens := codeCLensArr[:0] // Compact the array to have no holes
+	for _, c := range codeCLensArr {
+		if c.len > 0 {
+			codeCLens = append(codeCLens, c)
+		}
+	}
+	br.prefix.Init(codeCLens, true)
+
+	// Use code-lengths table to decode rest of prefix table.
+	var codesArr [maxAlphabetLen]prefixCode
+	codes := codesArr[:0]
+	sum = 32768
+	for sym := 0; sym < numSyms; sym++ {
+		clen := br.ReadSymbol(&br.prefix)
+		_, _, _ = sym, clen, sum
+		// TODO(dsnet)
+	}
+	pd.Init(codes, true)
 }
 
 // Read the context map according to RFC section 7.3.
 func (br *bitReader) ReadContextMap(cm []uint8, numTrees int) {
-	// TODO(dsnet)
+	var maxRLE int // Valid values are [0..16]
+	if hasRLE := br.ReadBits(1) == 1; hasRLE {
+		maxRLE = int(br.ReadBits(4)) + 1
+	}
+
+	br.ReadPrefixCode(&br.prefix, maxRLE+numTrees)
+	for i := range cm {
+		sym := br.ReadSymbol(&br.prefix)
+		_, _ = i, sym
+		// TODO(dsnet)
+	}
+
+	if invert := br.ReadBits(1) == 1; invert {
+		inverseMoveToFront(cm)
+	}
 }
