@@ -14,6 +14,13 @@ const (
 	numContextModes
 )
 
+// These constants are defined in sections 2 and 7.3 of the RFC.
+const (
+	maxTypes          = 256
+	maxLitContextIDs  = 64
+	maxDistContextIDs = 4
+)
+
 // These LUTs are taken directly from section 7.1 of the RFC.
 var (
 	contextLUT0 = []uint8{
@@ -83,9 +90,9 @@ var (
 // initContextLUTs computes LUTs so that context ID computation can be
 // efficiently without any branches.
 func initContextLUTs() {
-	contextP1LUT = make([]uint8, 256*numContextModes)
-	contextP2LUT = make([]uint8, 256*numContextModes)
-	for i := 0; i < 256; i++ {
+	contextP1LUT = make([]uint8, maxTypes*numContextModes)
+	contextP2LUT = make([]uint8, maxTypes*numContextModes)
+	for i := 0; i < maxTypes; i++ {
 		for m := 0; m < numContextModes; m++ {
 			base := m << 8
 
@@ -124,4 +131,11 @@ func getDistContextID(l int) uint8 {
 		return 3
 	}
 	return uint8(l - 2)
+}
+
+// inverseMoveToFront performs the inverse move-to-front transformation as
+// described in RFC section 7.3.
+func inverseMoveToFront(vals []uint8) {
+	// TODO(dsnet)
+	panic("no support")
 }
