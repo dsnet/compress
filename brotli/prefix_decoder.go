@@ -65,8 +65,8 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 		if maxBits < c.len {
 			maxBits = c.len
 		}
-		bitCnts[c.len]++ // Histogram of bit counts
-		symLast = int(c.sym)  // Keep track of last symbol
+		bitCnts[c.len]++     // Histogram of bit counts
+		symLast = int(c.sym) // Keep track of last symbol
 	}
 
 	// Compute the next code for a symbol of a given bit length.
