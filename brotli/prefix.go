@@ -4,6 +4,9 @@
 
 package brotli
 
+import "fmt"
+import "strings"
+
 // TODO(dsnet): Some of this logic is identical to compress/flate.
 // Centralize common logic to compress/internal/prefix.
 
@@ -62,6 +65,34 @@ type prefixCode struct {
 	sym uint16 // The symbol being mapped
 	val uint16 // Value of the prefix code (must be in [0..1<<len])
 	len uint8  // Bit length of the prefix code
+}
+type prefixCodes []prefixCode
+
+// String prints a humanly readable prefix table for debugging purposes.
+func (pc prefixCodes) String() (s string) {
+	// Get maximum symbol and length for right-justified printing.
+	var maxSym, maxLen int
+	for _, c := range pc {
+		if maxSym < int(c.sym) {
+			maxSym = int(c.sym)
+		}
+		if maxLen < int(c.len) {
+			maxLen = int(c.len)
+		}
+	}
+
+	var ss []string
+	ss = append(ss, "{\n")
+	maxDig := len(fmt.Sprintf("%d", maxSym))
+	for _, c := range pc {
+		ss = append(ss, fmt.Sprintf(
+			fmt.Sprintf("\t%%%dd:%s%%0%db,\n",
+				maxDig, strings.Repeat(" ", 2+maxLen-int(c.len)), c.len),
+			c.sym, c.val,
+		))
+	}
+	ss = append(ss, "}\n")
+	return strings.Join(ss, "")
 }
 
 func initPrefixLUTs() {

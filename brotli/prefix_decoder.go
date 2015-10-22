@@ -4,6 +4,8 @@
 
 package brotli
 
+import "fmt"
+import "strings"
 import "math"
 
 // TODO(dsnet): Almost all of this logic is identical to compress/flate.
@@ -150,6 +152,40 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 			}
 		}
 	}
+}
+
+// String prints a humanly readable prefix table for debugging purposes.
+func (pd prefixDecoder) String() string {
+	var ss []string
+	ss = append(ss, "{\n")
+	if len(pd.chunks) > 0 {
+		ss = append(ss, "\tchunks: {\n")
+		for i, c := range pd.chunks {
+			l := "sym"
+			if uint(c&prefixCountMask) > uint(pd.chunkBits) {
+				l = "idx"
+			}
+			ss = append(ss, fmt.Sprintf(
+				fmt.Sprintf("\t\t%%0%db:  {%%s: %%3d, len: %%2d},\n", pd.chunkBits),
+				i, l, c>>prefixCountBits, c&prefixCountMask,
+			))
+		}
+		ss = append(ss, "\t},\n")
+
+		for j, links := range pd.links {
+			ss = append(ss, fmt.Sprintf("\tlinks[%d]: {\n", j))
+			linkBits := len(fmt.Sprintf("%b", pd.linkMask))
+			for i, c := range links {
+				ss = append(ss, fmt.Sprintf(
+					fmt.Sprintf("\t\t%%0%db:  {sym: %%3d, len: %%2d},\n", linkBits),
+					i, c>>prefixCountBits, c&prefixCountMask,
+				))
+			}
+			ss = append(ss, "\t},\n")
+		}
+	}
+	ss = append(ss, "}\n")
+	return strings.Join(ss, "")
 }
 
 // checkPrefixes reports whether any codes have overlapping prefixes.

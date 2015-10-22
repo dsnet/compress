@@ -61,5 +61,11 @@ func initLUTs() {
 	initDictLUTs()
 }
 
-func init() { initLUTs() }
+func init() {
+	initLUTs()
 
+	const debugPrint = false
+	if debugPrint {
+		printLUTs()
+	}
+}
