@@ -61,7 +61,7 @@ func (br *Reader) Reset(r io.Reader) error {
 		step:  br.readStreamHeader,
 		wdict: br.wdict[:0],
 	}
-	br.rd.Reset(r)
+	br.rd.Init(r)
 	return nil
 }
 
@@ -131,10 +131,17 @@ func (br *Reader) readBlockHeader() {
 			skipLen++
 		}
 
+		// TODO(dsnet): Should we do something with this meta data?
+		// TODO(dsnet): Avoid allocating a large buffer to read data.
 		if br.rd.ReadPads() > 0 {
 			panic(ErrCorrupt)
 		}
-		br.rd.ReadFull(make([]byte, skipLen)) // TODO(dsnet): Do anything with this data?
+		if _, err := io.ReadFull(&br.rd, make([]byte, skipLen)); err != nil {
+			if err == io.EOF {
+				err = io.ErrUnexpectedEOF
+			}
+			panic(err)
+		}
 		br.step = br.readBlockHeader
 		return
 	} else {
@@ -202,13 +209,20 @@ func (br *Reader) readRawData() {
 	}
 
 	// TODO(dsnet): Handle sliding windows properly.
+	// TODO(dsnet): Avoid allocating a large buffer to read data.
 	if len(br.toRead) > 0 {
 		return
 	}
 	buf := make([]byte, br.blkLen)
-	br.rd.ReadFull(buf)
-	br.blkLen -= len(buf)
-	br.toRead = buf
+	cnt, err := br.rd.Read(buf)
+	if err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		panic(err)
+	}
+	br.toRead = buf[:cnt]
+	br.blkLen -= cnt
 	br.step = br.readRawData
 }
 

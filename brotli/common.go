@@ -54,6 +54,14 @@ func reverseBits(v uint16, n uint) uint16 {
 	return reverseUint16(v << uint8(16-n))
 }
 
+// neededBits computes the minimum number of bits needed to encode n elements.
+func neededBits(x uint16) (n uint) {
+	for x -= 1; x > 0; x >>= 1 {
+		n++
+	}
+	return
+}
+
 func initLUTs() {
 	initCommonLUTs()
 	initPrefixLUTs()
