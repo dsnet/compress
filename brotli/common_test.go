@@ -42,6 +42,7 @@ func TestTableCRC(t *testing.T) {
 // This benchmark is not thread-safe; so do not run it in parallel with other
 // tests or benchmarks!
 func BenchmarkInit(b *testing.B) {
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		initLUTs()
 	}
