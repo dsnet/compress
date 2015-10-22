@@ -123,3 +123,78 @@ func (br *bitReader) ReadSymbol(pd *prefixDecoder) uint {
 		}
 	}
 }
+
+// ReadPrefixCode reads the prefix definition from the stream and initializes
+// the provided prefixDecoder.
+func (br *bitReader) ReadPrefixCode(pd *prefixDecoder, numSyms int) {
+	hskip := int(br.ReadBits(2))
+	if hskip == 1 {
+		br.readSimplePrefixCode(pd, numSyms)
+	} else {
+		br.readComplexPrefixCode(pd, numSyms, hskip)
+	}
+}
+
+// readSimplePrefixCode reads the prefix code according to RFC section 3.4.
+func (br *bitReader) readSimplePrefixCode(pd *prefixDecoder, numSyms int) {
+	// TODO(dsnet): Test the following edge cases:
+	// * Re-used symbol
+	// * Out-of-order symbols
+	// * Excessively large symbol
+	// * Test each of the simple trees
+	var codes [4]prefixCode
+	nsym := int(br.ReadBits(2)) + 1
+	clen := neededBits(uint16(numSyms))
+	for i := 0; i < nsym; i++ {
+		codes[i].sym = uint16(br.ReadBits(clen))
+	}
+
+	var copyLens = func(lens []uint8) {
+		for i := 0; i < nsym; i++ {
+			codes[i].len = lens[i]
+		}
+	}
+	var compareSwap = func(i, j int) {
+		if codes[i].sym > codes[j].sym {
+			codes[i], codes[j] = codes[j], codes[i]
+		}
+	}
+
+	switch nsym {
+	case 1:
+		copyLens(simpleLens1[:])
+	case 2:
+		copyLens(simpleLens2[:])
+		compareSwap(0, 1)
+	case 3:
+		copyLens(simpleLens3[:])
+		compareSwap(0, 1)
+		compareSwap(1, 2)
+		compareSwap(0, 2)
+	case 4:
+		if tsel := br.ReadBits(1) == 1; !tsel {
+			copyLens(simpleLens4a[:])
+		} else {
+			copyLens(simpleLens4b[:])
+		}
+		compareSwap(0, 1)
+		compareSwap(2, 3)
+		compareSwap(0, 2)
+		compareSwap(1, 3)
+		compareSwap(1, 2)
+	}
+	if int(codes[nsym-1].sym) >= numSyms {
+		panic(ErrCorrupt) // Symbol goes beyond range of alphabet
+	}
+	pd.Init(codes[:nsym], true)
+}
+
+// readComplexPrefixCode reads the prefix code according to RFC section 3.5.
+func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, numSyms, hskip int) {
+	// TODO(dsnet)
+}
+
+// Read the context map according to RFC section 7.3.
+func (br *bitReader) ReadContextMap(cm []uint8, numTrees int) {
+	// TODO(dsnet)
+}
