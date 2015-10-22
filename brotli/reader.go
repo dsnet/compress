@@ -6,18 +6,37 @@ package brotli
 
 import "io"
 
+type prefixBlocks struct {
+	ntypes   int             // Total number of types
+	btype    int             // The current block type
+	blen     int             // The count for the current block type
+	ptype    prefixDecoder   // Prefix decoder for btype
+	plen     prefixDecoder   // Prefix decoder for blen
+	prefixes []prefixDecoder // Prefix decoders for each block type
+}
+
 type Reader struct {
 	InputOffset  int64 // Total number of bytes read from underlying io.Reader
 	OutputOffset int64 // Total number of bytes emitted from Read
 
 	rd     bitReader // Input source
 	step   func()    // Single step of decompression work (can panic)
-	blkLen int       // Uncompressed bytes left to read in meta-block
-	wsize  int       // Sliding window size
-	wdict  []byte    // Sliding window history, dynamically grown to match wsize
 	toRead []byte    // Uncompressed data ready to be emitted from Read
+	blkLen int       // Uncompressed bytes left to read in meta-block
+	insLen int       // Bytes left to insert in current command
+	cpyLen int       // Bytes left to copy in current command
 	last   bool      // Last block bit detected
 	err    error     // Persistent error
+
+	dict     dictDecoder  // Dynamic sliding dictionary
+	insBlks  prefixBlocks // Insert-and-copy prefix blocks
+	litBlks  prefixBlocks // Literal prefix blocks
+	distBlks prefixBlocks // Distance prefix blocks
+	cmodes   []uint8      // Literal context modes
+	litMap   []uint8      // Literal context map
+	distMap  []uint8      // Distance context map
+	npostfix uint8        // Postfix bits used in distance decoding
+	ndirect  uint8        // Number of direct distance codes
 }
 
 func NewReader(r io.Reader) *Reader {
@@ -49,17 +68,17 @@ func (br *Reader) Read(buf []byte) (int, error) {
 
 func (br *Reader) Close() error {
 	if br.err == io.EOF || br.err == io.ErrClosedPipe {
+		br.toRead = nil // Make sure future reads fail
+		br.err = io.ErrClosedPipe
 		return nil
 	}
-	err := br.err
-	br.err = io.ErrClosedPipe
-	return err
+	return br.err // Return the persistent error
 }
 
 func (br *Reader) Reset(r io.Reader) error {
 	*br = Reader{
-		step:  br.readStreamHeader,
-		wdict: br.wdict[:0],
+		step: br.readStreamHeader,
+		dict: br.dict,
 	}
 	br.rd.Init(r)
 	return nil
@@ -67,32 +86,11 @@ func (br *Reader) Reset(r io.Reader) error {
 
 // readStreamHeader reads the Brotli stream header according to RFC section 9.1.
 func (br *Reader) readStreamHeader() {
-	var wbits uint
-	if val := br.rd.ReadBits(1); val != 1 { // Code is "0"
-		wbits = 16
-		goto done
+	wbits := uint(br.rd.ReadSymbol(&decWinBits))
+	if wbits == 0 {
+		panic(ErrCorrupt)
 	}
-	if val := br.rd.ReadBits(3); val != 0 { // Code is "1xxx"
-		wbits = 18 + uint(val-1)
-		goto done
-	}
-	if val := br.rd.ReadBits(3); val != 1 { // Code is "1000xxx"
-		if val == 0 {
-			val = 9
-		}
-		wbits = 10 + uint(val-2)
-		goto done
-	}
-	panic(ErrCorrupt) // Code is "1000100", which is invalid
-
-done:
-	// Regardless of what wsize claims, start with a small dictionary to avoid
-	// denial-of-service attacks with large memory allocation.
-	br.wsize = (1 << wbits) - 16
-	if br.wdict == nil {
-		br.wdict = make([]byte, 0, 1024)
-	}
-	br.wdict = br.wdict[:0]
+	br.dict.Init(wbits)
 	br.step = br.readBlockHeader
 }
 
@@ -169,41 +167,76 @@ func (br *Reader) readBlockHeader() {
 
 // readPrefixCodes reads the prefix codes according to RFC section 9.2.
 func (br *Reader) readPrefixCodes() {
-	/*
-		loop for each three block categories (i = L, I, D)
-			read NBLTYPESi
-			if NBLTYPESi >= 2
-				read prefix code for block types, HTREE_BTYPE_i
-				read prefix code for block counts, HTREE_BLEN_i
-				read block count, BLEN_i
-				set block type, BTYPE_i to 0
-				initialize second-to-last and last block types to 0 and 1
-			else
-				set block type, BTYPE_i to 0
-				set block count, BLEN_i to 268435456
-		read NPOSTFIX and NDIRECT
-		read array of literal context modes, CMODE[]
-		read NTREESL
-		if NTREESL >= 2
-			read literal context map, CMAPL[]
-		else
-			fill CMAPL[] with zeros
-		read NTREESD
-		if NTREESD >= 2
-			read distance context map, CMAPD[]
-		else
-			fill CMAPD[] with zeros
-		read array of prefix codes for literals, HTREEL[]
-		read array of prefix codes for insert-and-copy, HTREEI[]
-		read array of prefix codes for distances, HTREED[]
-	*/
+	// Read block types for literal, insert-and-copy, and distance blocks.
+	for _, pb := range []*prefixBlocks{&br.litBlks, &br.insBlks, &br.distBlks} {
+		pb.btype = 0
+		pb.blen = 1 << 28 // Large enough value that will stay positive
+
+		pb.ntypes = int(br.rd.ReadSymbol(&decCounts))
+		if pb.ntypes >= 2 {
+			br.rd.ReadPrefixCode(&pb.ptype, pb.ntypes+2)
+			br.rd.ReadPrefixCode(&pb.plen, numCntSyms)
+			sym := int(br.rd.ReadSymbol(&pb.plen))
+			_ = sym
+			// TODO(dsnet): Read BLEN_x
+			// TODO(dsnet): Initialize second-to-last and last block types.
+		}
+	}
+
+	// Read NPOSTFIX and NDIRECT.
+	npostfix := br.rd.ReadBits(2)            // Valid values are [0..3]
+	ndirect := br.rd.ReadBits(4) << npostfix // Valid values are [0..120]
+	br.npostfix, br.ndirect = uint8(npostfix), uint8(ndirect)
+	numDistSyms := int(16 + ndirect + (48 << npostfix))
+
+	// Read CMODE, the literal context modes.
+	br.cmodes = extendUint8s(br.cmodes, br.litBlks.ntypes)
+	for i := range br.cmodes {
+		br.cmodes[i] = uint8(br.rd.ReadBits(2))
+	}
+
+	// Read CMAPL, the literal context map.
+	numLitTrees := int(br.rd.ReadSymbol(&decCounts))
+	br.litMap = extendUint8s(br.litMap, maxLitContextIDs*br.litBlks.ntypes)
+	if numLitTrees >= 2 {
+		br.rd.ReadContextMap(br.litMap, numLitTrees)
+	} else {
+		for i := range br.litMap {
+			br.litMap[i] = 0
+		}
+	}
+
+	// Read CMAPD, the distance context map.
+	numDistTrees := int(br.rd.ReadSymbol(&decCounts))
+	br.distMap = extendUint8s(br.distMap, maxDistContextIDs*br.distBlks.ntypes)
+	if numDistTrees >= 2 {
+		br.rd.ReadContextMap(br.distMap, numDistTrees)
+	} else {
+		for i := range br.distMap {
+			br.distMap[i] = 0
+		}
+	}
+
+	// Read HTREEL[], HTREEI[], and HTREED[], the arrays of prefix codes.
+	br.litBlks.prefixes = extendDecoders(br.litBlks.prefixes, numLitTrees)
+	for i := range br.litBlks.prefixes {
+		br.rd.ReadPrefixCode(&br.litBlks.prefixes[i], numLitSyms)
+	}
+	br.insBlks.prefixes = extendDecoders(br.insBlks.prefixes, br.insBlks.ntypes)
+	for i := range br.insBlks.prefixes {
+		br.rd.ReadPrefixCode(&br.insBlks.prefixes[i], numInsSyms)
+	}
+	br.distBlks.prefixes = extendDecoders(br.distBlks.prefixes, numDistTrees)
+	for i := range br.distBlks.prefixes {
+		br.rd.ReadPrefixCode(&br.distBlks.prefixes[i], numDistSyms)
+	}
 
 	br.step = br.readBlockData
 }
 
 // readRawData reads raw data according to RFC section 9.2.
 func (br *Reader) readRawData() {
-	if br.blkLen <= 0 {
+	if br.blkLen == 0 {
 		br.step = br.readBlockHeader
 		return
 	}
@@ -226,9 +259,9 @@ func (br *Reader) readRawData() {
 	br.step = br.readRawData
 }
 
-// readBlockData reads block data according to RFC section 9.2.
+// readBlockData reads block data according to RFC section 9.3.
 func (br *Reader) readBlockData() {
-	if br.blkLen <= 0 { // TODO(dsnet): Can this be negative?
+	if br.blkLen == 0 {
 		br.step = br.readBlockHeader
 		return
 	}
@@ -270,6 +303,25 @@ func (br *Reader) readBlockData() {
 			the word as directed, and copy the result to the
 			uncompressed stream
 	*/
+	if br.blkLen < 0 {
+		panic(ErrCorrupt)
+	}
 
 	br.step = br.readBlockData
+}
+
+// extendUint8s returns a slice with length n, reusing s if possible.
+func extendUint8s(s []uint8, n int) []uint8 {
+	if cap(s) >= n {
+		return s[:n]
+	}
+	return append(s[:cap(s)], make([]uint8, n-cap(s))...)
+}
+
+// extendDecoders returns a slice with length n, reusing s if possible.
+func extendDecoders(s []prefixDecoder, n int) []prefixDecoder {
+	if cap(s) >= n {
+		return s[:n]
+	}
+	return append(s[:cap(s)], make([]prefixDecoder, n-cap(s))...)
 }
