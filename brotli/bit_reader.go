@@ -24,10 +24,11 @@ type bitReader struct {
 }
 
 func (br *bitReader) Init(r io.Reader) {
+	*br = bitReader{prefix: br.prefix}
 	if rr, ok := r.(byteReader); ok {
-		*br = bitReader{rd: rr}
+		br.rd = rr
 	} else {
-		*br = bitReader{rd: bufio.NewReader(r)}
+		br.rd = bufio.NewReader(r)
 	}
 }
 
@@ -124,19 +125,28 @@ func (br *bitReader) ReadSymbol(pd *prefixDecoder) uint {
 	}
 }
 
+// ReadOffset reads an offset value using the provided rangesCodes indexed by
+// the given symbol.
+func (br *bitReader) ReadOffset(sym uint, rcs []rangeCode) uint {
+	rc := rcs[sym]
+	return uint(rc.base) + br.ReadBits(uint(rc.bits))
+}
+
 // ReadPrefixCode reads the prefix definition from the stream and initializes
-// the provided prefixDecoder.
-func (br *bitReader) ReadPrefixCode(pd *prefixDecoder, numSyms int) {
-	hskip := int(br.ReadBits(2))
+// the provided prefixDecoder. The value maxSyms is the alphabet size of the
+// prefix code being generated. The actual number of representable symbols
+// will be between 1 and maxSyms, inclusively.
+func (br *bitReader) ReadPrefixCode(pd *prefixDecoder, maxSyms uint) {
+	hskip := br.ReadBits(2)
 	if hskip == 1 {
-		br.readSimplePrefixCode(pd, numSyms)
+		br.readSimplePrefixCode(pd, maxSyms)
 	} else {
-		br.readComplexPrefixCode(pd, numSyms, hskip)
+		br.readComplexPrefixCode(pd, maxSyms, hskip)
 	}
 }
 
 // readSimplePrefixCode reads the prefix code according to RFC section 3.4.
-func (br *bitReader) readSimplePrefixCode(pd *prefixDecoder, numSyms int) {
+func (br *bitReader) readSimplePrefixCode(pd *prefixDecoder, maxSyms uint) {
 	// TODO(dsnet): Test the following edge cases:
 	// * Re-used symbol
 	// * Out-of-order symbols
@@ -144,7 +154,7 @@ func (br *bitReader) readSimplePrefixCode(pd *prefixDecoder, numSyms int) {
 	// * Test each of the simple trees
 	var codes [4]prefixCode
 	nsym := int(br.ReadBits(2)) + 1
-	clen := neededBits(uint16(numSyms))
+	clen := neededBits(uint16(maxSyms))
 	for i := 0; i < nsym; i++ {
 		codes[i].sym = uint16(br.ReadBits(clen))
 	}
@@ -169,8 +179,8 @@ func (br *bitReader) readSimplePrefixCode(pd *prefixDecoder, numSyms int) {
 	case 3:
 		copyLens(simpleLens3[:])
 		compareSwap(0, 1)
-		compareSwap(1, 2)
 		compareSwap(0, 2)
+		compareSwap(1, 2)
 	case 4:
 		if tsel := br.ReadBits(1) == 1; !tsel {
 			copyLens(simpleLens4a[:])
@@ -183,21 +193,29 @@ func (br *bitReader) readSimplePrefixCode(pd *prefixDecoder, numSyms int) {
 		compareSwap(1, 3)
 		compareSwap(1, 2)
 	}
-	if int(codes[nsym-1].sym) >= numSyms {
+	if uint(codes[nsym-1].sym) >= maxSyms {
 		panic(ErrCorrupt) // Symbol goes beyond range of alphabet
 	}
-	pd.Init(codes[:nsym], true)
+	pd.Init(codes[:nsym], true) // Must have 1..4 symbols
 }
 
 // readComplexPrefixCode reads the prefix code according to RFC section 3.5.
-func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, numSyms, hskip int) {
+func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, maxSyms, hskip uint) {
+	// TODO(dsnet): Test the following edge cases:
+	// * Integer overflow of repeaters
+	// * Over-subscribed and under-subscribed trees
+	// * Zero and one symbol trees
+	// * Repeat of clen 0
+	// * Test sequence: 4, 16+3, 4, 16+2
+	// * Test sequence: 0, 17+2, 0, 17+3
+
 	// Read the code-lengths prefix table.
 	var codeCLensArr [len(complexLens)]prefixCode // Sorted, but may have holes
 	sum := 32
 	for _, sym := range complexLens[hskip:] {
-		clen := uint8(br.ReadSymbol(&decCLens))
+		clen := br.ReadSymbol(&decCLens)
 		if clen > 0 {
-			codeCLensArr[sym] = prefixCode{sym: uint16(sym), len: clen}
+			codeCLensArr[sym] = prefixCode{sym: uint16(sym), len: uint8(clen)}
 			if sum -= 32 >> clen; sum <= 0 {
 				break
 			}
@@ -209,32 +227,90 @@ func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, numSyms, hskip int
 			codeCLens = append(codeCLens, c)
 		}
 	}
-	br.prefix.Init(codeCLens, true)
+	if len(codeCLens) < 1 {
+		panic(ErrCorrupt)
+	}
+	br.prefix.Init(codeCLens, true) // Must have 1..len(complexLens) symbols
 
 	// Use code-lengths table to decode rest of prefix table.
 	var codesArr [maxNumAlphabetSyms]prefixCode
+	var sym, repSymLast, repCntLast, clenLast uint = 0, 0, 0, 8
 	codes := codesArr[:0]
-	sum = 32768
-	for sym := 0; sym < numSyms; sym++ {
+	for sym, sum = 0, 32768; sym < maxSyms && sum > 0; {
 		clen := br.ReadSymbol(&br.prefix)
-		_, _, _ = sym, clen, sum
-		// TODO(dsnet)
+		if clen < 16 {
+			// Literal bit-length symbol used.
+			if clen > 0 {
+				codes = append(codes, prefixCode{sym: uint16(sym), len: uint8(clen)})
+				clenLast = clen
+				sum -= 32768 >> clen
+			}
+			repSymLast = 0 // Reset last repeater symbol
+			sym++
+		} else {
+			// Repeater symbol used.
+			//	16: Repeat previous non-zero code-length
+			//	17: Repeat code length of zero
+
+			repSym := clen // Rename clen for better clarity
+			if repSym != repSymLast {
+				repCntLast = 0
+				repSymLast = repSym
+			}
+
+			nb := repSym - 14          // 2..3 bits
+			rep := br.ReadBits(nb) + 3 // 3..6 or 3..10
+			if repCntLast > 0 {
+				rep += (repCntLast - 2) << nb // Modify previous repeat count
+			}
+			repDiff := rep - repCntLast // Always positive
+			repCntLast = rep
+
+			if repSym == 16 {
+				clen := clenLast
+				for symEnd := sym + repDiff; sym < symEnd; sym++ {
+					codes = append(codes, prefixCode{sym: uint16(sym), len: uint8(clen)})
+				}
+				sum -= int(repDiff) * (32768 >> clen)
+			} else {
+				sym += repDiff
+			}
+		}
 	}
-	pd.Init(codes, true)
+	if len(codes) < 2 || sym > maxSyms {
+		panic(ErrCorrupt)
+	}
+	pd.Init(codes, true) // Must have 2..maxSyms symbols
 }
 
-// Read the context map according to RFC section 7.3.
-func (br *bitReader) ReadContextMap(cm []uint8, numTrees int) {
-	var maxRLE int // Valid values are [0..16]
-	if hasRLE := br.ReadBits(1) == 1; hasRLE {
-		maxRLE = int(br.ReadBits(4)) + 1
-	}
+// ReadContextMap reads the context map according to RFC section 7.3.
+func (br *bitReader) ReadContextMap(cm []uint8, numTrees uint) {
+	// TODO(dsnet): Test the following edge cases:
+	// * Test with largest and smallest MAXRLE sizes
+	// * Test with with very large MAXRLE value
+	// * Test inverseMoveToFront
 
+	maxRLE := br.ReadSymbol(&decMaxRLE)
 	br.ReadPrefixCode(&br.prefix, maxRLE+numTrees)
-	for i := range cm {
+	for i := 0; i < len(cm); {
 		sym := br.ReadSymbol(&br.prefix)
-		_, _ = i, sym
-		// TODO(dsnet)
+		if sym == 0 || sym > maxRLE {
+			// Single non-zero value.
+			if sym > 0 {
+				sym -= maxRLE
+			}
+			cm[i] = uint8(sym)
+			i++
+		} else {
+			// Repeated zeros.
+			n := int(br.ReadOffset(sym-1, maxRLERanges))
+			if i+n > len(cm) {
+				panic(ErrCorrupt)
+			}
+			for j := i + n; i < j; i++ {
+				cm[i] = 0
+			}
+		}
 	}
 
 	if invert := br.ReadBits(1) == 1; invert {

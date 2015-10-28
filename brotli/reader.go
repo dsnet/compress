@@ -174,8 +174,8 @@ func (br *Reader) readPrefixCodes() {
 
 		pb.ntypes = int(br.rd.ReadSymbol(&decCounts))
 		if pb.ntypes >= 2 {
-			br.rd.ReadPrefixCode(&pb.ptype, pb.ntypes+2)
-			br.rd.ReadPrefixCode(&pb.plen, numBlkCntSyms)
+			br.rd.ReadPrefixCode(&pb.ptype, uint(pb.ntypes)+2)
+			br.rd.ReadPrefixCode(&pb.plen, uint(numBlkCntSyms))
 			sym := int(br.rd.ReadSymbol(&pb.plen))
 			_ = sym
 			// TODO(dsnet): Read BLEN_x
@@ -187,7 +187,7 @@ func (br *Reader) readPrefixCodes() {
 	npostfix := br.rd.ReadBits(2)            // Valid values are [0..3]
 	ndirect := br.rd.ReadBits(4) << npostfix // Valid values are [0..120]
 	br.npostfix, br.ndirect = uint8(npostfix), uint8(ndirect)
-	numDistSyms := int(16 + ndirect + (48 << npostfix))
+	numDistSyms := uint(16 + ndirect + (48 << npostfix))
 
 	// Read CMODE, the literal context modes.
 	br.cmodes = extendUint8s(br.cmodes, br.litBlks.ntypes)
@@ -199,7 +199,7 @@ func (br *Reader) readPrefixCodes() {
 	numLitTrees := int(br.rd.ReadSymbol(&decCounts))
 	br.litMap = extendUint8s(br.litMap, maxLitContextIDs*br.litBlks.ntypes)
 	if numLitTrees >= 2 {
-		br.rd.ReadContextMap(br.litMap, numLitTrees)
+		br.rd.ReadContextMap(br.litMap, uint(numLitTrees))
 	} else {
 		for i := range br.litMap {
 			br.litMap[i] = 0
@@ -210,7 +210,7 @@ func (br *Reader) readPrefixCodes() {
 	numDistTrees := int(br.rd.ReadSymbol(&decCounts))
 	br.distMap = extendUint8s(br.distMap, maxDistContextIDs*br.distBlks.ntypes)
 	if numDistTrees >= 2 {
-		br.rd.ReadContextMap(br.distMap, numDistTrees)
+		br.rd.ReadContextMap(br.distMap, uint(numDistTrees))
 	} else {
 		for i := range br.distMap {
 			br.distMap[i] = 0
