@@ -9,9 +9,36 @@ import "math"
 // TODO(dsnet): Almost all of this logic is identical to compress/flate.
 // Centralize common logic to compress/internal/prefix.
 
+// The algorithm used to decode variable length codes is based on the lookup
+// method in zlib. If the code is less-than-or-equal to prefixMaxChunkBits,
+// then the symbol can be decoded using a single lookup into the chunks table.
+// Otherwise, the links table will be used for a second level lookup.
+//
+// The chunks slice is keyed by the contents of the bit buffer ANDed with
+// the chunkMask to avoid a out-of-bounds lookup. The value of chunks is a tuple
+// that is decoded as follow:
+//
+//	var length = chunks[bitBuffer&chunkMask] & prefixCountMask
+//	var symbol = chunks[bitBuffer&chunkMask] >> prefixCountBits
+//
+// If the decoded length is larger than chunkBits, then an overflow link table
+// must be used for further decoding. In this case, the symbol is actually the
+// index into the links tables. The second-level links table returned is
+// processed in the same way as the chunks table.
+//
+//	if length > chunkBits {
+//		var index = symbol // Previous symbol is index into links tables
+//		length = links[index][bitBuffer>>chunkBits & linkMask] & prefixCountMask
+//		symbol = links[index][bitBuffer>>chunkBits & linkMask] >> prefixCountBits
+//	}
+//
+// See the following:
+//	http://www.gzip.org/algorithm.txt
+
 const (
-	prefixCountBits  = 4
-	prefixSymbolBits = 12
+	// These values add up to the width of a uint16 integer.
+	prefixCountBits  = 4  // Number of bits to store the bit-width of the code
+	prefixSymbolBits = 12 // Number of bits to store the symbol value
 
 	prefixCountMask    = (1 << prefixCountBits) - 1
 	prefixMaxChunkBits = 9 // This can be tuned for better performance
@@ -43,7 +70,7 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 			*pd = prefixDecoder{chunks: pd.chunks[:0], links: pd.links[:0], numSyms: 0}
 		case len(codes) == 1: // Single code tree (bit-width of zero)
 			*pd = prefixDecoder{
-				chunks:  append(pd.chunks[:0], codes[0].sym<<prefixCountBits),
+				chunks:  append(pd.chunks[:0], codes[0].sym<<prefixCountBits|0),
 				links:   pd.links[:0],
 				numSyms: 1,
 			}
@@ -56,8 +83,8 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 	var minBits, maxBits uint8 = math.MaxUint8, 0
 	symLast := -1
 	for _, c := range codes {
-		if c.len == 0 || int(c.sym) < symLast {
-			panic(ErrCorrupt)
+		if int(c.sym) <= symLast {
+			panic(ErrCorrupt) // Non-unique or non-monotonically increasing
 		}
 		if minBits > c.len {
 			minBits = c.len
@@ -67,6 +94,12 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 		}
 		bitCnts[c.len]++     // Histogram of bit counts
 		symLast = int(c.sym) // Keep track of last symbol
+	}
+	if maxBits >= 1<<prefixCountBits || minBits == 0 {
+		panic(ErrCorrupt) // Bit-width is too long or too short
+	}
+	if symLast >= 1<<prefixSymbolBits {
+		panic(ErrCorrupt) // Alphabet cardinality too large
 	}
 
 	// Compute the next code for a symbol of a given bit length.
@@ -79,9 +112,6 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 	}
 	if code != 1<<maxBits {
 		panic(ErrCorrupt) // Tree is under or over subscribed
-	}
-	if !assignCodes && !checkPrefixes(codes) {
-		panic(ErrCorrupt) // Some prefixes overlap with each other
 	}
 
 	// Allocate chunks table if necessary.
@@ -131,30 +161,37 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 	}
 
 	// Fill out chunks and links tables with values.
-	for _, c := range codes {
+	for i, c := range codes {
 		chunk := c.sym<<prefixCountBits | uint16(c.len)
 		if assignCodes {
-			c.val = reverseBits(uint16(nextCodes[c.len]), uint(c.len))
+			codes[i].val = reverseBits(uint16(nextCodes[c.len]), uint(c.len))
 			nextCodes[c.len]++
+			c = codes[i]
 		}
 
 		if c.len <= pd.chunkBits {
 			skip := 1 << uint(c.len)
-			for i := int(c.val); i < len(pd.chunks); i += skip {
-				pd.chunks[i] = chunk
+			for j := int(c.val); j < len(pd.chunks); j += skip {
+				pd.chunks[j] = chunk
 			}
 		} else {
 			linkIdx := pd.chunks[c.val&pd.chunkMask] >> prefixCountBits
 			links := pd.links[linkIdx]
 			skip := 1 << uint(c.len-pd.chunkBits)
-			for i := int(c.val >> pd.chunkBits); i < len(links); i += skip {
-				links[i] = chunk
+			for j := int(c.val >> pd.chunkBits); j < len(links); j += skip {
+				links[j] = chunk
 			}
 		}
+	}
+
+	const sanity = false
+	if sanity && !checkPrefixes(codes) {
+		panic(ErrCorrupt) // The codes do not form a valid prefix tree.
 	}
 }
 
 // checkPrefixes reports whether any codes have overlapping prefixes.
+// This check is expensive and runs in O(n^2) time!
 func checkPrefixes(codes []prefixCode) bool {
 	for i, c1 := range codes {
 		for j, c2 := range codes {
@@ -167,7 +204,6 @@ func checkPrefixes(codes []prefixCode) bool {
 	return true
 }
 
-// extendUint16s returns a slice with length n, reusing s if possible.
 func extendUint16s(s []uint16, n int) []uint16 {
 	if cap(s) >= n {
 		return s[:n]
@@ -175,7 +211,6 @@ func extendUint16s(s []uint16, n int) []uint16 {
 	return append(s[:cap(s)], make([]uint16, n-cap(s))...)
 }
 
-// extendSliceUints16s returns a slice with length n, reusing s if possible.
 func extendSliceUints16s(s [][]uint16, n int) [][]uint16 {
 	if cap(s) >= n {
 		return s[:n]
