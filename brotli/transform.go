@@ -29,6 +29,10 @@ const (
 	transformOmitLast9
 )
 
+// Maximum size of a word after transformation.
+// The largest combination of prefix and suffix occurs at index 73.
+const maxWordSize = maxDictLen + 13
+
 // This table is defined in Appendix B of the RFC.
 var transformLUT = []struct {
 	prefix    string
@@ -156,4 +160,64 @@ var transformLUT = []struct {
 	{" ", transformUppercaseFirst, "=\""},
 	{" ", transformUppercaseAll, "='"},
 	{" ", transformUppercaseFirst, "='"},
+}
+
+// transformWord transform the input word and places the result in buf according
+// to the transform primitives defined in RFC section 8.
+// The length of word must be <= maxDictLen.
+// The length of buf must be >= maxWordSize.
+func transformWord(buf, word []byte, id int) (cnt int) {
+	transform := transformLUT[id]
+	cnt = copy(buf, transform.prefix)
+	switch {
+	case id == transformIdentity:
+		cnt += copy(buf[cnt:], word)
+	case id == transformUppercaseFirst:
+		buf2 := buf[cnt:]
+		cnt += copy(buf2, word)
+		transformUppercase(buf2[:len(word)], true)
+	case id == transformUppercaseAll:
+		buf2 := buf[cnt:]
+		cnt += copy(buf2, word)
+		transformUppercase(buf2[:len(word)], false)
+	case id <= transformOmitFirst9:
+		cut := id - transformOmitFirst1 + 1 // Valid values are 1..9
+		if len(word) > cut {
+			cnt += copy(buf[cnt:], word[:])
+		}
+	case id <= transformOmitLast9:
+		cut := id - transformOmitLast1 + 1 // Valid values are 1..9
+		if len(word) > cut {
+			cnt += copy(buf[cnt:], word[:])
+		}
+	}
+	cnt += copy(buf[cnt:], transform.suffix)
+	return cnt
+}
+
+// transformUppercase transform the word to be in uppercase using the algorithm
+// presented in RFC section 8. If once is set, the loop only executes once.
+func transformUppercase(word []byte, once bool) {
+	for i := 0; i < len(word); {
+		c := word[i]
+		if c < 192 {
+			if c >= 97 && c <= 122 {
+				word[i] ^= 32
+			}
+			i += 1
+		} else if c < 224 {
+			if i+1 < len(word) {
+				word[i+1] ^= 32
+			}
+			i += 2
+		} else {
+			if i+2 < len(word) {
+				word[i+2] ^= 5
+			}
+			i += 3
+		}
+		if once {
+			return
+		}
+	}
 }
