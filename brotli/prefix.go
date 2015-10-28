@@ -4,61 +4,66 @@
 
 package brotli
 
-import "fmt"
-import "strings"
-
 // TODO(dsnet): Some of this logic is identical to compress/flate.
 // Centralize common logic to compress/internal/prefix.
 
 const (
-	// These constants are from RFC section 3.3.
-	numLitSyms = 256
-	numInsSyms = 704
-	numCntSyms = 26
-
-	// The largest alphabet size of any prefix table from RFC section 3.3.
-	// Thus, it is okay to use uint16 to store symbols.
-	maxAlphabetLen = numInsSyms
-
-	// This is the maximum bit-width of a prefix code from RFC section 3.5.
+	// RFC section 3.5.
+	// This is the maximum bit-width of a prefix code.
 	// Thus, it is okay to use uint16 to store codes.
-	maxPrefixLen = 15
+	maxPrefixBits = 15
+
+	// RFC section 3.3.
+	// The size of the alphabet for various prefix codes.
+	numLitSyms        = 256                  // Literal symbols
+	maxNumDistSyms    = 16 + 120 + (48 << 3) // Distance symbols
+	numInsSyms        = 704                  // Insert-and-copy length symbols
+	numBlkCntSyms     = 26                   // Block count symbols
+	maxNumBlkTypeSyms = maxTypes + 2         // Block type symbols
+	maxNumCtxMapSyms  = maxTypes + 16        // Context map symbols
+
+	// This should be the max of each of the constants above.
+	maxNumAlphabetSyms = numInsSyms
 )
 
 var (
 	// RFC section 3.4.
-	// Prefix codes for simple codes.
-	simpleLens1  = [1]uint8{0}
-	simpleLens2  = [2]uint8{1, 1}
-	simpleLens3  = [3]uint8{1, 2, 2}
-	simpleLens4a = [4]uint8{2, 2, 2, 2}
-	simpleLens4b = [4]uint8{1, 2, 3, 3}
+	// Prefix code lengths for simple codes.
+	simpleLens1  = [1]uint{0}
+	simpleLens2  = [2]uint{1, 1}
+	simpleLens3  = [3]uint{1, 2, 2}
+	simpleLens4a = [4]uint{2, 2, 2, 2}
+	simpleLens4b = [4]uint{1, 2, 3, 3}
 
 	// RFC section 3.5.
-	// Array of prefix lengths in the order they appear in the stream.
-	codeLens = [18]uint16{1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15}
+	// Prefix code lengths for complex codes as they appear in the stream.
+	complexLens = [18]uint{
+		1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+	}
 )
 
+type rangeCode struct {
+	base uint32 // Starting base offset of the range
+	bits uint8  // Bit-width of a subsequent integer to add to base offset
+}
+type rangeCodes []rangeCode
+
 var (
-	// RFC section 3.5.
-	// Prefix codecs for code lengths in complex prefix definition.
-	decCodeLens prefixDecoder
-	encCodeLens prefixEncoder
+	// RFC section 5.
+	// LUT to convert an insert symbol to an actual insert length.
+	insLenRanges rangeCodes
+
+	// RFC section 5.
+	// LUT to convert an copy symbol to an actual copy length.
+	cpyLenRanges rangeCodes
+
+	// RFC section 6.
+	// LUT to convert an block-type length symbol to an actual length.
+	blkLenRanges rangeCodes
 
 	// RFC section 7.3.
-	// Prefix codecs for RLEMAX in context map definition.
-	decMaxRLE prefixDecoder
-	encMaxRLE prefixEncoder
-
-	// RFC section 9.1.
-	// Prefix codecs for WBITS in stream header definition.
-	decWinBits prefixDecoder
-	encWinBits prefixEncoder
-
-	// RFC section 9.2.
-	// Prefix codecs used for size fields in meta-block header definition.
-	decCounts prefixDecoder
-	encCounts prefixEncoder
+	// LUT to convert RLE symbol to an actual repeat length.
+	maxRLERanges rangeCodes
 )
 
 type prefixCode struct {
@@ -68,99 +73,126 @@ type prefixCode struct {
 }
 type prefixCodes []prefixCode
 
-// String prints a humanly readable prefix table for debugging purposes.
-func (pc prefixCodes) String() (s string) {
-	// Get maximum symbol and length for right-justified printing.
-	var maxSym, maxLen int
-	for _, c := range pc {
-		if maxSym < int(c.sym) {
-			maxSym = int(c.sym)
-		}
-		if maxLen < int(c.len) {
-			maxLen = int(c.len)
-		}
-	}
+var (
+	// RFC section 3.5.
+	// Prefix codecs for code lengths in complex prefix definition.
+	codeCLens prefixCodes
+	decCLens  prefixDecoder
+	encCLens  prefixEncoder
 
-	var ss []string
-	ss = append(ss, "{\n")
-	maxDig := len(fmt.Sprintf("%d", maxSym))
-	for _, c := range pc {
-		ss = append(ss, fmt.Sprintf(
-			fmt.Sprintf("\t%%%dd:%s%%0%db,\n",
-				maxDig, strings.Repeat(" ", 2+maxLen-int(c.len)), c.len),
-			c.sym, c.val,
-		))
-	}
-	ss = append(ss, "}\n")
-	return strings.Join(ss, "")
-}
+	// RFC section 7.3.
+	// Prefix codecs for RLEMAX in context map definition.
+	codeMaxRLE prefixCodes
+	decMaxRLE  prefixDecoder
+	encMaxRLE  prefixEncoder
+
+	// RFC section 9.1.
+	// Prefix codecs for WBITS in stream header definition.
+	codeWinBits prefixCodes
+	decWinBits  prefixDecoder
+	encWinBits  prefixEncoder
+
+	// RFC section 9.2.
+	// Prefix codecs used for size fields in meta-block header definition.
+	codeCounts prefixCodes
+	decCounts  prefixDecoder
+	encCounts  prefixEncoder
+)
 
 func initPrefixLUTs() {
-	if maxAlphabetLen > 1<<(16-prefixCountBits) {
+	// Sanity check some constants.
+	for _, numMax := range []uint{
+		numLitSyms, maxNumDistSyms, numInsSyms, numBlkCntSyms, maxNumBlkTypeSyms, maxNumCtxMapSyms,
+	} {
+		if numMax > maxNumAlphabetSyms {
+			panic("maximum alphabet size is not updated")
+		}
+	}
+	if maxNumAlphabetSyms >= 1<<prefixSymbolBits {
 		panic("maximum alphabet size is too large to represent")
 	}
-	if maxPrefixLen > 1<<prefixCountBits {
+	if maxPrefixBits >= 1<<prefixCountBits {
 		panic("maximum prefix bit-length is too large to represent")
 	}
 
-	// Prefix code for reading code lengths in RFC section 3.5.
-	var clenCodes []prefixCode
-	for sym, clen := range []uint8{2, 4, 3, 2, 2, 4} {
-		clenCodes = append(clenCodes, prefixCode{sym: uint16(sym), len: clen})
+	initPrefixRangeLUTs()
+	initPrefixCodeLUTs()
+}
+
+func initPrefixRangeLUTs() {
+	var makeRanges = func(base uint, bits []uint) (rc []rangeCode) {
+		for _, nb := range bits {
+			rc = append(rc, rangeCode{base: uint32(base), bits: uint8(nb)})
+			base += 1 << nb
+		}
+		return rc
 	}
-	decCodeLens.Init(clenCodes, true)
-	encCodeLens.Init(clenCodes)
+
+	insLenRanges = makeRanges(0, []uint{
+		0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8, 9, 10, 12, 14, 24,
+	}) // RFC section 5
+	cpyLenRanges = makeRanges(2, []uint{
+		0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8, 9, 10, 24,
+	}) // RFC section 5
+	blkLenRanges = makeRanges(1, []uint{
+		2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 7, 8, 9, 10, 11, 12, 13, 24,
+	}) // RFC section 6
+	maxRLERanges = makeRanges(2, []uint{
+		1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+	}) // RFC section 7.3
+}
+
+func initPrefixCodeLUTs() {
+	// Prefix code for reading code lengths in RFC section 3.5.
+	codeCLens = nil
+	for sym, clen := range []uint{2, 4, 3, 2, 2, 4} {
+		var code = prefixCode{sym: uint16(sym), len: uint8(clen)}
+		codeCLens = append(codeCLens, code)
+	}
+	decCLens.Init(codeCLens, true)
+	encCLens.Init(codeCLens)
 
 	// Prefix code for reading RLEMAX in RFC section 7.3.
-	var rleCodes = []prefixCode{{sym: 0, val: 0, len: 1}}
+	codeMaxRLE = []prefixCode{{sym: 0, val: 0, len: 1}}
 	for i := uint16(0); i < 16; i++ {
-		rleCodes = append(rleCodes, prefixCode{
-			sym: i + 1,
-			val: i<<1 | 1,
-			len: 5,
-		})
+		var code = prefixCode{sym: i + 1, val: i<<1 | 1, len: 5}
+		codeMaxRLE = append(codeMaxRLE, code)
 	}
-	decMaxRLE.Init(rleCodes, false)
-	encMaxRLE.Init(rleCodes)
+	decMaxRLE.Init(codeMaxRLE, false)
+	encMaxRLE.Init(codeMaxRLE)
 
 	// Prefix code for reading WBITS in RFC section 9.1.
-	var winCodes []prefixCode
+	codeWinBits = nil
 	for i := uint16(9); i <= 24; i++ {
 		var code prefixCode
 		switch {
-		case i < 16:
-			code = prefixCode{sym: i, val: i - 8, len: 7}
-			if i == 9 {
-				code.sym = 0 // Invalid code "1000100"
-			}
 		case i == 16:
-			code = prefixCode{sym: i, val: i - 16, len: 1}
-		case i > 16:
-			code = prefixCode{sym: i, val: i - 17, len: 4}
-			if i == 17 {
-				code.len = 7 // Symbol 17 is oddly longer
-			}
+			code = prefixCode{sym: i, val: (i-16)<<0 | 0, len: 1} // Symbols: 16
+		case i > 17:
+			code = prefixCode{sym: i, val: (i-17)<<1 | 1, len: 4} // Symbols: 18..24
+		case i < 17:
+			code = prefixCode{sym: i, val: (i-8)<<4 | 1, len: 7} // Symbols: 9..15
+		default:
+			code = prefixCode{sym: i, val: (i-17)<<4 | 1, len: 7} // Symbols: 17
 		}
-		if code.len > 1 {
-			code.val = code.val<<(code.len-3) | 1
-		}
-		winCodes = append(winCodes, code)
+		codeWinBits = append(codeWinBits, code)
 	}
-	decWinBits.Init(winCodes, false)
-	encWinBits.Init(winCodes)
+	codeWinBits[0].sym = 0 // Invalid code "1000100" to use symbol zero
+	decWinBits.Init(codeWinBits, false)
+	encWinBits.Init(codeWinBits)
 
 	// Prefix code for reading counts in RFC section 9.2.
 	// This is used for: NBLTYPESL, NBLTYPESI, NBLTYPESD, NTREESL, and NTREESD.
-	var cntCodes = []prefixCode{{sym: 1, val: 0, len: 1}}
+	codeCounts = []prefixCode{{sym: 1, val: 0, len: 1}}
+	var code = codeCounts[len(codeCounts)-1]
 	for i := uint16(0); i < 8; i++ {
-		for j := uint16(0); j < 1<<uint(i); j++ {
-			cntCodes = append(cntCodes, prefixCode{
-				sym: cntCodes[len(cntCodes)-1].sym + 1,
-				val: j<<4 | i<<1 | 1,
-				len: uint8(i + 4),
-			})
+		for j := uint16(0); j < 1<<i; j++ {
+			code.sym = code.sym + 1
+			code.val = j<<4 | i<<1 | 1
+			code.len = uint8(i + 4)
+			codeCounts = append(codeCounts, code)
 		}
 	}
-	decCounts.Init(cntCodes, false)
-	encCounts.Init(cntCodes)
+	decCounts.Init(codeCounts, false)
+	encCounts.Init(codeCounts)
 }

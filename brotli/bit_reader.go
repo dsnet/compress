@@ -149,9 +149,9 @@ func (br *bitReader) readSimplePrefixCode(pd *prefixDecoder, numSyms int) {
 		codes[i].sym = uint16(br.ReadBits(clen))
 	}
 
-	var copyLens = func(lens []uint8) {
+	var copyLens = func(lens []uint) {
 		for i := 0; i < nsym; i++ {
-			codes[i].len = lens[i]
+			codes[i].len = uint8(lens[i])
 		}
 	}
 	var compareSwap = func(i, j int) {
@@ -192,12 +192,12 @@ func (br *bitReader) readSimplePrefixCode(pd *prefixDecoder, numSyms int) {
 // readComplexPrefixCode reads the prefix code according to RFC section 3.5.
 func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, numSyms, hskip int) {
 	// Read the code-lengths prefix table.
-	var codeCLensArr [len(codeLens)]prefixCode // Sorted, but may have holes
+	var codeCLensArr [len(complexLens)]prefixCode // Sorted, but may have holes
 	sum := 32
-	for _, sym := range codeLens[hskip:] {
-		clen := uint8(br.ReadSymbol(&decCodeLens))
+	for _, sym := range complexLens[hskip:] {
+		clen := uint8(br.ReadSymbol(&decCLens))
 		if clen > 0 {
-			codeCLensArr[sym] = prefixCode{sym: sym, len: clen}
+			codeCLensArr[sym] = prefixCode{sym: uint16(sym), len: clen}
 			if sum -= 32 >> clen; sum <= 0 {
 				break
 			}
@@ -212,7 +212,7 @@ func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, numSyms, hskip int
 	br.prefix.Init(codeCLens, true)
 
 	// Use code-lengths table to decode rest of prefix table.
-	var codesArr [maxAlphabetLen]prefixCode
+	var codesArr [maxNumAlphabetSyms]prefixCode
 	codes := codesArr[:0]
 	sum = 32768
 	for sym := 0; sym < numSyms; sym++ {

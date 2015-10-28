@@ -175,7 +175,7 @@ func (br *Reader) readPrefixCodes() {
 		pb.ntypes = int(br.rd.ReadSymbol(&decCounts))
 		if pb.ntypes >= 2 {
 			br.rd.ReadPrefixCode(&pb.ptype, pb.ntypes+2)
-			br.rd.ReadPrefixCode(&pb.plen, numCntSyms)
+			br.rd.ReadPrefixCode(&pb.plen, numBlkCntSyms)
 			sym := int(br.rd.ReadSymbol(&pb.plen))
 			_ = sym
 			// TODO(dsnet): Read BLEN_x

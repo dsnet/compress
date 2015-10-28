@@ -5,58 +5,137 @@ import "fmt"
 import "strings"
 
 func printLUTs() {
-	print := func(name string, obj interface{}) {
+	var output = os.Stderr
+
+	printVar := func(name string, obj interface{}) {
 		var body string
 		if bs, ok := obj.([]uint8); ok && len(bs) >= 256 {
+			// Special case handling for large []uint16 to form 16x16 blocks.
 			var ss []string
-			ss = append(ss, "{\n")
+			ss = append(ss, "{")
 			var s string
 			for i, b := range bs {
 				s += fmt.Sprintf("%02x ", b)
 				if i%16 == 15 || i+1 == len(bs) {
-					ss = append(ss, "\t"+s+"\n")
+					ss = append(ss, "\t"+s+"")
 					s = ""
 				}
 				if i%256 == 255 && (i+1 != len(bs)) {
-					ss = append(ss, "\n")
+					ss = append(ss, "")
 				}
 			}
-			ss = append(ss, "}\n")
-			body = strings.Join(ss, "")
+			ss = append(ss, "}")
+			body = strings.Join(ss, "\n")
 		} else {
 			body = fmt.Sprintf("%v", obj)
 		}
-		body = strings.TrimSpace(body)
-		fmt.Fprintf(os.Stderr, "var %s %T = %v\n\n", name, obj, body)
+		fmt.Fprintf(output, "var %s %T = %v\n", name, obj, body)
 	}
 
 	// Common LUTs.
-	print("reverseLUT", reverseLUT)
+	printVar("reverseLUT", reverseLUT)
+	fmt.Fprintln(output)
 
 	// Context LUTs.
-	print("contextP1LUT", contextP1LUT)
-	print("contextP2LUT", contextP2LUT)
+	printVar("contextP1LUT", contextP1LUT)
+	printVar("contextP2LUT", contextP2LUT)
+	fmt.Fprintln(output)
 
 	// Static dictionary LUTs.
-	print("dictBitSizes", dictBitSizes)
-	print("dictSizes", dictSizes)
-	print("dictOffsets", dictOffsets)
+	printVar("dictBitSizes", dictBitSizes)
+	printVar("dictSizes", dictSizes)
+	printVar("dictOffsets", dictOffsets)
+	fmt.Fprintln(output)
 
 	// Prefix LUTs.
-	print("simpleLens1", simpleLens1)
-	print("simpleLens2", simpleLens2)
-	print("simpleLens3", simpleLens3)
-	print("simpleLens4a", simpleLens4a)
-	print("simpleLens4b", simpleLens4b)
-	print("codeLens", codeLens)
+	printVar("simpleLens1", simpleLens1)
+	printVar("simpleLens2", simpleLens2)
+	printVar("simpleLens3", simpleLens3)
+	printVar("simpleLens4a", simpleLens4a)
+	printVar("simpleLens4b", simpleLens4b)
+	printVar("complexLens", complexLens)
+	fmt.Fprintln(output)
 
-	print("decCodeLens", decCodeLens)
-	print("decMaxRLE", decMaxRLE)
-	print("decWinBits", decWinBits)
-	print("decCounts", decCounts)
+	printVar("codeCLens", codeCLens)
+	printVar("decCLens", decCLens)
+	printVar("encCLens", encCLens)
+	fmt.Fprintln(output)
 
-	print("encCodeLens", encCodeLens)
-	print("encMaxRLE", encMaxRLE)
-	print("encWinBits", encWinBits)
-	print("encCounts", encCounts)
+	printVar("codeMaxRLE", codeMaxRLE)
+	printVar("decMaxRLE", decMaxRLE)
+	printVar("encMaxRLE", encMaxRLE)
+	fmt.Fprintln(output)
+
+	printVar("codeWinBits", codeWinBits)
+	printVar("decWinBits", decWinBits)
+	printVar("encWinBits", encWinBits)
+	fmt.Fprintln(output)
+
+	printVar("codeCounts", codeCounts)
+	printVar("decCounts", decCounts)
+	printVar("encCounts", encCounts)
+	fmt.Fprintln(output)
+}
+
+func (pc prefixCodes) String() (s string) {
+	var maxSym, maxLen int
+	for _, c := range pc {
+		if maxSym < int(c.sym) {
+			maxSym = int(c.sym)
+		}
+		if maxLen < int(c.len) {
+			maxLen = int(c.len)
+		}
+	}
+
+	var ss []string
+	ss = append(ss, "{")
+	maxSymDig := len(fmt.Sprintf("%d", maxSym))
+	for _, c := range pc {
+		ss = append(ss, fmt.Sprintf(
+			fmt.Sprintf("\t%%%dd:%s%%0%db,",
+				maxSymDig, strings.Repeat(" ", 2+maxLen-int(c.len)), c.len),
+			c.sym, c.val,
+		))
+	}
+	ss = append(ss, "}")
+	return strings.Join(ss, "\n")
+}
+
+func (pd prefixDecoder) String() string {
+	var ss []string
+	ss = append(ss, "{")
+	if len(pd.chunks) > 0 {
+		ss = append(ss, "\tchunks: {")
+		for i, c := range pd.chunks {
+			l := "sym"
+			if uint(c&prefixCountMask) > uint(pd.chunkBits) {
+				l = "idx"
+			}
+			ss = append(ss, fmt.Sprintf(
+				fmt.Sprintf("\t\t%%0%db:  {%%s: %%3d, len: %%2d},", pd.chunkBits),
+				i, l, c>>prefixCountBits, c&prefixCountMask,
+			))
+		}
+		ss = append(ss, "\t},")
+
+		for j, links := range pd.links {
+			ss = append(ss, fmt.Sprintf("\tlinks[%d]: {", j))
+			linkBits := len(fmt.Sprintf("%b", pd.linkMask))
+			for i, c := range links {
+				ss = append(ss, fmt.Sprintf(
+					fmt.Sprintf("\t\t%%0%db:  {sym: %%3d, len: %%2d},", linkBits),
+					i, c>>prefixCountBits, c&prefixCountMask,
+				))
+			}
+			ss = append(ss, "\t},")
+		}
+		ss = append(ss, fmt.Sprintf("\tchunkMask: %b,", pd.chunkMask))
+		ss = append(ss, fmt.Sprintf("\tlinkMask: %b,", pd.linkMask))
+		ss = append(ss, fmt.Sprintf("\tnumSyms: %d,", pd.numSyms))
+		ss = append(ss, fmt.Sprintf("\tchunkBits: %d,", pd.chunkBits))
+		ss = append(ss, fmt.Sprintf("\tminBits: %d,", pd.minBits))
+	}
+	ss = append(ss, "}")
+	return strings.Join(ss, "\n")
 }
