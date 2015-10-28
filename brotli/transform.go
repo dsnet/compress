@@ -164,8 +164,11 @@ var transformLUT = []struct {
 
 // transformWord transform the input word and places the result in buf according
 // to the transform primitives defined in RFC section 8.
-// The length of word must be <= maxDictLen.
-// The length of buf must be >= maxWordSize.
+
+// The following invariants must be kept:
+//	id < len(transformLUT)
+//	len(word) <= maxDictLen
+//	len(buf) >= maxWordSize
 func transformWord(buf, word []byte, id int) (cnt int) {
 	transform := transformLUT[id]
 	cnt = copy(buf, transform.prefix)

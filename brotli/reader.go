@@ -20,20 +20,29 @@ type Reader struct {
 	last   bool      // Last block bit detected
 	err    error     // Persistent error
 
-	dict     dictDecoder       // Dynamic sliding dictionary
-	iacBlk   blockDecoder      // Insert-and-copy block decoder
-	litBlk   blockDecoder      // Literal block decoder
-	distBlk  blockDecoder      // Distance block decoder
-	wordBuf  [maxWordSize]byte // Buffer to write a transformed word into
-	word     []byte            // Transformed word obtained from static dictionary
-	cmodes   []uint8           // Literal context modes
-	litMap   []uint8           // Literal context map
-	distMap  []uint8           // Distance context map
-	dist     int               // The current distance (may not be in dists)
-	dists    [4]int            // Last few distances (newest-to-oldest)
-	distZero bool              // Implicit zero distance symbol found
-	npostfix uint8             // Postfix bits used in distance decoding
-	ndirect  uint8             // Number of direct distance codes
+	dict    dictDecoder  // Dynamic sliding dictionary
+	iacBlk  blockDecoder // Insert-and-copy block decoder
+	litBlk  blockDecoder // Literal block decoder
+	distBlk blockDecoder // Distance block decoder
+
+	// Literal decoding state fields.
+	litMapType []uint8 // The current literal context map for the current block type
+	litMap     []uint8 // Literal context map
+	cmode      uint8   // The current context mode
+	cmodes     []uint8 // Literal context modes
+
+	// Distance decoding state fields.
+	distMap     []uint8 // Distance context map
+	distMapType []uint8 // The current distance context map for the current block type
+	dist        int     // The current distance (may not be in dists)
+	dists       [4]int  // Last few distances (newest-to-oldest)
+	distZero    bool    // Implicit zero distance symbol found
+	npostfix    uint8   // Postfix bits used in distance decoding
+	ndirect     uint8   // Number of direct distance codes
+
+	// Static dictionary state fields.
+	word    []byte            // Transformed word obtained from static dictionary
+	wordBuf [maxWordSize]byte // Buffer to write a transformed word into
 
 	metaWr  io.Writer // Writer to write meta data to
 	metaBuf []byte    // Scratch space for reading meta data
@@ -226,7 +235,7 @@ func (br *Reader) readPrefixCodes() {
 		bd.types = [2]uint8{0, 1}
 		bd.typeLen = 1 << 28 // Large enough value that will stay positive
 
-		bd.numTypes = int(br.rd.ReadSymbol(&decCounts))
+		bd.numTypes = int(br.rd.ReadSymbol(&decCounts)) // 1..256
 		if bd.numTypes >= 2 {
 			br.rd.ReadPrefixCode(&bd.decType, uint(bd.numTypes)+2)
 			br.rd.ReadPrefixCode(&bd.decLen, uint(numBlkCntSyms))
@@ -246,9 +255,10 @@ func (br *Reader) readPrefixCodes() {
 	for i := range br.cmodes {
 		br.cmodes[i] = uint8(br.rd.ReadBits(2))
 	}
+	br.cmode = br.cmodes[0] // 0..3
 
 	// Read CMAPL, the literal context map.
-	numLitTrees := int(br.rd.ReadSymbol(&decCounts))
+	numLitTrees := int(br.rd.ReadSymbol(&decCounts)) // 1..256
 	br.litMap = extendUint8s(br.litMap, maxLitContextIDs*br.litBlk.numTypes)
 	if numLitTrees >= 2 {
 		br.rd.ReadContextMap(br.litMap, uint(numLitTrees))
@@ -257,9 +267,10 @@ func (br *Reader) readPrefixCodes() {
 			br.litMap[i] = 0
 		}
 	}
+	br.litMapType = br.litMap[0:] // First block type is zero
 
 	// Read CMAPD, the distance context map.
-	numDistTrees := int(br.rd.ReadSymbol(&decCounts))
+	numDistTrees := int(br.rd.ReadSymbol(&decCounts)) // 1..256
 	br.distMap = extendUint8s(br.distMap, maxDistContextIDs*br.distBlk.numTypes)
 	if numDistTrees >= 2 {
 		br.rd.ReadContextMap(br.distMap, uint(numDistTrees))
@@ -268,6 +279,7 @@ func (br *Reader) readPrefixCodes() {
 			br.distMap[i] = 0
 		}
 	}
+	br.distMapType = br.distMap[0:] // First block type is zero
 
 	// Read HTREEL[], HTREEI[], and HTREED[], the arrays of prefix codes.
 	br.litBlk.prefixes = extendDecoders(br.litBlk.prefixes, numLitTrees)
@@ -323,13 +335,13 @@ func (br *Reader) readLiterals() {
 	for i := range buf {
 		if br.litBlk.typeLen == 0 {
 			br.litBlk.readBlockSwitch(&br.rd)
+			br.litMapType = br.litMap[64*int(br.litBlk.types[0]):]
+			br.cmode = br.cmodes[br.litBlk.types[0]] // 0..3
 		}
 		br.litBlk.typeLen--
 
-		cmode := br.cmodes[br.litBlk.types[0]]       // 0..3
-		cidl := uint(getLitContextID(p1, p2, cmode)) // 0..63
-		mapIdx := 64*uint(br.litBlk.types[0]) + cidl
-		treel := &br.litBlk.prefixes[br.litMap[mapIdx]]
+		cidl := getLitContextID(p1, p2, br.cmode) // 0..63
+		treel := &br.litBlk.prefixes[br.litMapType[cidl]]
 		litSym := br.rd.ReadSymbol(treel)
 
 		buf[i] = byte(litSym)
@@ -360,13 +372,14 @@ func (br *Reader) readDistance() {
 	} else {
 		if br.distBlk.typeLen == 0 {
 			br.distBlk.readBlockSwitch(&br.rd)
+			br.distMapType = br.distMap[4*int(br.distBlk.types[0]):]
 		}
 		br.distBlk.typeLen--
 
-		cidd := uint(getDistContextID(br.cpyLen)) // 0..3
-		mapIdx := 4*uint(br.distBlk.types[0]) + cidd
-		treed := &br.distBlk.prefixes[br.distMap[mapIdx]]
+		cidd := getDistContextID(br.cpyLen) // 0..3
+		treed := &br.distBlk.prefixes[br.distMapType[cidd]]
 		distSym := br.rd.ReadSymbol(treed)
+
 		br.dist = br.decodeDistanceSymbol(distSym)
 		br.distZero = bool(distSym == 0)
 	}
