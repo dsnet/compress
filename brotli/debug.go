@@ -56,6 +56,12 @@ func printLUTs() {
 	printVar("complexLens", complexLens)
 	fmt.Fprintln(output)
 
+	printVar("insLenRanges", insLenRanges)
+	printVar("cpyLenRanges", cpyLenRanges)
+	printVar("blkLenRanges", blkLenRanges)
+	printVar("maxRLERanges", maxRLERanges)
+	fmt.Fprintln(output)
+
 	printVar("codeCLens", codeCLens)
 	printVar("decCLens", decCLens)
 	printVar("encCLens", encCLens)
@@ -75,6 +81,37 @@ func printLUTs() {
 	printVar("decCounts", decCounts)
 	printVar("encCounts", encCounts)
 	fmt.Fprintln(output)
+}
+
+func (rc rangeCodes) String() (s string) {
+	var maxBits, maxBase int
+	for _, c := range rc {
+		if maxBits < int(c.bits) {
+			maxBits = int(c.bits)
+		}
+		if maxBase < int(c.base) {
+			maxBase = int(c.base)
+		}
+	}
+
+	var ss []string
+	ss = append(ss, "{")
+	maxSymDig := len(fmt.Sprintf("%d", len(rc)-1))
+	maxBitsDig := len(fmt.Sprintf("%d", maxBits))
+	maxBaseDig := len(fmt.Sprintf("%d", maxBase))
+	for i, c := range rc {
+		base := fmt.Sprintf(fmt.Sprintf("%%%dd", maxBaseDig), c.base)
+		if c.bits > 0 {
+			base += fmt.Sprintf("-%d", c.base+1<<c.bits-1)
+		}
+		ss = append(ss, fmt.Sprintf(
+			fmt.Sprintf("\t%%%dd:  {bits: %%%dd, base: %%s},",
+				maxSymDig, maxBitsDig),
+			i, c.bits, base,
+		))
+	}
+	ss = append(ss, "}")
+	return strings.Join(ss, "\n")
 }
 
 func (pc prefixCodes) String() (s string) {
