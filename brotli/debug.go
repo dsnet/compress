@@ -10,7 +10,7 @@ func printLUTs() {
 	printVar := func(name string, obj interface{}) {
 		var body string
 		if bs, ok := obj.([]uint8); ok && len(bs) >= 256 {
-			// Special case handling for large []uint16 to form 16x16 blocks.
+			// Special case handling for large []uint8 to form 16x16 blocks.
 			var ss []string
 			ss = append(ss, "{")
 			var s string

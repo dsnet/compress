@@ -181,14 +181,14 @@ func transformWord(buf, word []byte, id int) (cnt int) {
 		cnt += copy(buf2, word)
 		transformUppercase(buf2[:len(word)], false)
 	case id <= transformOmitFirst9:
-		cut := id - transformOmitFirst1 + 1 // Valid values are 1..9
+		cut := id - transformOmitFirst1 + 1 // 1..9
 		if len(word) > cut {
-			cnt += copy(buf[cnt:], word[:])
+			cnt += copy(buf[cnt:], word[cut:])
 		}
 	case id <= transformOmitLast9:
-		cut := id - transformOmitLast1 + 1 // Valid values are 1..9
+		cut := id - transformOmitLast1 + 1 // 1..9
 		if len(word) > cut {
-			cnt += copy(buf[cnt:], word[:])
+			cnt += copy(buf[cnt:], word[:len(word)-cut])
 		}
 	}
 	cnt += copy(buf[cnt:], transform.suffix)
@@ -196,7 +196,7 @@ func transformWord(buf, word []byte, id int) (cnt int) {
 }
 
 // transformUppercase transform the word to be in uppercase using the algorithm
-// presented in RFC section 8. If once is set, the loop only executes once.
+// presented in RFC section 8. If once is set, then loop only executes once.
 func transformUppercase(word []byte, once bool) {
 	for i := 0; i < len(word); {
 		c := word[i]
