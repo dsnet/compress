@@ -10,3 +10,9 @@ This repository stores a collection of compression related libraries.
 Run the command:
 
 ```go get github.com/dsnet/compress```
+
+
+## Packages ##
+
+* [brotli](http://godoc.org/github.com/dsnet/compress/brotli): Implementation of
+the Brotli compression format.
