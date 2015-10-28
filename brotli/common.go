@@ -13,15 +13,15 @@ type Error string
 func (e Error) Error() string { return "brotli: " + string(e) }
 
 var (
-	ErrCorrupt  = Error("stream is corrupted")
-	ErrInvalid  = Error("cannot encode data")
-	ErrInternal = Error("internal error")
+	ErrCorrupt  error = Error("stream is corrupted")
+	ErrInvalid  error = Error("cannot encode data")
+	ErrInternal error = Error("internal error")
 )
 
 func errRecover(err *error) {
 	switch ex := recover().(type) {
 	case nil:
-		// Do nothing
+		// Do nothing.
 	case runtime.Error:
 		panic(ex)
 	case error:
@@ -51,13 +51,13 @@ func reverseUint16(v uint16) uint16 {
 
 // reverseBits reverses the lower n bits of v.
 func reverseBits(v uint16, n uint) uint16 {
-	return reverseUint16(v << uint8(16-n))
+	return reverseUint16(v << (16 - n))
 }
 
 // neededBits computes the minimum number of bits needed to encode n elements.
-func neededBits(x uint16) (n uint) {
-	for x -= 1; x > 0; x >>= 1 {
-		n++
+func neededBits(n uint16) (nb uint) {
+	for n -= 1; n > 0; n >>= 1 {
+		nb++
 	}
 	return
 }

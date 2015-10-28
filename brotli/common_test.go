@@ -10,7 +10,7 @@ import "testing"
 
 // TestTableCRC tests that the CRC of static tables matches those of the RFC.
 func TestTableCRC(t *testing.T) {
-	// Convert transformLUT to byte array according to Appendix B of RFC.
+	// Convert transformLUT to byte array according to Appendix B of the RFC.
 	var transformBuf bytes.Buffer
 	for _, t := range transformLUT {
 		transformBuf.WriteString(t.prefix + "\x00")

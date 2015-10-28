@@ -4,7 +4,7 @@
 
 package brotli
 
-// These constants are defined in section 7.1 of the RFC.
+// These constants are defined in RFC section 7.1.
 const (
 	contextLSB6 = iota
 	contextMSB6
@@ -14,14 +14,14 @@ const (
 	numContextModes
 )
 
-// These constants are defined in sections 2 and 7.3 of the RFC.
+// These constants are defined in RFC sections 2 and 7.3.
 const (
 	maxTypes          = 256
 	maxLitContextIDs  = 64
 	maxDistContextIDs = 4
 )
 
-// These LUTs are taken directly from section 7.1 of the RFC.
+// These LUTs are taken directly from RFC section 7.1.
 var (
 	contextLUT0 = []uint8{
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 4, 0, 0,
@@ -119,9 +119,9 @@ func initContextLUTs() {
 
 // getLitContextID computes the context ID for literals.
 // Bytes p1 and p2 are the last and second-to-last byte, respectively.
-func getLitContextID(p1, p2 byte, mode int) uint8 {
-	base := mode << 8
-	return contextP1LUT[base+int(p1)] | contextP2LUT[base+int(p2)]
+func getLitContextID(p1, p2 byte, mode uint8) uint8 {
+	base := uint(mode) << 8
+	return contextP1LUT[base+uint(p1)] | contextP2LUT[base+uint(p2)]
 }
 
 // getDistContextID computes the context ID for distances using the copy length.
@@ -136,6 +136,18 @@ func getDistContextID(l int) uint8 {
 // inverseMoveToFront performs the inverse move-to-front transformation as
 // described in RFC section 7.3.
 func inverseMoveToFront(vals []uint8) {
-	// TODO(dsnet)
-	panic("no support")
+	// TODO(dsnet): This seems slow...
+	var mtf [256]uint8
+	for i := range mtf {
+		mtf[i] = uint8(i)
+	}
+	for i := range vals {
+		idx := vals[i]
+		val := mtf[idx]
+		vals[i] = val
+		for ; idx > 0; idx-- {
+			mtf[idx] = mtf[idx-1]
+		}
+		mtf[0] = val
+	}
 }
