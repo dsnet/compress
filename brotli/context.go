@@ -117,16 +117,16 @@ func initContextLUTs() {
 	}
 }
 
-// getLitContextID computes the context ID for literals.
+// getLitContextID computes the context ID for literals from RFC section 7.1.
 // Bytes p1 and p2 are the last and second-to-last byte, respectively.
 func getLitContextID(p1, p2 byte, mode uint8) uint8 {
 	base := uint(mode) << 8
 	return contextP1LUT[base+uint(p1)] | contextP2LUT[base+uint(p2)]
 }
 
-// getDistContextID computes the context ID for distances using the copy length.
+// getDistContextID computes the context ID for distances using the copy length
+// as specified in RFC section 7.2.
 func getDistContextID(l int) uint8 {
-	// Operation specified in RFC section 7.2.
 	if l > 4 {
 		return 3
 	}

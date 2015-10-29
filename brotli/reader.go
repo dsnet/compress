@@ -136,13 +136,13 @@ func (br *Reader) readBlockHeader() {
 	}
 
 	// Read MLEN and MNIBBLES and process meta data.
-	var blkLen int // Valid values are 1..1<<24
+	var blkLen int // 1..1<<24
 	if nibbles := br.rd.ReadBits(2) + 4; nibbles == 7 {
 		if reserved := br.rd.ReadBits(1) == 1; reserved {
 			panic(ErrCorrupt)
 		}
 
-		var skipLen int // Valid values are 0..1<<24
+		var skipLen int // 0..1<<24
 		if skipBytes := br.rd.ReadBits(2); skipBytes > 0 {
 			skipLen = int(br.rd.ReadBits(skipBytes * 8))
 			if skipBytes > 1 && skipLen>>((skipBytes-1)*8) == 0 {
@@ -236,10 +236,10 @@ func (br *Reader) readPrefixCodes() {
 	}
 
 	// Read NPOSTFIX and NDIRECT.
-	npostfix := br.rd.ReadBits(2)            // Valid values are 0..3
-	ndirect := br.rd.ReadBits(4) << npostfix // Valid values are 0..120
+	npostfix := br.rd.ReadBits(2)            // 0..3
+	ndirect := br.rd.ReadBits(4) << npostfix // 0..120
 	br.npostfix, br.ndirect = uint8(npostfix), uint8(ndirect)
-	numDistSyms := uint(16 + ndirect + (48 << npostfix))
+	numDistSyms := 16 + ndirect + 48<<npostfix
 
 	// Read CMODE, the literal context modes.
 	br.cmodes = extendUint8s(br.cmodes, br.litBlk.numTypes)
@@ -300,14 +300,14 @@ func (br *Reader) readCommand() {
 
 	iacSym := br.rd.ReadSymbol(&br.iacBlk.prefixes[br.iacBlk.types[0]])
 	insSym, cpySym := br.decodeInsertAndCopySymbol(iacSym)
-	br.insLen = int(br.rd.ReadOffset(insSym, insLenRanges))
-	br.cpyLen = int(br.rd.ReadOffset(cpySym, cpyLenRanges))
+	br.insLen = int(br.rd.ReadOffset(insSym, insLenRanges)) // 0..16799809
+	br.cpyLen = int(br.rd.ReadOffset(cpySym, cpyLenRanges)) // 2..16779333
 	br.distZero = iacSym < 128
 
-	if br.insLen == 0 {
-		br.readDistance()
-	} else {
+	if br.insLen > 0 {
 		br.readLiterals()
+	} else {
+		br.readDistance()
 	}
 }
 
@@ -326,16 +326,16 @@ func (br *Reader) readLiterals() {
 		}
 		br.litBlk.typeLen--
 
-		cmode := br.cmodes[br.litBlk.types[0]]
-		cidl := uint(getLitContextID(p1, p2, cmode))
-		treel := &br.litBlk.prefixes[br.litMap[64*uint(br.litBlk.types[0])+cidl]]
+		cmode := br.cmodes[br.litBlk.types[0]]       // 0..3
+		cidl := uint(getLitContextID(p1, p2, cmode)) // 0..63
+		mapIdx := 64*uint(br.litBlk.types[0]) + cidl
+		treel := &br.litBlk.prefixes[br.litMap[mapIdx]]
 		litSym := br.rd.ReadSymbol(treel)
 
 		buf[i] = byte(litSym)
 		p1, p2 = byte(litSym), p1
 		br.dict.WriteMark(1)
 	}
-
 	br.insLen -= len(buf)
 	br.blkLen -= len(buf)
 
@@ -363,8 +363,9 @@ func (br *Reader) readDistance() {
 		}
 		br.distBlk.typeLen--
 
-		cidd := uint(getDistContextID(br.cpyLen))
-		treed := &br.distBlk.prefixes[br.distMap[4*uint(br.distBlk.types[0])+cidd]]
+		cidd := uint(getDistContextID(br.cpyLen)) // 0..3
+		mapIdx := 4*uint(br.distBlk.types[0]) + cidd
+		treed := &br.distBlk.prefixes[br.distMap[mapIdx]]
 		distSym := br.rd.ReadSymbol(treed)
 		br.dist = br.decodeDistanceSymbol(distSym)
 		br.distZero = bool(distSym == 0)
@@ -440,6 +441,7 @@ func (br *Reader) copyStaticDict() {
 // decodeInsertAndCopySymbol converts an insert-and-copy length symbol to a pair
 // of insert length and copy length symbols according to RFC section 5.
 func (br *Reader) decodeInsertAndCopySymbol(iacSym uint) (insSym, cpySym uint) {
+	// TODO(dsnet): Results for symbols 0..703 can be determined by a LUT.
 	switch iacSym / 64 {
 	case 0, 2: // 0..63 and 128..191
 		insSym, cpySym = 0, 0
@@ -470,23 +472,24 @@ func (br *Reader) decodeInsertAndCopySymbol(iacSym uint) (insSym, cpySym uint) {
 // decodeDistanceSymbol decodes distSym returns the effective backward distance
 // according to RFC section 4.
 func (br *Reader) decodeDistanceSymbol(distSym uint) (dist int) {
+	// TODO(dsnet): Results for symbols 0..15 can be determined by a LUT.
 	switch {
 	case distSym < 4: // Last to fourth-to-last distance
 		return br.dists[distSym]
 	case distSym < 10: // Variations on last distance
-		delta := int(distSym/2 - 1) // Valid values 1..3
+		delta := int(distSym/2 - 1) // 1..3
 		if distSym%2 == 0 {
 			delta *= -1
 		}
 		return br.dists[0] + delta
 	case distSym < 16: // Variations on second-to-last distance
-		delta := int(distSym/2 - 4) // Valid values 1..3
+		delta := int(distSym/2 - 4) // 1..3
 		if distSym%2 == 0 {
 			delta *= -1
 		}
 		return br.dists[1] + delta
 	case distSym < uint(16+br.ndirect): // Direct distance
-		return int(distSym - 15) // Valid values are 1..ndirect
+		return int(distSym - 15) // 1..ndirect
 	default:
 		distSym -= uint(16 + br.ndirect)
 		postfixMask := uint(1<<br.npostfix - 1)
@@ -506,7 +509,7 @@ func (bd *blockDecoder) readBlockSwitch(r *bitReader) {
 	case 0:
 		symType = uint(bd.types[1])
 	case 1:
-		symType = uint(bd.types[0] + 1)
+		symType = uint(bd.types[0]) + 1
 		if symType >= uint(bd.numTypes) {
 			symType -= uint(bd.numTypes)
 		}
