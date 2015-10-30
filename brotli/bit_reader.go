@@ -20,7 +20,7 @@ type bitReader struct {
 	prefix  prefixDecoder // Local prefix decoder
 	bufBits uint32        // Buffer to hold some bits
 	numBits uint          // Number of valid bits in bufBits
-	offset  int64         // Number of bytes read from the underlying reader
+	offset  int64         // Number of bytes read from the underlying io.Reader
 }
 
 func (br *bitReader) Init(r io.Reader) {
@@ -147,11 +147,6 @@ func (br *bitReader) ReadPrefixCode(pd *prefixDecoder, maxSyms uint) {
 
 // readSimplePrefixCode reads the prefix code according to RFC section 3.4.
 func (br *bitReader) readSimplePrefixCode(pd *prefixDecoder, maxSyms uint) {
-	// TODO(dsnet): Test the following edge cases:
-	// * Re-used symbol
-	// * Out-of-order symbols
-	// * Excessively large symbol
-	// * Test each of the simple trees
 	var codes [4]prefixCode
 	nsym := int(br.ReadBits(2)) + 1
 	clen := neededBits(uint16(maxSyms))
@@ -201,14 +196,6 @@ func (br *bitReader) readSimplePrefixCode(pd *prefixDecoder, maxSyms uint) {
 
 // readComplexPrefixCode reads the prefix code according to RFC section 3.5.
 func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, maxSyms, hskip uint) {
-	// TODO(dsnet): Test the following edge cases:
-	// * Integer overflow of repeaters
-	// * Over-subscribed and under-subscribed trees
-	// * Zero and one symbol trees
-	// * Repeat of clen 0
-	// * Test sequence: 4, 16+3, 4, 16+2
-	// * Test sequence: 0, 17+2, 0, 17+3
-
 	// Read the code-lengths prefix table.
 	var codeCLensArr [len(complexLens)]prefixCode // Sorted, but may have holes
 	sum := 32
