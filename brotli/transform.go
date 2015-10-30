@@ -4,6 +4,10 @@
 
 package brotli
 
+// RFC section 8.
+// Maximum buffer size needed to store a word after a transformation.
+const maxWordSize = maxDictLen + 13 + 1
+
 // These constants are defined in Appendix B of the RFC.
 const (
 	transformIdentity = iota
@@ -28,10 +32,6 @@ const (
 	transformOmitLast8
 	transformOmitLast9
 )
-
-// Maximum size of a word after transformation.
-// The largest combination of prefix and suffix occurs at index 73.
-const maxWordSize = maxDictLen + 13
 
 // This table is defined in Appendix B of the RFC.
 var transformLUT = []struct {

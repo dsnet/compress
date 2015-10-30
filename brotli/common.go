@@ -13,9 +13,7 @@ type Error string
 func (e Error) Error() string { return "brotli: " + string(e) }
 
 var (
-	ErrCorrupt  error = Error("stream is corrupted")
-	ErrInvalid  error = Error("cannot encode data")
-	ErrInternal error = Error("internal error")
+	ErrCorrupt error = Error("stream is corrupted")
 )
 
 func errRecover(err *error) {

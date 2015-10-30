@@ -5,10 +5,11 @@
 package brotli
 
 type dictDecoder struct {
+	// Invariant: len(hist) <= size
 	size int    // Sliding window size
 	hist []byte // Sliding window history, dynamically grown to match size
 
-	// Invariant: rdPos <= wrPos
+	// Invariant: 0 <= rdPos <= wrPos <= len(hist)
 	wrPos int  // Current output position in buffer
 	rdPos int  // Have emitted hist[:rdPos] already
 	full  bool // Has a full window length been written yet?
@@ -93,10 +94,11 @@ func (dd *dictDecoder) ReadFlush() []byte {
 			dd.full = true
 		} else {
 			// Allocate a larger history buffer.
-			hist := make([]byte, cap(dd.hist)*4)
-			if len(hist) > dd.size {
-				hist = hist[:dd.size]
+			size := cap(dd.hist) * 4
+			if size > dd.size {
+				size = dd.size
 			}
+			hist := make([]byte, size)
 			copy(hist, dd.hist)
 			dd.hist = hist
 		}

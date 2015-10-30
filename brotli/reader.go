@@ -233,7 +233,7 @@ func (br *Reader) readPrefixCodes() {
 		// *not* count down to zero. Thus, there is no need to validate that
 		// typeLen is within some reasonable range.
 		bd.types = [2]uint8{0, 1}
-		bd.typeLen = 1 << 28 // Large enough value that will stay positive
+		bd.typeLen = -1 // Stay on this type until next meta-block
 
 		bd.numTypes = int(br.rd.ReadSymbol(&decCounts)) // 1..256
 		if bd.numTypes >= 2 {
