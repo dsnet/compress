@@ -34,27 +34,12 @@ func (br *bitReader) Init(r io.Reader) {
 
 // Read reads up to len(buf) bytes into buf.
 func (br *bitReader) Read(buf []byte) (int, error) {
-	if br.numBits%8 > 0 {
-		return 0, Error("unaligned byte read")
+	if br.numBits > 0 {
+		return 0, Error("non-empty bit buffer")
 	}
-
-	bufBase := buf
-	for len(buf) > 0 {
-		if br.numBits > 0 {
-			buf[0] = byte(br.bufBits)
-			br.bufBits >>= 8
-			br.numBits -= 8
-			buf = buf[1:]
-		} else {
-			cnt, err := br.rd.Read(buf)
-			buf = buf[cnt:]
-			br.offset += int64(cnt)
-			if err != nil {
-				return len(bufBase) - len(buf), err
-			}
-		}
-	}
-	return len(bufBase) - len(buf), nil
+	cnt, err := br.rd.Read(buf)
+	br.offset += int64(cnt)
+	return cnt, err
 }
 
 // ReadBits reads nb bits in LSB order from the underlying reader.
