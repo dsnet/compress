@@ -122,7 +122,8 @@ func (br *Reader) readStreamHeader() {
 	if wbits == 0 {
 		panic(ErrCorrupt) // Reserved value used
 	}
-	br.dict.Init(wbits)
+	size := int(1<<wbits) - 16
+	br.dict.Init(size)
 	br.readBlockHeader()
 }
 
