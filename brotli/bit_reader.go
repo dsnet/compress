@@ -17,6 +17,7 @@ type byteReader interface {
 
 type bitReader struct {
 	rd      byteReader
+	mtf     moveToFront   // Local move-to-front decoder
 	prefix  prefixDecoder // Local prefix decoder
 	bufBits uint32        // Buffer to hold some bits
 	numBits uint          // Number of valid bits in bufBits
@@ -286,6 +287,6 @@ func (br *bitReader) ReadContextMap(cm []uint8, numTrees uint) {
 	}
 
 	if invert := br.ReadBits(1) == 1; invert {
-		inverseMoveToFront(cm)
+		br.mtf.Decode(cm)
 	}
 }
