@@ -59,8 +59,8 @@ func (dd *dictDecoder) WriteMark(cnt int) {
 }
 
 // WriteCopy copies a string at a given (distance, length) to the output.
-// This returns the number of bytes and may be less than the requested length
-// if the available space in the output buffer is too small.
+// This returns the number of bytes copied and may be less than the requested
+// length if the available space in the output buffer is too small.
 //
 // This invariant must be kept: 0 <= dist <= HistSize()
 func (dd *dictDecoder) WriteCopy(dist, length int) int {
