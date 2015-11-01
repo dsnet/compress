@@ -63,19 +63,42 @@ func TestDictDecoder(t *testing.T) {
 		{151, 3}, {48, 4}, {0, 4}, {125, 3}, {108, 3}, {0, 2},
 	}
 
+	var want string
 	var buf bytes.Buffer
 	var dd dictDecoder
 	dd.Init(1 << 11)
 
+	var checkLastBytes = func(str string) {
+		if len(str) < 2 {
+			str = "\x00\x00" + str
+		}
+		str = str[len(str)-2:]
+		p1, p2 := dd.LastBytes()
+		got := string([]byte{p2, p1})
+		if got != str {
+			t.Errorf("last bytes mismatch: got %q, want %q", got, str)
+		}
+	}
 	var writeCopy = func(dist, length int) {
+		if dist < length {
+			cnt := (dist + length - 1) / dist
+			want += strings.Repeat(want[len(want)-dist:], cnt)[:length]
+		} else {
+			want += want[len(want)-dist:][:length]
+		}
+
 		for length > 0 {
 			length -= dd.WriteCopy(dist, length)
 			if dd.AvailSize() == 0 {
 				buf.Write(dd.ReadFlush())
 			}
 		}
+
+		checkLastBytes(want)
 	}
 	var writeString = func(str string) {
+		want += str
+
 		for len(str) > 0 {
 			cnt := copy(dd.WriteSlice(), str)
 			str = str[cnt:]
@@ -84,23 +107,12 @@ func TestDictDecoder(t *testing.T) {
 				buf.Write(dd.ReadFlush())
 			}
 		}
-	}
-	var checkLastBytes = func(str string) {
-		str = str[len(str)-2:]
-		p1, p2 := dd.LastBytes()
-		got := string([]byte{p2, p1})
-		if got != str {
-			t.Errorf("last bytes mismatch: got %q, want %q", got, str)
-		}
+
+		checkLastBytes(want)
 	}
 
-	want := ""
-	checkLastBytes("\x00\x00")
-
+	writeString("")
 	writeString(".")
-	want += "."
-	checkLastBytes("\x00.")
-
 	str := poem
 	for _, ref := range refs {
 		if ref.dist == 0 {
@@ -110,37 +122,16 @@ func TestDictDecoder(t *testing.T) {
 		}
 		str = str[ref.length:]
 	}
-	want += poem
-	checkLastBytes(want)
-
 	writeCopy(dd.HistSize(), 33)
-	want += want[:33]
-	checkLastBytes(want)
-
 	writeString(abc)
 	writeCopy(len(abc), 59*len(abc))
-	want += strings.Repeat(abc, 60)
-	checkLastBytes(want)
-
 	writeString(fox)
 	writeCopy(len(fox), 9*len(fox))
-	want += strings.Repeat(fox, 10)
-	checkLastBytes(want)
-
 	writeString(".")
-	checkLastBytes(want + ".")
 	writeCopy(1, 9)
-	want += strings.Repeat(".", 10)
-	checkLastBytes(want)
-
 	writeString(strings.ToUpper(poem))
 	writeCopy(len(poem), 7*len(poem))
-	want += strings.Repeat(strings.ToUpper(poem), 8)
-	checkLastBytes(want)
-
 	writeCopy(dd.HistSize(), 10)
-	want += want[len(want)-dd.HistSize():][:10]
-	checkLastBytes(want)
 
 	buf.Write(dd.ReadFlush())
 	if buf.String() != want {
