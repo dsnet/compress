@@ -5,19 +5,22 @@
 package brotli
 
 type dictDecoder struct {
+	// Invariant: len(hist) <= size
 	size int    // Sliding window size
 	hist []byte // Sliding window history, dynamically grown to match size
 
-	// Invariant: rdPos <= wrPos
+	// Invariant: 0 <= rdPos <= wrPos <= len(hist)
 	wrPos int  // Current output position in buffer
 	rdPos int  // Have emitted hist[:rdPos] already
 	full  bool // Has a full window length been written yet?
 }
 
-func (dd *dictDecoder) Init(wbits uint) {
+func (dd *dictDecoder) Init(size int) {
+	*dd = dictDecoder{hist: dd.hist}
+
 	// Regardless of what size claims, start with a small dictionary to avoid
 	// denial-of-service attacks with large memory allocation.
-	dd.size = int(1<<wbits) - 16
+	dd.size = size
 	if dd.hist == nil {
 		dd.hist = make([]byte, 1024)
 	}
@@ -58,27 +61,30 @@ func (dd *dictDecoder) WriteMark(cnt int) {
 }
 
 // WriteCopy copies a string at a given (distance, length) to the output.
-// This returns the number of bytes and may be less than the requested length
-// if the available space in the output buffer is too small.
+// This returns the number of bytes copied and may be less than the requested
+// length if the available space in the output buffer is too small.
 //
-// This invariant must be kept: dist <= HistSize()
+// This invariant must be kept: 0 <= dist <= HistSize()
 func (dd *dictDecoder) WriteCopy(dist, length int) int {
+	wrBase := dd.wrPos
+	wrEnd := dd.wrPos + length
+	if wrEnd > len(dd.hist) {
+		wrEnd = len(dd.hist)
+	}
+
+	// Copy non-overlapping section after destination.
 	rdPos := dd.wrPos - dist
 	if rdPos < 0 {
 		rdPos += len(dd.hist)
+		dd.wrPos += copy(dd.hist[dd.wrPos:wrEnd], dd.hist[rdPos:])
+		rdPos = 0
 	}
 
-	if wrSize := len(dd.hist) - dd.wrPos; length > wrSize {
-		length = wrSize
+	// Copy overlapping section before destination.
+	for dd.wrPos < wrEnd {
+		dd.wrPos += copy(dd.hist[dd.wrPos:wrEnd], dd.hist[rdPos:dd.wrPos])
 	}
-	if rdSize := len(dd.hist) - rdPos; length > rdSize {
-		length = rdSize
-	}
-	for i := 0; i < length; i++ {
-		dd.hist[dd.wrPos+i] = dd.hist[rdPos+i]
-	}
-	dd.wrPos += length
-	return length
+	return dd.wrPos - wrBase
 }
 
 // ReadFlush returns a slice of the historical buffer that is ready to be
@@ -93,10 +99,11 @@ func (dd *dictDecoder) ReadFlush() []byte {
 			dd.full = true
 		} else {
 			// Allocate a larger history buffer.
-			hist := make([]byte, cap(dd.hist)*4)
-			if len(hist) > dd.size {
-				hist = hist[:dd.size]
+			size := cap(dd.hist) * 4
+			if size > dd.size {
+				size = dd.size
 			}
+			hist := make([]byte, size)
 			copy(hist, dd.hist)
 			dd.hist = hist
 		}

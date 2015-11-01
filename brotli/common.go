@@ -13,9 +13,7 @@ type Error string
 func (e Error) Error() string { return "brotli: " + string(e) }
 
 var (
-	ErrCorrupt  error = Error("stream is corrupted")
-	ErrInvalid  error = Error("cannot encode data")
-	ErrInternal error = Error("internal error")
+	ErrCorrupt error = Error("stream is corrupted")
 )
 
 func errRecover(err *error) {
@@ -31,10 +29,31 @@ func errRecover(err *error) {
 	}
 }
 
-var reverseLUT []uint8
+var (
+	reverseLUT [256]uint8
+	mtfLUT     [256]uint8
+)
+
+func init() {
+	initLUTs()
+
+	const debugPrint = false
+	if debugPrint {
+		printLUTs()
+	}
+}
+
+func initLUTs() {
+	initCommonLUTs()
+	initPrefixLUTs()
+	initContextLUTs()
+	initDictLUTs()
+}
 
 func initCommonLUTs() {
-	reverseLUT = make([]uint8, 256)
+	for i := range mtfLUT {
+		mtfLUT[i] = uint8(i)
+	}
 	for i := range reverseLUT {
 		b := uint8(i)
 		b = (b&0xaa)>>1 | (b&0x55)<<1
@@ -42,6 +61,14 @@ func initCommonLUTs() {
 		b = (b&0xf0)>>4 | (b&0x0f)<<4
 		reverseLUT[i] = b
 	}
+}
+
+// neededBits computes the minimum number of bits needed to encode n elements.
+func neededBits(n uint16) (nb uint) {
+	for n -= 1; n > 0; n >>= 1 {
+		nb++
+	}
+	return
 }
 
 // reverseUint16 reverses all bits of v.
@@ -54,26 +81,51 @@ func reverseBits(v uint16, n uint) uint16 {
 	return reverseUint16(v << (16 - n))
 }
 
-// neededBits computes the minimum number of bits needed to encode n elements.
-func neededBits(n uint16) (nb uint) {
-	for n -= 1; n > 0; n >>= 1 {
-		nb++
-	}
-	return
+// moveToFront is a data structure that allows for more efficient move-to-front
+// transformations (described in RFC section 7.3). Since most transformations
+// only involve a fairly low number of symbols, it can be quite expensive
+// filling out the dict with values 0..255 for every call. Instead, we remember
+// what part of the dict was altered and make sure we reset it at the beginning
+// of every encode and decode operation.
+type moveToFront struct {
+	dict [256]uint8 // Mapping from indexes to values
+	tail int        // Number of tail bytes that already ordered
 }
 
-func initLUTs() {
-	initCommonLUTs()
-	initPrefixLUTs()
-	initContextLUTs()
-	initDictLUTs()
+func (m *moveToFront) Encode(vals []uint8) {
+	// Reset dict to be identical to mtfLUT.
+	copy(m.dict[:], mtfLUT[:256-m.tail])
+
+	var max int
+	for i, val := range vals {
+		var idx uint8 // Reverse lookup idx in dict
+		for di, dv := range m.dict {
+			if dv == val {
+				idx = uint8(di)
+				break
+			}
+		}
+		vals[i] = idx
+
+		max |= int(idx)
+		copy(m.dict[1:], m.dict[:idx])
+		m.dict[0] = val
+	}
+	m.tail = 256 - max - 1
 }
 
-func init() {
-	initLUTs()
+func (m *moveToFront) Decode(idxs []uint8) {
+	// Reset dict to be identical to mtfLUT.
+	copy(m.dict[:], mtfLUT[:256-m.tail])
 
-	const debugPrint = false
-	if debugPrint {
-		printLUTs()
+	var max int
+	for i, idx := range idxs {
+		val := m.dict[idx] // Forward lookup val in dict
+		idxs[i] = val
+
+		max |= int(idx)
+		copy(m.dict[1:], m.dict[:idx])
+		m.dict[0] = val
 	}
+	m.tail = 256 - max - 1
 }

@@ -4,6 +4,10 @@
 
 package brotli
 
+// RFC section 8.
+// Maximum buffer size needed to store a word after a transformation.
+const maxWordSize = maxDictLen + 13 + 1
+
 // These constants are defined in Appendix B of the RFC.
 const (
 	transformIdentity = iota
@@ -29,17 +33,13 @@ const (
 	transformOmitLast9
 )
 
-// Maximum size of a word after transformation.
-// The largest combination of prefix and suffix occurs at index 73.
-const maxWordSize = maxDictLen + 13
-
 // This table is defined in Appendix B of the RFC.
 var transformLUT = []struct {
 	prefix    string
 	transform int
 	suffix    string
 }{
-	{"", transformIdentity, ""},
+	{"", transformIdentity, ""}, // 0
 	{"", transformIdentity, " "},
 	{" ", transformIdentity, " "},
 	{"", transformOmitFirst1, ""},
@@ -49,7 +49,7 @@ var transformLUT = []struct {
 	{"s ", transformIdentity, " "},
 	{"", transformIdentity, " of "},
 	{"", transformUppercaseFirst, ""},
-	{"", transformIdentity, " and "},
+	{"", transformIdentity, " and "}, // 10
 	{"", transformOmitFirst2, ""},
 	{"", transformOmitLast1, ""},
 	{", ", transformIdentity, " "},
@@ -59,7 +59,7 @@ var transformLUT = []struct {
 	{"", transformIdentity, " to "},
 	{"e ", transformIdentity, " "},
 	{"", transformIdentity, "\""},
-	{"", transformIdentity, "."},
+	{"", transformIdentity, "."}, // 20
 	{"", transformIdentity, "\">"},
 	{"", transformIdentity, "\n"},
 	{"", transformOmitLast3, ""},
@@ -69,7 +69,7 @@ var transformLUT = []struct {
 	{"", transformOmitLast2, ""},
 	{"", transformIdentity, " a "},
 	{"", transformIdentity, " that "},
-	{" ", transformUppercaseFirst, ""},
+	{" ", transformUppercaseFirst, ""}, // 30
 	{"", transformIdentity, ". "},
 	{".", transformIdentity, ""},
 	{" ", transformIdentity, ", "},
@@ -79,7 +79,7 @@ var transformLUT = []struct {
 	{"", transformIdentity, " from "},
 	{"", transformIdentity, " by "},
 	{"", transformOmitFirst5, ""},
-	{"", transformOmitFirst6, ""},
+	{"", transformOmitFirst6, ""}, // 40
 	{" the ", transformIdentity, ""},
 	{"", transformOmitLast4, ""},
 	{"", transformIdentity, ". The "},
@@ -89,7 +89,7 @@ var transformLUT = []struct {
 	{"", transformIdentity, " is "},
 	{"", transformOmitLast7, ""},
 	{"", transformOmitLast1, "ing "},
-	{"", transformIdentity, "\n\t"},
+	{"", transformIdentity, "\n\t"}, // 50
 	{"", transformIdentity, ":"},
 	{" ", transformIdentity, ". "},
 	{"", transformIdentity, "ed "},
@@ -99,7 +99,7 @@ var transformLUT = []struct {
 	{"", transformIdentity, "("},
 	{"", transformUppercaseFirst, ", "},
 	{"", transformOmitLast8, ""},
-	{"", transformIdentity, " at "},
+	{"", transformIdentity, " at "}, // 60
 	{"", transformIdentity, "ly "},
 	{" the ", transformIdentity, " of "},
 	{"", transformOmitLast5, ""},
@@ -109,7 +109,7 @@ var transformLUT = []struct {
 	{".", transformIdentity, "("},
 	{"", transformUppercaseAll, " "},
 	{"", transformUppercaseFirst, "\">"},
-	{"", transformIdentity, "=\""},
+	{"", transformIdentity, "=\""}, // 70
 	{" ", transformIdentity, "."},
 	{".com/", transformIdentity, ""},
 	{" the ", transformIdentity, " of the "},
@@ -119,7 +119,7 @@ var transformLUT = []struct {
 	{".", transformIdentity, " "},
 	{"", transformUppercaseFirst, "("},
 	{"", transformUppercaseFirst, "."},
-	{"", transformIdentity, " not "},
+	{"", transformIdentity, " not "}, // 80
 	{" ", transformIdentity, "=\""},
 	{"", transformIdentity, "er "},
 	{" ", transformUppercaseAll, " "},
@@ -129,7 +129,7 @@ var transformLUT = []struct {
 	{"", transformUppercaseAll, "\""},
 	{"", transformUppercaseFirst, ". "},
 	{" ", transformIdentity, "("},
-	{"", transformIdentity, "ful "},
+	{"", transformIdentity, "ful "}, // 90
 	{" ", transformUppercaseFirst, ". "},
 	{"", transformIdentity, "ive "},
 	{"", transformIdentity, "less "},
@@ -139,7 +139,7 @@ var transformLUT = []struct {
 	{"", transformUppercaseAll, "\">"},
 	{" ", transformIdentity, "='"},
 	{"", transformUppercaseFirst, ","},
-	{"", transformIdentity, "ize "},
+	{"", transformIdentity, "ize "}, // 100
 	{"", transformUppercaseAll, "."},
 	{"\xc2\xa0", transformIdentity, ""},
 	{" ", transformIdentity, ","},
@@ -149,7 +149,7 @@ var transformLUT = []struct {
 	{"", transformUppercaseAll, ", "},
 	{"", transformUppercaseFirst, "='"},
 	{" ", transformUppercaseFirst, ","},
-	{" ", transformUppercaseAll, "=\""},
+	{" ", transformUppercaseAll, "=\""}, // 110
 	{" ", transformUppercaseAll, ", "},
 	{"", transformUppercaseAll, ","},
 	{"", transformUppercaseAll, "("},
@@ -159,34 +159,38 @@ var transformLUT = []struct {
 	{" ", transformUppercaseAll, ". "},
 	{" ", transformUppercaseFirst, "=\""},
 	{" ", transformUppercaseAll, "='"},
-	{" ", transformUppercaseFirst, "='"},
+	{" ", transformUppercaseFirst, "='"}, // 120
 }
 
 // transformWord transform the input word and places the result in buf according
 // to the transform primitives defined in RFC section 8.
-// The length of word must be <= maxDictLen.
-// The length of buf must be >= maxWordSize.
+//
+// The following invariants must be kept:
+//	0 <= id < len(transformLUT)
+//	len(word) <= maxDictLen
+//	len(buf) >= maxWordSize
 func transformWord(buf, word []byte, id int) (cnt int) {
 	transform := transformLUT[id]
+	tid := transform.transform
 	cnt = copy(buf, transform.prefix)
 	switch {
-	case id == transformIdentity:
+	case tid == transformIdentity:
 		cnt += copy(buf[cnt:], word)
-	case id == transformUppercaseFirst:
+	case tid == transformUppercaseFirst:
 		buf2 := buf[cnt:]
 		cnt += copy(buf2, word)
 		transformUppercase(buf2[:len(word)], true)
-	case id == transformUppercaseAll:
+	case tid == transformUppercaseAll:
 		buf2 := buf[cnt:]
 		cnt += copy(buf2, word)
 		transformUppercase(buf2[:len(word)], false)
-	case id <= transformOmitFirst9:
-		cut := id - transformOmitFirst1 + 1 // 1..9
+	case tid <= transformOmitFirst9:
+		cut := tid - transformOmitFirst1 + 1 // 1..9
 		if len(word) > cut {
 			cnt += copy(buf[cnt:], word[cut:])
 		}
-	case id <= transformOmitLast9:
-		cut := id - transformOmitLast1 + 1 // 1..9
+	case tid <= transformOmitLast9:
+		cut := tid - transformOmitLast1 + 1 // 1..9
 		if len(word) > cut {
 			cnt += copy(buf[cnt:], word[:len(word)-cut])
 		}
