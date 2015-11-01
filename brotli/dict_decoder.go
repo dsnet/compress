@@ -16,6 +16,8 @@ type dictDecoder struct {
 }
 
 func (dd *dictDecoder) Init(size int) {
+	*dd = dictDecoder{hist: dd.hist}
+
 	// Regardless of what size claims, start with a small dictionary to avoid
 	// denial-of-service attacks with large memory allocation.
 	dd.size = size

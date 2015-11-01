@@ -98,8 +98,8 @@ func TestDictDecoder(t *testing.T) {
 	checkLastBytes("\x00\x00")
 
 	writeString(".")
-	checkLastBytes("\x00.")
 	want += "."
+	checkLastBytes("\x00.")
 
 	str := poem
 	for _, ref := range refs {
