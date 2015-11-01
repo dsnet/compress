@@ -81,6 +81,9 @@ func (br *Reader) Read(buf []byte) (int, error) {
 			br.step()
 		}()
 		br.InputOffset = br.rd.offset
+		if br.err != nil {
+			br.toRead = br.dict.ReadFlush() // Flush what's left in case of error
+		}
 	}
 }
 
@@ -130,7 +133,6 @@ func (br *Reader) readStreamHeader() {
 // readBlockHeader reads a meta-block header according to RFC section 9.2.
 func (br *Reader) readBlockHeader() {
 	if br.last {
-		br.toRead = br.dict.ReadFlush()
 		if br.rd.ReadPads() > 0 {
 			panic(ErrCorrupt)
 		}

@@ -66,7 +66,7 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 	// Handle special case trees.
 	if len(codes) <= 1 {
 		switch {
-		case len(codes) == 0: // Empty tree (should panic if used later)
+		case len(codes) == 0: // Empty tree (should error if used later)
 			*pd = prefixDecoder{chunks: pd.chunks[:0], links: pd.links[:0], numSyms: 0}
 		case len(codes) == 1: // Single code tree (bit-width of zero)
 			*pd = prefixDecoder{

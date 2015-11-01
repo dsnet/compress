@@ -303,16 +303,16 @@ func TestReader(t *testing.T) {
 		output := hex.EncodeToString(data)
 
 		if err != v.err {
-			t.Errorf("test %d: %s\nerror mismatch: got %v, want %v", i, v.desc, err, v.err)
+			t.Errorf("test %d, %s\nerror mismatch: got %v, want %v", i, v.desc, err, v.err)
 		}
 		if output != v.output {
-			t.Errorf("test %d: %s\noutput mismatch:\ngot  %v\nwant %v", i, v.desc, output, v.output)
+			t.Errorf("test %d, %s\noutput mismatch:\ngot  %v\nwant %v", i, v.desc, output, v.output)
 		}
 		if rd.InputOffset != v.inIdx {
-			t.Errorf("test %d: %s\ninput offset mismatch: got %d, want %d", i, v.desc, rd.InputOffset, v.inIdx)
+			t.Errorf("test %d, %s\ninput offset mismatch: got %d, want %d", i, v.desc, rd.InputOffset, v.inIdx)
 		}
 		if rd.OutputOffset != v.outIdx {
-			t.Errorf("test %d: %s\noutput offset mismatch: got %d, want %d", i, v.desc, rd.OutputOffset, v.outIdx)
+			t.Errorf("test %d, %s\noutput offset mismatch: got %d, want %d", i, v.desc, rd.OutputOffset, v.outIdx)
 		}
 	}
 }
@@ -381,10 +381,10 @@ func TestReaderGolden(t *testing.T) {
 		rd := NewReader(bytes.NewReader(input))
 		data, err := ioutil.ReadAll(rd)
 		if err != nil {
-			t.Errorf("test %d: %s\nerror mismatch: got %v, want nil", i, v.input, err)
+			t.Errorf("test %d, %s\nerror mismatch: got %v, want nil", i, v.input, err)
 		}
 		if string(data) != string(output) {
-			t.Errorf("test %d: %s\noutput mismatch:\ngot  %q\nwant %q", i, v.input, string(data), string(output))
+			t.Errorf("test %d, %s\noutput mismatch:\ngot  %q\nwant %q", i, v.input, string(data), string(output))
 		}
 	}
 }
