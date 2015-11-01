@@ -19,8 +19,8 @@ const (
 	maxNumDistSyms    = 16 + 120 + (48 << 3) // Distance symbols
 	numInsSyms        = 704                  // Insert-and-copy length symbols
 	numBlkCntSyms     = 26                   // Block count symbols
-	maxNumBlkTypeSyms = maxTypes + 2         // Block type symbols
-	maxNumCtxMapSyms  = maxTypes + 16        // Context map symbols
+	maxNumBlkTypeSyms = 256 + 2              // Block type symbols
+	maxNumCtxMapSyms  = 256 + 16             // Context map symbols
 
 	// This should be the max of each of the constants above.
 	maxNumAlphabetSyms = numInsSyms
