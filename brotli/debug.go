@@ -1,8 +1,16 @@
+// Copyright 2015, Joe Tsai. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE.md file.
+
+// +build debug
+
 package brotli
 
 import "os"
 import "fmt"
 import "strings"
+
+const debug = true
 
 func printLUTs() {
 	var output = os.Stderr
@@ -33,12 +41,13 @@ func printLUTs() {
 	}
 
 	// Common LUTs.
-	printVar("reverseLUT", reverseLUT)
+	printVar("reverseLUT", reverseLUT[:])
+	printVar("mtfLUT", mtfLUT[:])
 	fmt.Fprintln(output)
 
 	// Context LUTs.
-	printVar("contextP1LUT", contextP1LUT)
-	printVar("contextP2LUT", contextP2LUT)
+	printVar("contextP1LUT", contextP1LUT[:])
+	printVar("contextP2LUT", contextP2LUT[:])
 	fmt.Fprintln(output)
 
 	// Static dictionary LUTs.

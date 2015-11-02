@@ -184,8 +184,7 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 		}
 	}
 
-	const sanity = false
-	if sanity && !checkPrefixes(codes) {
+	if debug && !checkPrefixes(codes) {
 		panic(ErrCorrupt) // The codes do not form a valid prefix tree.
 	}
 }

@@ -36,11 +36,7 @@ var (
 
 func init() {
 	initLUTs()
-
-	const debugPrint = false
-	if debugPrint {
-		printLUTs()
-	}
+	printLUTs() // Only occurs in debug mode
 }
 
 func initLUTs() {
