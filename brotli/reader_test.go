@@ -9,6 +9,7 @@ import "io/ioutil"
 import "bytes"
 import "strings"
 import "encoding/hex"
+import "runtime"
 import "testing"
 
 func TestReader(t *testing.T) {
@@ -388,3 +389,46 @@ func TestReaderGolden(t *testing.T) {
 		}
 	}
 }
+
+func benchmarkDecode(b *testing.B, testfile string) {
+	b.StopTimer()
+	b.ReportAllocs()
+
+	input, err := ioutil.ReadFile("testdata/" + testfile)
+	if err != nil {
+		b.Fatal(err)
+	}
+	output, err := ioutil.ReadAll(NewReader(bytes.NewReader(input)))
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	nb := int64(len(output))
+	output = nil
+	runtime.GC()
+
+	b.SetBytes(nb)
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		io.Copy(ioutil.Discard, NewReader(bytes.NewReader(input)))
+	}
+}
+
+func BenchmarkDecodeDigitsSpeed1e4(b *testing.B)    { benchmarkDecode(b, "digits-speed-1e4.br") }
+func BenchmarkDecodeDigitsSpeed1e5(b *testing.B)    { benchmarkDecode(b, "digits-speed-1e5.br") }
+func BenchmarkDecodeDigitsSpeed1e6(b *testing.B)    { benchmarkDecode(b, "digits-speed-1e6.br") }
+func BenchmarkDecodeDigitsDefault1e4(b *testing.B)  { benchmarkDecode(b, "digits-default-1e4.br") }
+func BenchmarkDecodeDigitsDefault1e5(b *testing.B)  { benchmarkDecode(b, "digits-default-1e5.br") }
+func BenchmarkDecodeDigitsDefault1e6(b *testing.B)  { benchmarkDecode(b, "digits-default-1e6.br") }
+func BenchmarkDecodeDigitsCompress1e4(b *testing.B) { benchmarkDecode(b, "digits-best-1e4.br") }
+func BenchmarkDecodeDigitsCompress1e5(b *testing.B) { benchmarkDecode(b, "digits-best-1e5.br") }
+func BenchmarkDecodeDigitsCompress1e6(b *testing.B) { benchmarkDecode(b, "digits-best-1e6.br") }
+func BenchmarkDecodeTwainSpeed1e4(b *testing.B)     { benchmarkDecode(b, "twain-speed-1e4.br") }
+func BenchmarkDecodeTwainSpeed1e5(b *testing.B)     { benchmarkDecode(b, "twain-speed-1e5.br") }
+func BenchmarkDecodeTwainSpeed1e6(b *testing.B)     { benchmarkDecode(b, "twain-speed-1e6.br") }
+func BenchmarkDecodeTwainDefault1e4(b *testing.B)   { benchmarkDecode(b, "twain-default-1e4.br") }
+func BenchmarkDecodeTwainDefault1e5(b *testing.B)   { benchmarkDecode(b, "twain-default-1e5.br") }
+func BenchmarkDecodeTwainDefault1e6(b *testing.B)   { benchmarkDecode(b, "twain-default-1e6.br") }
+func BenchmarkDecodeTwainCompress1e4(b *testing.B)  { benchmarkDecode(b, "twain-best-1e4.br") }
+func BenchmarkDecodeTwainCompress1e5(b *testing.B)  { benchmarkDecode(b, "twain-best-1e5.br") }
+func BenchmarkDecodeTwainCompress1e6(b *testing.B)  { benchmarkDecode(b, "twain-best-1e6.br") }
