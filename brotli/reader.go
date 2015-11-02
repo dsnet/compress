@@ -411,11 +411,11 @@ func (br *Reader) copyDynamicDict() {
 		br.toRead = br.dict.ReadFlush()
 		br.step = br.copyDynamicDict // We need to continue this work
 		return
-	}
-	if br.blkLen < 0 {
+	} else if br.blkLen < 0 {
 		panic(ErrCorrupt)
+	} else {
+		br.readCommand()
 	}
-	br.readCommand()
 }
 
 // copyStaticDict copies a string a string from the static dictionary using
@@ -447,11 +447,11 @@ func (br *Reader) copyStaticDict() {
 		br.toRead = br.dict.ReadFlush()
 		br.step = br.copyStaticDict // We need to continue this work
 		return
-	}
-	if br.blkLen < 0 {
+	} else if br.blkLen < 0 {
 		panic(ErrCorrupt)
+	} else {
+		br.readCommand()
 	}
-	br.readCommand()
 }
 
 // decodeInsertAndCopySymbol converts an insert-and-copy length symbol to a pair
