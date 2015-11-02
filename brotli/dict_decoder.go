@@ -64,7 +64,7 @@ func (dd *dictDecoder) WriteMark(cnt int) {
 // This returns the number of bytes copied and may be less than the requested
 // length if the available space in the output buffer is too small.
 //
-// This invariant must be kept: 0 <= dist <= HistSize()
+// This invariant must be kept: 0 < dist <= HistSize()
 func (dd *dictDecoder) WriteCopy(dist, length int) int {
 	wrBase := dd.wrPos
 	wrEnd := dd.wrPos + length
