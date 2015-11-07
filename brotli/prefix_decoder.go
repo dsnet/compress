@@ -4,8 +4,6 @@
 
 package brotli
 
-import "math"
-
 // TODO(dsnet): Almost all of this logic is identical to compress/flate.
 // Centralize common logic to compress/internal/prefix.
 
@@ -80,9 +78,10 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 
 	// Compute basic statistics on the symbols.
 	var bitCnts [maxPrefixBits + 1]uint
-	var minBits, maxBits uint8 = math.MaxUint8, 0
-	symLast := -1
-	for _, c := range codes {
+	c0 := codes[0]
+	bitCnts[c0.len]++
+	minBits, maxBits, symLast := c0.len, c0.len, int(c0.sym)
+	for _, c := range codes[1:] {
 		if int(c.sym) <= symLast {
 			panic(ErrCorrupt) // Non-unique or non-monotonically increasing
 		}
