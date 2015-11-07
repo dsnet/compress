@@ -12,13 +12,15 @@ type Reader struct {
 	OutputOffset int64 // Total number of bytes emitted from Read
 
 	rd     bitReader // Input source
-	step   func()    // Single step of decompression work (can panic)
 	toRead []byte    // Uncompressed data ready to be emitted from Read
 	blkLen int       // Uncompressed bytes left to read in meta-block
 	insLen int       // Bytes left to insert in current command
 	cpyLen int       // Bytes left to copy in current command
 	last   bool      // Last block bit detected
 	err    error     // Persistent error
+
+	step      func() // Single step of decompression work (can panic)
+	stepState int    // The sub-step state for certain steps
 
 	dict    dictDecoder  // Dynamic sliding dictionary
 	iacBlk  blockDecoder // Insert-and-copy block decoder
@@ -200,7 +202,7 @@ func (br *Reader) readMetaData() {
 	} else if cnt < int64(br.blkLen) {
 		panic(io.ErrUnexpectedEOF)
 	}
-	br.readBlockHeader()
+	br.step = br.readBlockHeader
 }
 
 // readRawData reads raw data according to RFC section 9.2.
@@ -225,7 +227,7 @@ func (br *Reader) readRawData() {
 		br.step = br.readRawData // We need to continue this work
 		return
 	}
-	br.readBlockHeader()
+	br.step = br.readBlockHeader
 }
 
 // readPrefixCodes reads the prefix codes according to RFC section 9.2.
@@ -298,160 +300,187 @@ func (br *Reader) readPrefixCodes() {
 		br.rd.ReadPrefixCode(&br.distBlk.prefixes[i], numDistSyms)
 	}
 
-	br.readCommand()
+	br.readCommands()
 }
 
-// readCommand reads start of block command according to RFC section 9.3.
-func (br *Reader) readCommand() {
-	if br.blkLen == 0 {
-		br.readBlockHeader() // Block is complete, read next one
-		return
+// readCommands reads block commands according to RFC section 9.3.
+//
+// Since Go does not support tail call optimization, we use goto statements
+// to achieve higher performance processing each command.
+func (br *Reader) readCommands() {
+	br.step = br.readCommands // Assume we may need to continue this function
+
+	const (
+		stateInit = iota
+		stateLiterals
+		stateDynamicDict
+		stateStaticDict
+	)
+
+	switch br.stepState {
+	case stateInit:
+		goto startCommand
+	case stateLiterals:
+		goto readLiterals
+	case stateDynamicDict:
+		goto copyDynamicDict
+	case stateStaticDict:
+		goto copyStaticDict
 	}
 
-	if br.iacBlk.typeLen == 0 {
-		br.iacBlk.readBlockSwitch(&br.rd)
-	}
-	br.iacBlk.typeLen--
-
-	iacSym := br.rd.ReadSymbol(&br.iacBlk.prefixes[br.iacBlk.types[0]])
-	insSym, cpySym := br.decodeInsertAndCopySymbol(iacSym)
-	br.insLen = int(br.rd.ReadOffset(insSym, insLenRanges)) // 0..16799809
-	br.cpyLen = int(br.rd.ReadOffset(cpySym, cpyLenRanges)) // 2..16779333
-	br.distZero = iacSym < 128
-
-	if br.insLen > 0 {
-		br.readLiterals()
-	} else {
-		br.readDistance()
-	}
-}
-
-// readLiterals reads insLen literal symbols as uncompressed data according to
-// RFC section 9.3.
-func (br *Reader) readLiterals() {
-	buf := br.dict.WriteSlice()
-	if len(buf) > br.insLen {
-		buf = buf[:br.insLen]
-	}
-
-	p1, p2 := br.dict.LastBytes()
-	for i := range buf {
-		if br.litBlk.typeLen == 0 {
-			br.litBlk.readBlockSwitch(&br.rd)
-			br.litMapType = br.litMap[64*int(br.litBlk.types[0]):]
-			br.cmode = br.cmodes[br.litBlk.types[0]] // 0..3
+startCommand:
+	// Read the insert and copy lengths according to RFC section 5.
+	{
+		if br.iacBlk.typeLen == 0 {
+			br.iacBlk.readBlockSwitch(&br.rd)
 		}
-		br.litBlk.typeLen--
+		br.iacBlk.typeLen--
 
-		cidl := getLitContextID(p1, p2, br.cmode) // 0..63
-		treel := &br.litBlk.prefixes[br.litMapType[cidl]]
-		litSym := br.rd.ReadSymbol(treel)
-
-		buf[i] = byte(litSym)
-		p1, p2 = byte(litSym), p1
-		br.dict.WriteMark(1)
+		iacSym := br.rd.ReadSymbol(&br.iacBlk.prefixes[br.iacBlk.types[0]])
+		insSym, cpySym := br.decodeInsertAndCopySymbol(iacSym)
+		br.insLen = int(br.rd.ReadOffset(insSym, insLenRanges)) // 0..16799809
+		br.cpyLen = int(br.rd.ReadOffset(cpySym, cpyLenRanges)) // 2..16779333
+		br.distZero = iacSym < 128
+		if br.insLen > 0 {
+			goto readLiterals
+		} else {
+			goto readDistance
+		}
 	}
-	br.insLen -= len(buf)
-	br.blkLen -= len(buf)
 
-	if br.insLen > 0 {
-		br.toRead = br.dict.ReadFlush()
-		br.step = br.readLiterals // We need to continue this work
-		return
-	} else if br.blkLen < 0 {
+readLiterals:
+	// Read literal symbols as uncompressed data according to RFC section 9.3.
+	{
+		buf := br.dict.WriteSlice()
+		if len(buf) > br.insLen {
+			buf = buf[:br.insLen]
+		}
+
+		p1, p2 := br.dict.LastBytes()
+		for i := range buf {
+			if br.litBlk.typeLen == 0 {
+				br.litBlk.readBlockSwitch(&br.rd)
+				br.litMapType = br.litMap[64*int(br.litBlk.types[0]):]
+				br.cmode = br.cmodes[br.litBlk.types[0]] // 0..3
+			}
+			br.litBlk.typeLen--
+
+			cidl := getLitContextID(p1, p2, br.cmode) // 0..63
+			treel := &br.litBlk.prefixes[br.litMapType[cidl]]
+			litSym := br.rd.ReadSymbol(treel)
+
+			buf[i] = byte(litSym)
+			p1, p2 = byte(litSym), p1
+			br.dict.WriteMark(1)
+		}
+		br.insLen -= len(buf)
+		br.blkLen -= len(buf)
+
+		if br.insLen > 0 {
+			br.toRead = br.dict.ReadFlush()
+			br.stepState = stateLiterals // Need to continue work here
+			return
+		} else if br.blkLen > 0 {
+			goto readDistance
+		} else {
+			goto finishCommand
+		}
+	}
+
+readDistance:
+	// Read and decode the distance length according to RFC section 9.3.
+	{
+		if br.distZero {
+			br.dist = br.dists[0]
+		} else {
+			if br.distBlk.typeLen == 0 {
+				br.distBlk.readBlockSwitch(&br.rd)
+				br.distMapType = br.distMap[4*int(br.distBlk.types[0]):]
+			}
+			br.distBlk.typeLen--
+
+			cidd := getDistContextID(br.cpyLen) // 0..3
+			treed := &br.distBlk.prefixes[br.distMapType[cidd]]
+			distSym := br.rd.ReadSymbol(treed)
+
+			br.dist = br.decodeDistanceSymbol(distSym)
+			br.distZero = bool(distSym == 0)
+			if br.dist <= 0 {
+				panic(ErrCorrupt)
+			}
+		}
+
+		if br.dist <= br.dict.HistSize() {
+			if !br.distZero {
+				copy(br.dists[1:], br.dists[:])
+				br.dists[0] = br.dist
+			}
+			goto copyDynamicDict
+		} else {
+			goto copyStaticDict
+		}
+	}
+
+copyDynamicDict:
+	// Copy a string from the past uncompressed data according to RFC section 2.
+	{
+		cnt := br.dict.WriteCopy(br.dist, br.cpyLen)
+		br.blkLen -= cnt
+		br.cpyLen -= cnt
+
+		if br.cpyLen > 0 {
+			br.toRead = br.dict.ReadFlush()
+			br.stepState = stateDynamicDict // Need to continue work here
+			return
+		} else {
+			goto finishCommand
+		}
+	}
+
+copyStaticDict:
+	// Copy a string from the static dictionary according to RFC section 8.
+	{
+		if len(br.word) == 0 {
+			if br.cpyLen < minDictLen || br.cpyLen > maxDictLen {
+				panic(ErrCorrupt)
+			}
+			wordIdx := br.dist - (br.dict.HistSize() + 1)
+			index := wordIdx % dictSizes[br.cpyLen]
+			offset := dictOffsets[br.cpyLen] + index*br.cpyLen
+			baseWord := dictLUT[offset : offset+br.cpyLen]
+			transformIdx := wordIdx >> uint(dictBitSizes[br.cpyLen])
+			if transformIdx >= len(transformLUT) {
+				panic(ErrCorrupt)
+			}
+			cnt := transformWord(br.wordBuf[:], baseWord, transformIdx)
+			br.word = br.wordBuf[:cnt]
+		}
+
+		buf := br.dict.WriteSlice()
+		cnt := copy(buf, br.word)
+		br.word = br.word[cnt:]
+		br.blkLen -= cnt
+		br.dict.WriteMark(cnt)
+
+		if len(br.word) > 0 {
+			br.toRead = br.dict.ReadFlush()
+			br.stepState = stateStaticDict // Need to continue work here
+			return
+		} else {
+			goto finishCommand
+		}
+	}
+
+finishCommand:
+	// Finish off this command and check if we need to loop again.
+	br.stepState = stateInit
+	if br.blkLen < 0 {
 		panic(ErrCorrupt)
-	} else if br.blkLen == 0 {
-		br.readCommand()
-	} else {
-		br.readDistance()
+	} else if br.blkLen > 0 {
+		goto startCommand // More commands in this block
 	}
-}
-
-// readDistance reads the distance length and copies a sub-string from either
-// the past history or from the static dictionary according to RFC section 9.3.
-func (br *Reader) readDistance() {
-	if br.distZero {
-		br.dist = br.dists[0]
-	} else {
-		if br.distBlk.typeLen == 0 {
-			br.distBlk.readBlockSwitch(&br.rd)
-			br.distMapType = br.distMap[4*int(br.distBlk.types[0]):]
-		}
-		br.distBlk.typeLen--
-
-		cidd := getDistContextID(br.cpyLen) // 0..3
-		treed := &br.distBlk.prefixes[br.distMapType[cidd]]
-		distSym := br.rd.ReadSymbol(treed)
-
-		br.dist = br.decodeDistanceSymbol(distSym)
-		br.distZero = bool(distSym == 0)
-	}
-
-	if br.dist <= 0 {
-		panic(ErrCorrupt)
-	}
-	if br.dist <= br.dict.HistSize() {
-		if !br.distZero {
-			copy(br.dists[1:], br.dists[:])
-			br.dists[0] = br.dist
-		}
-		br.copyDynamicDict()
-	} else {
-		br.copyStaticDict()
-	}
-}
-
-// copyDynamicDict copies a sub-string from the past according to RFC section 2.
-func (br *Reader) copyDynamicDict() {
-	cnt := br.dict.WriteCopy(br.dist, br.cpyLen)
-	br.blkLen -= cnt
-	br.cpyLen -= cnt
-
-	if br.cpyLen > 0 {
-		br.toRead = br.dict.ReadFlush()
-		br.step = br.copyDynamicDict // We need to continue this work
-		return
-	} else if br.blkLen < 0 {
-		panic(ErrCorrupt)
-	} else {
-		br.readCommand()
-	}
-}
-
-// copyStaticDict copies a string a string from the static dictionary using
-// the logic described in RFC section 8.
-func (br *Reader) copyStaticDict() {
-	if len(br.word) == 0 {
-		if br.cpyLen < minDictLen || br.cpyLen > maxDictLen {
-			panic(ErrCorrupt)
-		}
-		wordIdx := br.dist - (br.dict.HistSize() + 1)
-		index := wordIdx % dictSizes[br.cpyLen]
-		offset := dictOffsets[br.cpyLen] + index*br.cpyLen
-		baseWord := dictLUT[offset : offset+br.cpyLen]
-		transformIdx := wordIdx >> uint(dictBitSizes[br.cpyLen])
-		if transformIdx >= len(transformLUT) {
-			panic(ErrCorrupt)
-		}
-		cnt := transformWord(br.wordBuf[:], baseWord, transformIdx)
-		br.word = br.wordBuf[:cnt]
-	}
-
-	buf := br.dict.WriteSlice()
-	cnt := copy(buf, br.word)
-	br.word = br.word[cnt:]
-	br.blkLen -= cnt
-	br.dict.WriteMark(cnt)
-
-	if len(br.word) > 0 {
-		br.toRead = br.dict.ReadFlush()
-		br.step = br.copyStaticDict // We need to continue this work
-		return
-	} else if br.blkLen < 0 {
-		panic(ErrCorrupt)
-	} else {
-		br.readCommand()
-	}
+	br.step = br.readBlockHeader // Done with this block
+	return
 }
 
 // decodeInsertAndCopySymbol converts an insert-and-copy length symbol to a pair
