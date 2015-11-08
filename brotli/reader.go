@@ -337,9 +337,9 @@ startCommand:
 		br.iacBlk.typeLen--
 
 		iacSym := br.rd.ReadSymbol(&br.iacBlk.prefixes[br.iacBlk.types[0]])
-		insSym, cpySym := br.decodeInsertAndCopySymbol(iacSym)
-		br.insLen = int(br.rd.ReadOffset(insSym, insLenRanges)) // 0..16799809
-		br.cpyLen = int(br.rd.ReadOffset(cpySym, cpyLenRanges)) // 2..16779333
+		rec := iacLUT[iacSym]
+		br.insLen = int(rec.ins.base) + int(br.rd.ReadBits(uint(rec.ins.bits)))
+		br.cpyLen = int(rec.cpy.base) + int(br.rd.ReadBits(uint(rec.cpy.bits)))
 		br.distZero = iacSym < 128
 		if br.insLen > 0 {
 			goto readLiterals
@@ -403,7 +403,16 @@ readDistance:
 			treed := &br.distBlk.prefixes[br.distMapType[cidd]]
 			distSym := br.rd.ReadSymbol(treed)
 
-			br.dist = br.decodeDistanceSymbol(distSym)
+			if distSym < 16 { // Short-code
+				rec := distShortLUT[distSym]
+				br.dist = br.dists[rec.index] + rec.delta
+			} else if distSym < uint(16+br.ndirect) { // Direct-code
+				br.dist = int(distSym - 15) // 1..ndirect
+			} else { // Long-code
+				rec := distLongLUT[br.npostfix][distSym-uint(16+br.ndirect)]
+				extra := br.rd.ReadBits(uint(rec.bits)) << br.npostfix
+				br.dist = int(br.ndirect) + int(rec.base) + int(extra)
+			}
 			br.distZero = bool(distSym == 0)
 			if br.dist <= 0 {
 				panic(ErrCorrupt)
@@ -412,7 +421,9 @@ readDistance:
 
 		if br.dist <= br.dict.HistSize() {
 			if !br.distZero {
-				copy(br.dists[1:], br.dists[:])
+				br.dists[3] = br.dists[2]
+				br.dists[2] = br.dists[1]
+				br.dists[1] = br.dists[0]
 				br.dists[0] = br.dist
 			}
 			goto copyDynamicDict
@@ -481,70 +492,6 @@ finishCommand:
 	}
 	br.step = br.readBlockHeader // Done with this block
 	return
-}
-
-// decodeInsertAndCopySymbol converts an insert-and-copy length symbol to a pair
-// of insert length and copy length symbols according to RFC section 5.
-func (br *Reader) decodeInsertAndCopySymbol(iacSym uint) (insSym, cpySym uint) {
-	// TODO(dsnet): Results for symbols 0..703 can be determined by a LUT.
-	switch iacSym / 64 {
-	case 0, 2: // 0..63 and 128..191
-		insSym, cpySym = 0, 0
-	case 1, 3: // 64..127 and 192..255
-		insSym, cpySym = 0, 8
-	case 4: // 256..319
-		insSym, cpySym = 8, 0
-	case 5: // 320..383
-		insSym, cpySym = 8, 8
-	case 6: // 384..447
-		insSym, cpySym = 0, 16
-	case 7: // 448..511
-		insSym, cpySym = 16, 0
-	case 8: // 512..575
-		insSym, cpySym = 8, 16
-	case 9: // 576..639
-		insSym, cpySym = 16, 8
-	case 10: // 640..703
-		insSym, cpySym = 16, 16
-	}
-
-	r64 := iacSym % 64
-	insSym += r64 >> 3   // Lower 3 bits
-	cpySym += r64 & 0x07 // Upper 3 bits
-	return insSym, cpySym
-}
-
-// decodeDistanceSymbol decodes distSym returns the effective backward distance
-// according to RFC section 4.
-func (br *Reader) decodeDistanceSymbol(distSym uint) (dist int) {
-	// TODO(dsnet): Results for symbols 0..15 can be determined by a LUT.
-	switch {
-	case distSym < 4: // Last to fourth-to-last distance
-		return br.dists[distSym]
-	case distSym < 10: // Variations on last distance
-		delta := int(distSym/2 - 1) // 1..3
-		if distSym%2 == 0 {
-			delta *= -1
-		}
-		return br.dists[0] + delta
-	case distSym < 16: // Variations on second-to-last distance
-		delta := int(distSym/2 - 4) // 1..3
-		if distSym%2 == 0 {
-			delta *= -1
-		}
-		return br.dists[1] + delta
-	case distSym < uint(16+br.ndirect): // Direct distance
-		return int(distSym - 15) // 1..ndirect
-	default:
-		distSym -= uint(16 + br.ndirect)
-		postfixMask := uint(1<<br.npostfix - 1)
-		hcode := distSym >> br.npostfix
-		lcode := distSym & postfixMask
-		nbits := 1 + distSym>>(br.npostfix+1)
-		offset := ((2 + (hcode & 1)) << nbits) - 4
-		dextra := br.rd.ReadBits(nbits)
-		return int(((offset + dextra) << br.npostfix) + lcode + uint(br.ndirect) + 1)
-	}
 }
 
 // readBlockSwitch handles a block switch command according to RFC section 6.

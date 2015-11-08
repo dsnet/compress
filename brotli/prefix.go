@@ -99,6 +99,22 @@ var (
 	encCounts  prefixEncoder
 )
 
+var (
+	// RFC section 5.
+	// Table to convert insert-and-copy symbols to insert and copy lengths.
+	iacLUT [numInsSyms]struct{ ins, cpy rangeCode }
+
+	// RFC section 4.
+	// Table to help convert short-codes (first 16 symbols) to distances using
+	// the ring buffer of past distances.
+	distShortLUT [16]struct{ index, delta int }
+
+	// RFC section 4.
+	// Table to help convert long-codes to distances. This is two dimensional
+	// slice keyed by the NPOSTFIX and the normalized distance symbol.
+	distLongLUT [4]rangeCodes
+)
+
 func initPrefixLUTs() {
 	// Sanity check some constants.
 	for _, numMax := range []uint{
@@ -117,6 +133,7 @@ func initPrefixLUTs() {
 
 	initPrefixRangeLUTs()
 	initPrefixCodeLUTs()
+	initLengthLUTs()
 }
 
 func initPrefixRangeLUTs() {
@@ -195,4 +212,83 @@ func initPrefixCodeLUTs() {
 	}
 	decCounts.Init(codeCounts, false)
 	encCounts.Init(codeCounts)
+}
+
+func initLengthLUTs() {
+	// RFC section 5.
+	// The insert-and-copy length symbol is converted into an insert length
+	// and a copy length. Thus, create a table to precompute the result for
+	// all input symbols.
+	for iacSym := range iacLUT {
+		var insSym, cpySym int
+		switch iacSym / 64 {
+		case 0, 2: // 0..63 and 128..191
+			insSym, cpySym = 0, 0
+		case 1, 3: // 64..127 and 192..255
+			insSym, cpySym = 0, 8
+		case 4: // 256..319
+			insSym, cpySym = 8, 0
+		case 5: // 320..383
+			insSym, cpySym = 8, 8
+		case 6: // 384..447
+			insSym, cpySym = 0, 16
+		case 7: // 448..511
+			insSym, cpySym = 16, 0
+		case 8: // 512..575
+			insSym, cpySym = 8, 16
+		case 9: // 576..639
+			insSym, cpySym = 16, 8
+		case 10: // 640..703
+			insSym, cpySym = 16, 16
+		}
+
+		r64 := iacSym % 64
+		insSym += r64 >> 3   // Lower 3 bits
+		cpySym += r64 & 0x07 // Upper 3 bits
+
+		iacLUT[iacSym].ins = insLenRanges[insSym]
+		iacLUT[iacSym].cpy = cpyLenRanges[cpySym]
+	}
+
+	// RFC section 4.
+	// The first 16 symbols modify a previously seen symbol. Thus, we can create
+	// a table to determine which distance to use and how much to modify it by.
+	for distSym := range distShortLUT {
+		var index, delta int
+		switch {
+		case distSym < 4:
+			index, delta = distSym, 0
+		case distSym < 10:
+			index, delta = 0, int(distSym/2-1)
+		case distSym < 16:
+			index, delta = 1, int(distSym/2-4)
+		}
+		if distSym%2 == 0 {
+			delta *= -1
+		}
+		distShortLUT[distSym].index = index
+		distShortLUT[distSym].delta = delta
+	}
+
+	// RFC section 4.
+	// Longer distances are computed according the equation in the RFC.
+	// To reduce computation during runtime, we precompute as much of the output
+	// as possible. Thus, we compute the final distance using the following:
+	//	rec := distLongLUT[NPOSTFIX][distSym - (16+NDIRECT)]
+	//	distance := NDIRECT + rec.base + ReadBits(rec.bits)<<NPOSTFIX
+	for npostfix := range distLongLUT {
+		numDistSyms := 48 << uint(npostfix)
+		distLongLUT[npostfix] = make([]rangeCode, numDistSyms)
+		for distSym := range distLongLUT[npostfix] {
+			postfixMask := 1<<uint(npostfix) - 1
+			hcode := distSym >> uint(npostfix)
+			lcode := distSym & postfixMask
+			nbits := 1 + distSym>>uint(npostfix+1)
+			offset := ((2 + (hcode & 1)) << uint(nbits)) - 4
+			distLongLUT[npostfix][distSym] = rangeCode{
+				base: uint32(offset<<uint(npostfix) + lcode + 1),
+				bits: uint8(nbits),
+			}
+		}
+	}
 }
