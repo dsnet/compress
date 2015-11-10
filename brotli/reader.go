@@ -337,10 +337,21 @@ startCommand:
 		br.iacBlk.typeLen--
 
 		iacTree := &br.iacBlk.prefixes[br.iacBlk.types[0]]
-		iacSym := br.rd.ReadSymbol(iacTree)
+		iacSym, ok := br.rd.TryReadSymbol(iacTree)
+		if !ok {
+			iacSym = br.rd.ReadSymbol(iacTree)
+		}
 		rec := iacLUT[iacSym]
-		br.insLen = int(rec.ins.base) + int(br.rd.ReadBits(uint(rec.ins.bits)))
-		br.cpyLen = int(rec.cpy.base) + int(br.rd.ReadBits(uint(rec.cpy.bits)))
+		insExtra, ok := br.rd.TryReadBits(uint(rec.ins.bits))
+		if !ok {
+			insExtra = br.rd.ReadBits(uint(rec.ins.bits))
+		}
+		cpyExtra, ok := br.rd.TryReadBits(uint(rec.cpy.bits))
+		if !ok {
+			cpyExtra = br.rd.ReadBits(uint(rec.cpy.bits))
+		}
+		br.insLen = int(rec.ins.base) + int(insExtra)
+		br.cpyLen = int(rec.cpy.base) + int(cpyExtra)
 		br.distZero = iacSym < 128
 		if br.insLen > 0 {
 			goto readLiterals
@@ -368,7 +379,10 @@ readLiterals:
 
 			litCID := getLitContextID(p1, p2, br.cmode) // 0..63
 			litTree := &br.litBlk.prefixes[br.litMapType[litCID]]
-			litSym := br.rd.ReadSymbol(litTree)
+			litSym, ok := br.rd.TryReadSymbol(litTree)
+			if !ok {
+				litSym = br.rd.ReadSymbol(litTree)
+			}
 
 			buf[i] = byte(litSym)
 			p1, p2 = byte(litSym), p1
@@ -402,7 +416,10 @@ readDistance:
 
 			distCID := getDistContextID(br.cpyLen) // 0..3
 			distTree := &br.distBlk.prefixes[br.distMapType[distCID]]
-			distSym := br.rd.ReadSymbol(distTree)
+			distSym, ok := br.rd.TryReadSymbol(distTree)
+			if !ok {
+				distSym = br.rd.ReadSymbol(distTree)
+			}
 
 			if distSym < 16 { // Short-code
 				rec := distShortLUT[distSym]
@@ -411,8 +428,11 @@ readDistance:
 				br.dist = int(distSym - 15) // 1..ndirect
 			} else { // Long-code
 				rec := distLongLUT[br.npostfix][distSym-uint(16+br.ndirect)]
-				extra := br.rd.ReadBits(uint(rec.bits)) << br.npostfix
-				br.dist = int(br.ndirect) + int(rec.base) + int(extra)
+				extra, ok := br.rd.TryReadBits(uint(rec.bits))
+				if !ok {
+					extra = br.rd.ReadBits(uint(rec.bits))
+				}
+				br.dist = int(br.ndirect) + int(rec.base) + int(extra<<br.npostfix)
 			}
 			br.distZero = bool(distSym == 0)
 			if br.dist <= 0 {

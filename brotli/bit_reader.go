@@ -10,6 +10,12 @@ import "bufio"
 // TODO(dsnet): Most of this logic is identical to compress/flate.
 // Centralize common logic to compress/internal/prefix.
 
+// NOTE: The TryReadXXX methods only exists for performance reasons.
+// Currently, the Go compiler does not inline functions that are not leaf
+// functions. That is, if they make another function call, they cannot be
+// inlined. The TryReadXXX methods are intentionally simple so that they can
+// be inlined for the common case.
+
 type byteReader interface {
 	io.Reader
 	io.ByteReader
@@ -43,6 +49,18 @@ func (br *bitReader) Read(buf []byte) (int, error) {
 	return cnt, err
 }
 
+// TryReadBits attempts to read nb bits using the contents of the bit buffer
+// alone. It returns the value and whether it suceeded.
+func (br *bitReader) TryReadBits(nb uint) (uint, bool) {
+	if br.numBits < nb {
+		return 0, false
+	}
+	val := uint(br.bufBits & uint32(1<<nb-1))
+	br.bufBits >>= nb
+	br.numBits -= nb
+	return val, true
+}
+
 // ReadBits reads nb bits in LSB order from the underlying reader.
 // If an IO error occurs, then it panics.
 func (br *bitReader) ReadBits(nb uint) uint {
@@ -71,6 +89,22 @@ func (br *bitReader) ReadPads() uint {
 	br.bufBits >>= nb
 	br.numBits -= nb
 	return val
+}
+
+// TryReadSymbol attempts to decode the next symbol using the contents of the
+// bit buffer alone. It returns the decoded symbol and whether it suceeded.
+func (br *bitReader) TryReadSymbol(pd *prefixDecoder) (uint, bool) {
+	if br.numBits < uint(pd.minBits) || len(pd.chunks) == 0 {
+		return 0, false
+	}
+	chunk := pd.chunks[uint16(br.bufBits)&pd.chunkMask]
+	nb := uint(chunk & prefixCountMask)
+	if nb > br.numBits || nb > uint(pd.chunkBits) {
+		return 0, false
+	}
+	br.bufBits >>= nb
+	br.numBits -= nb
+	return uint(chunk >> prefixCountBits), true
 }
 
 // ReadSymbol reads the next prefix symbol using the provided prefixDecoder.
