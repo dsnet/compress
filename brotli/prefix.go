@@ -17,13 +17,13 @@ const (
 	// The size of the alphabet for various prefix codes.
 	numLitSyms        = 256                  // Literal symbols
 	maxNumDistSyms    = 16 + 120 + (48 << 3) // Distance symbols
-	numInsSyms        = 704                  // Insert-and-copy length symbols
+	numIaCSyms        = 704                  // Insert-and-copy length symbols
 	numBlkCntSyms     = 26                   // Block count symbols
 	maxNumBlkTypeSyms = 256 + 2              // Block type symbols
 	maxNumCtxMapSyms  = 256 + 16             // Context map symbols
 
 	// This should be the max of each of the constants above.
-	maxNumAlphabetSyms = numInsSyms
+	maxNumAlphabetSyms = numIaCSyms
 )
 
 var (
@@ -102,7 +102,7 @@ var (
 var (
 	// RFC section 5.
 	// Table to convert insert-and-copy symbols to insert and copy lengths.
-	iacLUT [numInsSyms]struct{ ins, cpy rangeCode }
+	iacLUT [numIaCSyms]struct{ ins, cpy rangeCode }
 
 	// RFC section 4.
 	// Table to help convert short-codes (first 16 symbols) to distances using
@@ -118,7 +118,7 @@ var (
 func initPrefixLUTs() {
 	// Sanity check some constants.
 	for _, numMax := range []uint{
-		numLitSyms, maxNumDistSyms, numInsSyms, numBlkCntSyms, maxNumBlkTypeSyms, maxNumCtxMapSyms,
+		numLitSyms, maxNumDistSyms, numIaCSyms, numBlkCntSyms, maxNumBlkTypeSyms, maxNumCtxMapSyms,
 	} {
 		if numMax > maxNumAlphabetSyms {
 			panic("maximum alphabet size is not updated")

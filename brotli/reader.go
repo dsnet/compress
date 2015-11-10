@@ -293,14 +293,14 @@ func (br *Reader) readPrefixCodes() {
 	}
 	br.iacBlk.prefixes = extendDecoders(br.iacBlk.prefixes, br.iacBlk.numTypes)
 	for i := range br.iacBlk.prefixes {
-		br.rd.ReadPrefixCode(&br.iacBlk.prefixes[i], numInsSyms)
+		br.rd.ReadPrefixCode(&br.iacBlk.prefixes[i], numIaCSyms)
 	}
 	br.distBlk.prefixes = extendDecoders(br.distBlk.prefixes, numDistTrees)
 	for i := range br.distBlk.prefixes {
 		br.rd.ReadPrefixCode(&br.distBlk.prefixes[i], numDistSyms)
 	}
 
-	br.readCommands()
+	br.step = br.readCommands
 }
 
 // readCommands reads block commands according to RFC section 9.3.
@@ -336,7 +336,8 @@ startCommand:
 		}
 		br.iacBlk.typeLen--
 
-		iacSym := br.rd.ReadSymbol(&br.iacBlk.prefixes[br.iacBlk.types[0]])
+		iacTree := &br.iacBlk.prefixes[br.iacBlk.types[0]]
+		iacSym := br.rd.ReadSymbol(iacTree)
 		rec := iacLUT[iacSym]
 		br.insLen = int(rec.ins.base) + int(br.rd.ReadBits(uint(rec.ins.bits)))
 		br.cpyLen = int(rec.cpy.base) + int(br.rd.ReadBits(uint(rec.cpy.bits)))
@@ -365,9 +366,9 @@ readLiterals:
 			}
 			br.litBlk.typeLen--
 
-			cidl := getLitContextID(p1, p2, br.cmode) // 0..63
-			treel := &br.litBlk.prefixes[br.litMapType[cidl]]
-			litSym := br.rd.ReadSymbol(treel)
+			litCID := getLitContextID(p1, p2, br.cmode) // 0..63
+			litTree := &br.litBlk.prefixes[br.litMapType[litCID]]
+			litSym := br.rd.ReadSymbol(litTree)
 
 			buf[i] = byte(litSym)
 			p1, p2 = byte(litSym), p1
@@ -399,9 +400,9 @@ readDistance:
 			}
 			br.distBlk.typeLen--
 
-			cidd := getDistContextID(br.cpyLen) // 0..3
-			treed := &br.distBlk.prefixes[br.distMapType[cidd]]
-			distSym := br.rd.ReadSymbol(treed)
+			distCID := getDistContextID(br.cpyLen) // 0..3
+			distTree := &br.distBlk.prefixes[br.distMapType[distCID]]
+			distSym := br.rd.ReadSymbol(distTree)
 
 			if distSym < 16 { // Short-code
 				rec := distShortLUT[distSym]
