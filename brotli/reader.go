@@ -82,7 +82,7 @@ func (br *Reader) Read(buf []byte) (int, error) {
 			defer errRecover(&br.err)
 			br.step()
 		}()
-		br.InputOffset = br.rd.offset
+		br.InputOffset = br.rd.FlushOffset()
 		if br.err != nil {
 			br.toRead = br.dict.ReadFlush() // Flush what's left in case of error
 		}

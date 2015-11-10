@@ -6,6 +6,7 @@ package brotli
 
 import "io"
 import "io/ioutil"
+import "bufio"
 import "bytes"
 import "strings"
 import "encoding/hex"
@@ -410,7 +411,13 @@ func benchmarkDecode(b *testing.B, testfile string) {
 	b.SetBytes(nb)
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		io.Copy(ioutil.Discard, NewReader(bytes.NewReader(input)))
+		cnt, err := io.Copy(ioutil.Discard, NewReader(bufio.NewReader(bytes.NewReader(input))))
+		if err != nil {
+			b.Fatalf("unexpected error: %v", err)
+		}
+		if cnt != nb {
+			b.Fatalf("unexpected count: got %d, want %d", cnt, nb)
+		}
 	}
 }
 

@@ -10,11 +10,16 @@ import "bufio"
 // TODO(dsnet): Most of this logic is identical to compress/flate.
 // Centralize common logic to compress/internal/prefix.
 
-// NOTE: The TryReadXXX methods only exists for performance reasons.
-// Currently, the Go compiler does not inline functions that are not leaf
-// functions. That is, if they make another function call, they cannot be
-// inlined. The TryReadXXX methods are intentionally simple so that they can
-// be inlined for the common case.
+// The bitReader preserves the property that it will never read more bytes than
+// is necessary. However, this feature dramatically hurts performance because
+// every byte needs to be obtained through a ReadByte method call.
+// Furthermore, the decoding of variable length codes in ReadSymbol, often
+// requires multiple passes before it knows the exact bit-length of the code.
+//
+// Thus, to improve performance, if the underlying byteReader is a bufio.Reader,
+// then the bitReader will use the Peek and Discard methods to fill the internal
+// bit buffer with as many bits as possible, allowing the TryReadBits and
+// TryReadSymbol methods to often succeed on the first try.
 
 type byteReader interface {
 	io.Reader
@@ -25,9 +30,17 @@ type bitReader struct {
 	rd      byteReader
 	mtf     moveToFront   // Local move-to-front decoder
 	prefix  prefixDecoder // Local prefix decoder
-	bufBits uint32        // Buffer to hold some bits
+	bufBits uint64        // Buffer to hold some bits
 	numBits uint          // Number of valid bits in bufBits
 	offset  int64         // Number of bytes read from the underlying io.Reader
+
+	// These fields are only used if rd is a bufio.Reader.
+	bufRd       *bufio.Reader // Is the byteReader a bufio.Reader?
+	fedBits     uint          // Number of bits fed in last call to FeedBits
+	discardBits int           // Number of bits to discard from bufio.Reader
+	maxPeek     int           // Maximum number of bytes that we can Peek
+	idxPeek     int           // The current index into the Peek buffer
+	bufPeek     []byte        // Buffer for the Peek data
 }
 
 func (br *bitReader) Init(r io.Reader) {
@@ -37,46 +50,125 @@ func (br *bitReader) Init(r io.Reader) {
 	} else {
 		br.rd = bufio.NewReader(r)
 	}
+	if brd, ok := br.rd.(*bufio.Reader); ok {
+		br.bufRd = brd
+		br.maxPeek = 8 // Some minimum amount to Peek to make progress
+	}
+}
+
+// FlushOffset updates the read offset of the underlying byteReader.
+// If the byteReader is a bufio.Reader, then this calls Discard to update the
+// read offset.
+func (br *bitReader) FlushOffset() int64 {
+	if br.bufRd == nil {
+		return br.offset
+	}
+
+	// Update the number of total bits to discard.
+	br.discardBits += int(br.fedBits - br.numBits)
+	br.fedBits = br.numBits
+
+	// Discard some bytes to update read offset.
+	nd := (br.discardBits + 7) / 8 // Round up to nearest byte
+	nd, _ = br.bufRd.Discard(nd)
+	br.discardBits -= nd * 8 // -7..0
+	br.offset += int64(nd)
+
+	// These are invalid after Discard.
+	br.bufPeek = nil
+	br.idxPeek = 0
+
+	return br.offset
+}
+
+// FeedBits ensures that at least nb bits exist in the bit buffer.
+// If the underlying byteReader is a bufio.Reader, then this will fill the
+// bit buffer with as many bits as possible, relying on Peek and Discard to
+// properly advance the read offset. Otherwise, it will use ReadByte to fill the
+// buffer with just the right number of bits.
+func (br *bitReader) FeedBits(nb uint) {
+	if br.bufRd != nil {
+		br.discardBits += int(br.fedBits - br.numBits)
+		for br.numBits <= 56 {
+			if len(br.bufPeek) <= br.idxPeek {
+				br.fedBits = br.numBits // Don't discard bits just added
+				br.FlushOffset()
+
+				var err error
+				if br.bufRd.Buffered() > br.maxPeek {
+					br.maxPeek = br.bufRd.Buffered()
+				}
+				br.bufPeek, err = br.bufRd.Peek(br.maxPeek)
+
+				br.idxPeek = int(br.numBits / 8)
+				if len(br.bufPeek) <= br.idxPeek {
+					if br.numBits >= nb {
+						break
+					}
+					if err == io.EOF {
+						err = io.ErrUnexpectedEOF
+					}
+					panic(err)
+				}
+			}
+			br.bufBits |= uint64(br.bufPeek[br.idxPeek]) << br.numBits
+			br.numBits += 8
+			br.idxPeek++
+		}
+		br.fedBits = br.numBits
+	} else {
+		for br.numBits < nb {
+			c, err := br.rd.ReadByte()
+			if err != nil {
+				if err == io.EOF {
+					err = io.ErrUnexpectedEOF
+				}
+				panic(err)
+			}
+			br.bufBits |= uint64(c) << br.numBits
+			br.numBits += 8
+			br.offset++
+		}
+	}
 }
 
 // Read reads up to len(buf) bytes into buf.
-func (br *bitReader) Read(buf []byte) (int, error) {
-	if br.numBits > 0 {
-		return 0, Error("non-empty bit buffer")
+func (br *bitReader) Read(buf []byte) (cnt int, err error) {
+	if br.numBits%8 != 0 {
+		return 0, Error("non-aligned bit buffer")
 	}
-	cnt, err := br.rd.Read(buf)
-	br.offset += int64(cnt)
+	if br.numBits > 0 {
+		for cnt = 0; len(buf) > cnt && br.numBits > 0; cnt++ {
+			buf[cnt] = byte(br.bufBits)
+			br.bufBits >>= 8
+			br.numBits -= 8
+		}
+	} else {
+		br.FlushOffset()
+		cnt, err = br.rd.Read(buf)
+		br.offset += int64(cnt)
+	}
 	return cnt, err
 }
 
 // TryReadBits attempts to read nb bits using the contents of the bit buffer
-// alone. It returns the value and whether it suceeded.
+// alone. It returns the value and whether it succeeded.
+//
+// This method is designed to be inlined for performance reasons.
 func (br *bitReader) TryReadBits(nb uint) (uint, bool) {
 	if br.numBits < nb {
 		return 0, false
 	}
-	val := uint(br.bufBits & uint32(1<<nb-1))
+	val := uint(br.bufBits & uint64(1<<nb-1))
 	br.bufBits >>= nb
 	br.numBits -= nb
 	return val, true
 }
 
 // ReadBits reads nb bits in LSB order from the underlying reader.
-// If an IO error occurs, then it panics.
 func (br *bitReader) ReadBits(nb uint) uint {
-	for br.numBits < nb {
-		c, err := br.rd.ReadByte()
-		if err != nil {
-			if err == io.EOF {
-				err = io.ErrUnexpectedEOF
-			}
-			panic(err)
-		}
-		br.offset++
-		br.bufBits |= uint32(c) << br.numBits
-		br.numBits += 8
-	}
-	val := uint(br.bufBits & uint32(1<<nb-1))
+	br.FeedBits(nb)
+	val := uint(br.bufBits & uint64(1<<nb-1))
 	br.bufBits >>= nb
 	br.numBits -= nb
 	return val
@@ -85,14 +177,16 @@ func (br *bitReader) ReadBits(nb uint) uint {
 // ReadPads reads 0-7 bits from the bit buffer to achieve byte-alignment.
 func (br *bitReader) ReadPads() uint {
 	nb := br.numBits % 8
-	val := uint(br.bufBits & uint32(1<<nb-1))
+	val := uint(br.bufBits & uint64(1<<nb-1))
 	br.bufBits >>= nb
 	br.numBits -= nb
 	return val
 }
 
 // TryReadSymbol attempts to decode the next symbol using the contents of the
-// bit buffer alone. It returns the decoded symbol and whether it suceeded.
+// bit buffer alone. It returns the decoded symbol and whether it succeeded.
+//
+// This method is designed to be inlined for performance reasons.
 func (br *bitReader) TryReadSymbol(pd *prefixDecoder) (uint, bool) {
 	if br.numBits < uint(pd.minBits) || len(pd.chunks) == 0 {
 		return 0, false
@@ -108,7 +202,6 @@ func (br *bitReader) TryReadSymbol(pd *prefixDecoder) (uint, bool) {
 }
 
 // ReadSymbol reads the next prefix symbol using the provided prefixDecoder.
-// If an IO error occurs, then it panics.
 func (br *bitReader) ReadSymbol(pd *prefixDecoder) uint {
 	if len(pd.chunks) == 0 {
 		panic(ErrCorrupt) // Decode with empty tree
@@ -116,20 +209,7 @@ func (br *bitReader) ReadSymbol(pd *prefixDecoder) uint {
 
 	nb := uint(pd.minBits)
 	for {
-		for br.numBits < nb {
-			// This section is an inlined version of the inner loop of ReadBits
-			// for performance reasons.
-			c, err := br.rd.ReadByte()
-			if err != nil {
-				if err == io.EOF {
-					err = io.ErrUnexpectedEOF
-				}
-				panic(err)
-			}
-			br.offset++
-			br.bufBits |= uint32(c) << br.numBits
-			br.numBits += 8
-		}
+		br.FeedBits(nb)
 		chunk := pd.chunks[uint16(br.bufBits)&pd.chunkMask]
 		nb = uint(chunk & prefixCountMask)
 		if nb > uint(pd.chunkBits) {
