@@ -4,9 +4,6 @@
 
 package brotli
 
-// TODO(dsnet): Almost all of this logic is identical to compress/flate.
-// Centralize common logic to compress/internal/prefix.
-
 // The algorithm used to decode variable length codes is based on the lookup
 // method in zlib. If the code is less-than-or-equal to prefixMaxChunkBits,
 // then the symbol can be decoded using a single lookup into the chunks table.

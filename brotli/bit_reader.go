@@ -7,9 +7,6 @@ package brotli
 import "io"
 import "bufio"
 
-// TODO(dsnet): Most of this logic is identical to compress/flate.
-// Centralize common logic to compress/internal/prefix.
-
 // The bitReader preserves the property that it will never read more bytes than
 // is necessary. However, this feature dramatically hurts performance because
 // every byte needs to be obtained through a ReadByte method call.

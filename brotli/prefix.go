@@ -4,9 +4,6 @@
 
 package brotli
 
-// TODO(dsnet): Some of this logic is identical to compress/flate.
-// Centralize common logic to compress/internal/prefix.
-
 const (
 	// RFC section 3.5.
 	// This is the maximum bit-width of a prefix code.

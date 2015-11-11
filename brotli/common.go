@@ -85,7 +85,7 @@ func reverseBits(v uint16, n uint) uint16 {
 // of every encode and decode operation.
 type moveToFront struct {
 	dict [256]uint8 // Mapping from indexes to values
-	tail int        // Number of tail bytes that already ordered
+	tail int        // Number of tail bytes that are already ordered
 }
 
 func (m *moveToFront) Encode(vals []uint8) {
