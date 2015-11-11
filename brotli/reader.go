@@ -556,8 +556,11 @@ finishCommand:
 	} else if br.blkLen > 0 {
 		goto startCommand // More commands in this block
 	}
-	br.step = (*Reader).readBlockHeader // Done with this block
-	br.stepState = stateInit            // Next call to readCommands must start here
+
+	// Done with this block.
+	br.toRead = br.dict.ReadFlush()
+	br.step = (*Reader).readBlockHeader
+	br.stepState = stateInit // Next call to readCommands must start here
 	return
 }
 
