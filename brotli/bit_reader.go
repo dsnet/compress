@@ -28,17 +28,18 @@ type byteReader interface {
 
 type bitReader struct {
 	rd      byteReader
-	mtf     moveToFront   // Local move-to-front decoder
-	prefix  prefixDecoder // Local prefix decoder
-	bufBits uint64        // Buffer to hold some bits
-	numBits uint          // Number of valid bits in bufBits
-	offset  int64         // Number of bytes read from the underlying io.Reader
+	bufBits uint64 // Buffer to hold some bits
+	numBits uint   // Number of valid bits in bufBits
+	offset  int64  // Number of bytes read from the underlying io.Reader
+
+	// Local copies of decoders to reduce memory allocation.
+	mtf    moveToFront   // Local move-to-front decoder
+	prefix prefixDecoder // Local prefix decoder
 
 	// These fields are only used if rd is a bufio.Reader.
 	bufRd       *bufio.Reader // Is the byteReader a bufio.Reader?
 	fedBits     uint          // Number of bits fed in last call to FeedBits
 	discardBits int           // Number of bits to discard from bufio.Reader
-	maxPeek     int           // Maximum number of bytes that we can Peek
 	idxPeek     int           // The current index into the Peek buffer
 	bufPeek     []byte        // Buffer for the Peek data
 }
@@ -52,7 +53,6 @@ func (br *bitReader) Init(r io.Reader) {
 	}
 	if brd, ok := br.rd.(*bufio.Reader); ok {
 		br.bufRd = brd
-		br.maxPeek = 8 // Some minimum amount to Peek to make progress
 	}
 }
 
@@ -95,10 +95,11 @@ func (br *bitReader) FeedBits(nb uint) {
 				br.FlushOffset()
 
 				var err error
-				if br.bufRd.Buffered() > br.maxPeek {
-					br.maxPeek = br.bufRd.Buffered()
+				cntPeek := 8 // Minimum Peek amount to make progress
+				if br.bufRd.Buffered() > cntPeek {
+					cntPeek = br.bufRd.Buffered()
 				}
-				br.bufPeek, err = br.bufRd.Peek(br.maxPeek)
+				br.bufPeek, err = br.bufRd.Peek(cntPeek)
 
 				br.idxPeek = int(br.numBits / 8)
 				if len(br.bufPeek) <= br.idxPeek {
