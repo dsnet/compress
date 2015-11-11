@@ -304,9 +304,6 @@ func (br *Reader) readPrefixCodes() {
 }
 
 // readCommands reads block commands according to RFC section 9.3.
-//
-// Since Go does not support tail call optimization, we use goto statements
-// to achieve higher performance processing each command.
 func (br *Reader) readCommands() {
 	br.step = br.readCommands // Assume we may need to continue this function
 
@@ -316,6 +313,46 @@ func (br *Reader) readCommands() {
 		stateDynamicDict
 		stateStaticDict
 	)
+
+	// Since Go does not support tail call optimization, we use goto statements
+	// to achieve higher performance processing each command. Each label can be
+	// thought of as a mini function, and each goto as a cheap function call.
+	// The following code follows this control flow.
+	//
+	// Some labels (readLiterals, copyDynamicDict, copyStaticDict) require work
+	// to be continued if more buffer space is needed. This is achieved by the
+	// switch block right below, which continues the work at the right sub-step.
+	//
+	// The bulk of the action will be in the following loop:
+	//	startCommand -> readLiterals -> readDistance -> copyDynamicDict ->
+	//		finishCommand -> startCommand -> ...
+	/*
+		             readCommands()
+		                   |
+		+----------------> +
+		|                  |
+		|                  V
+		|         +-- startCommand
+		|         |        |
+		|         |        V
+		|         |   readLiterals ----------+
+		|         |        |                 |
+		|         |        V                 |
+		|         +-> readDistance           |
+		|                  |                 |
+		|         +--------+--------+        |
+		|         |                 |        |
+		|         V                 V        |
+		|  copyDynamicDict   copyStaticDict  |
+		|         |                 |        |
+		|         +--------+--------+        |
+		|                  |                 |
+		|                  V                 |
+		+----------- finishCommand <---------+
+		                   |
+		                   V
+		           readBlockHeader()
+	*/
 
 	switch br.stepState {
 	case stateInit:
