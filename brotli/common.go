@@ -36,11 +36,7 @@ var (
 
 func init() {
 	initLUTs()
-
-	const debugPrint = false
-	if debugPrint {
-		printLUTs()
-	}
+	printLUTs() // Only occurs in debug mode
 }
 
 func initLUTs() {
@@ -64,21 +60,25 @@ func initCommonLUTs() {
 }
 
 // neededBits computes the minimum number of bits needed to encode n elements.
-func neededBits(n uint16) (nb uint) {
+func neededBits(n uint32) (nb uint) {
 	for n -= 1; n > 0; n >>= 1 {
 		nb++
 	}
 	return
 }
 
-// reverseUint16 reverses all bits of v.
-func reverseUint16(v uint16) uint16 {
-	return uint16(reverseLUT[v>>8]) | uint16(reverseLUT[v&0xff])<<8
+// reverseUint32 reverses all bits of v.
+func reverseUint32(v uint32) (x uint32) {
+	x |= uint32(reverseLUT[byte(v>>0)]) << 24
+	x |= uint32(reverseLUT[byte(v>>8)]) << 16
+	x |= uint32(reverseLUT[byte(v>>16)]) << 8
+	x |= uint32(reverseLUT[byte(v>>24)]) << 0
+	return x
 }
 
 // reverseBits reverses the lower n bits of v.
-func reverseBits(v uint16, n uint) uint16 {
-	return reverseUint16(v << (16 - n))
+func reverseBits(v uint32, n uint) uint32 {
+	return reverseUint32(v << (32 - n))
 }
 
 // moveToFront is a data structure that allows for more efficient move-to-front
@@ -89,7 +89,7 @@ func reverseBits(v uint16, n uint) uint16 {
 // of every encode and decode operation.
 type moveToFront struct {
 	dict [256]uint8 // Mapping from indexes to values
-	tail int        // Number of tail bytes that already ordered
+	tail int        // Number of tail bytes that are already ordered
 }
 
 func (m *moveToFront) Encode(vals []uint8) {
@@ -128,4 +128,36 @@ func (m *moveToFront) Decode(idxs []uint8) {
 		m.dict[0] = val
 	}
 	m.tail = 256 - max - 1
+}
+
+func allocUint8s(s []uint8, n int) []uint8 {
+	if cap(s) >= n {
+		return s[:n]
+	}
+	return make([]uint8, n, n*3/2)
+}
+
+func allocUint32s(s []uint32, n int) []uint32 {
+	if cap(s) >= n {
+		return s[:n]
+	}
+	return make([]uint32, n, n*3/2)
+}
+
+func extendSliceUints32s(s [][]uint32, n int) [][]uint32 {
+	if cap(s) >= n {
+		return s[:n]
+	}
+	ss := make([][]uint32, n, n*3/2)
+	copy(ss, s[:cap(s)])
+	return ss
+}
+
+func extendDecoders(s []prefixDecoder, n int) []prefixDecoder {
+	if cap(s) >= n {
+		return s[:n]
+	}
+	ss := make([]prefixDecoder, n, n*3/2)
+	copy(ss, s[:cap(s)])
+	return ss
 }

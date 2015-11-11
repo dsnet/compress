@@ -7,8 +7,16 @@ package brotli
 import "io"
 import "bufio"
 
-// TODO(dsnet): Most of this logic is identical to compress/flate.
-// Centralize common logic to compress/internal/prefix.
+// The bitReader preserves the property that it will never read more bytes than
+// is necessary. However, this feature dramatically hurts performance because
+// every byte needs to be obtained through a ReadByte method call.
+// Furthermore, the decoding of variable length codes in ReadSymbol, often
+// requires multiple passes before it knows the exact bit-length of the code.
+//
+// Thus, to improve performance, if the underlying byteReader is a bufio.Reader,
+// then the bitReader will use the Peek and Discard methods to fill the internal
+// bit buffer with as many bits as possible, allowing the TryReadBits and
+// TryReadSymbol methods to often succeed on the first try.
 
 type byteReader interface {
 	io.Reader
@@ -17,11 +25,19 @@ type byteReader interface {
 
 type bitReader struct {
 	rd      byteReader
-	mtf     moveToFront   // Local move-to-front decoder
-	prefix  prefixDecoder // Local prefix decoder
-	bufBits uint32        // Buffer to hold some bits
-	numBits uint          // Number of valid bits in bufBits
-	offset  int64         // Number of bytes read from the underlying io.Reader
+	bufBits uint64 // Buffer to hold some bits
+	numBits uint   // Number of valid bits in bufBits
+	offset  int64  // Number of bytes read from the underlying io.Reader
+
+	// These fields are only used if rd is a bufio.Reader.
+	bufRd       *bufio.Reader
+	bufPeek     []byte // Buffer for the Peek data
+	idxPeek     int    // The current index into the Peek buffer
+	discardBits int    // Number of bits to discard from bufio.Reader
+	fedBits     uint   // Number of bits fed in last call to FeedBits
+
+	// Local copy of decoders to reduce memory allocations.
+	prefix prefixDecoder
 }
 
 func (br *bitReader) Init(r io.Reader) {
@@ -31,34 +47,125 @@ func (br *bitReader) Init(r io.Reader) {
 	} else {
 		br.rd = bufio.NewReader(r)
 	}
+	if brd, ok := br.rd.(*bufio.Reader); ok {
+		br.bufRd = brd
+	}
+}
+
+// FlushOffset updates the read offset of the underlying byteReader.
+// If the byteReader is a bufio.Reader, then this calls Discard to update the
+// read offset.
+func (br *bitReader) FlushOffset() int64 {
+	if br.bufRd == nil {
+		return br.offset
+	}
+
+	// Update the number of total bits to discard.
+	br.discardBits += int(br.fedBits - br.numBits)
+	br.fedBits = br.numBits
+
+	// Discard some bytes to update read offset.
+	nd := (br.discardBits + 7) / 8 // Round up to nearest byte
+	nd, _ = br.bufRd.Discard(nd)
+	br.discardBits -= nd * 8 // -7..0
+	br.offset += int64(nd)
+
+	// These are invalid after Discard.
+	br.bufPeek = nil
+	br.idxPeek = 0
+
+	return br.offset
+}
+
+// FeedBits ensures that at least nb bits exist in the bit buffer.
+// If the underlying byteReader is a bufio.Reader, then this will fill the
+// bit buffer with as many bits as possible, relying on Peek and Discard to
+// properly advance the read offset. Otherwise, it will use ReadByte to fill the
+// buffer with just the right number of bits.
+func (br *bitReader) FeedBits(nb uint) {
+	if br.bufRd != nil {
+		br.discardBits += int(br.fedBits - br.numBits)
+		for br.numBits <= 56 {
+			if len(br.bufPeek) <= br.idxPeek {
+				br.fedBits = br.numBits // Don't discard bits just added
+				br.FlushOffset()
+
+				var err error
+				cntPeek := 8 // Minimum Peek amount to make progress
+				if br.bufRd.Buffered() > cntPeek {
+					cntPeek = br.bufRd.Buffered()
+				}
+				br.bufPeek, err = br.bufRd.Peek(cntPeek)
+
+				br.idxPeek = int(br.numBits / 8)
+				if len(br.bufPeek) <= br.idxPeek {
+					if br.numBits >= nb {
+						break
+					}
+					if err == io.EOF {
+						err = io.ErrUnexpectedEOF
+					}
+					panic(err)
+				}
+			}
+			br.bufBits |= uint64(br.bufPeek[br.idxPeek]) << br.numBits
+			br.numBits += 8
+			br.idxPeek++
+		}
+		br.fedBits = br.numBits
+	} else {
+		for br.numBits < nb {
+			c, err := br.rd.ReadByte()
+			if err != nil {
+				if err == io.EOF {
+					err = io.ErrUnexpectedEOF
+				}
+				panic(err)
+			}
+			br.bufBits |= uint64(c) << br.numBits
+			br.numBits += 8
+			br.offset++
+		}
+	}
 }
 
 // Read reads up to len(buf) bytes into buf.
-func (br *bitReader) Read(buf []byte) (int, error) {
-	if br.numBits > 0 {
-		return 0, Error("non-empty bit buffer")
+func (br *bitReader) Read(buf []byte) (cnt int, err error) {
+	if br.numBits%8 != 0 {
+		return 0, Error("non-aligned bit buffer")
 	}
-	cnt, err := br.rd.Read(buf)
-	br.offset += int64(cnt)
+	if br.numBits > 0 {
+		for cnt = 0; len(buf) > cnt && br.numBits > 0; cnt++ {
+			buf[cnt] = byte(br.bufBits)
+			br.bufBits >>= 8
+			br.numBits -= 8
+		}
+	} else {
+		br.FlushOffset()
+		cnt, err = br.rd.Read(buf)
+		br.offset += int64(cnt)
+	}
 	return cnt, err
 }
 
-// ReadBits reads nb bits in LSB order from the underlying reader.
-// If an IO error occurs, then it panics.
-func (br *bitReader) ReadBits(nb uint) uint {
-	for br.numBits < nb {
-		c, err := br.rd.ReadByte()
-		if err != nil {
-			if err == io.EOF {
-				err = io.ErrUnexpectedEOF
-			}
-			panic(err)
-		}
-		br.offset++
-		br.bufBits |= uint32(c) << br.numBits
-		br.numBits += 8
+// TryReadBits attempts to read nb bits using the contents of the bit buffer
+// alone. It returns the value and whether it succeeded.
+//
+// This method is designed to be inlined for performance reasons.
+func (br *bitReader) TryReadBits(nb uint) (uint, bool) {
+	if br.numBits < nb {
+		return 0, false
 	}
-	val := uint(br.bufBits & uint32(1<<nb-1))
+	val := uint(br.bufBits & uint64(1<<nb-1))
+	br.bufBits >>= nb
+	br.numBits -= nb
+	return val, true
+}
+
+// ReadBits reads nb bits in LSB order from the underlying reader.
+func (br *bitReader) ReadBits(nb uint) uint {
+	br.FeedBits(nb)
+	val := uint(br.bufBits & uint64(1<<nb-1))
 	br.bufBits >>= nb
 	br.numBits -= nb
 	return val
@@ -67,14 +174,31 @@ func (br *bitReader) ReadBits(nb uint) uint {
 // ReadPads reads 0-7 bits from the bit buffer to achieve byte-alignment.
 func (br *bitReader) ReadPads() uint {
 	nb := br.numBits % 8
-	val := uint(br.bufBits & uint32(1<<nb-1))
+	val := uint(br.bufBits & uint64(1<<nb-1))
 	br.bufBits >>= nb
 	br.numBits -= nb
 	return val
 }
 
+// TryReadSymbol attempts to decode the next symbol using the contents of the
+// bit buffer alone. It returns the decoded symbol and whether it succeeded.
+//
+// This method is designed to be inlined for performance reasons.
+func (br *bitReader) TryReadSymbol(pd *prefixDecoder) (uint, bool) {
+	if br.numBits < uint(pd.minBits) || len(pd.chunks) == 0 {
+		return 0, false
+	}
+	chunk := pd.chunks[uint32(br.bufBits)&pd.chunkMask]
+	nb := uint(chunk & prefixCountMask)
+	if nb > br.numBits || nb > uint(pd.chunkBits) {
+		return 0, false
+	}
+	br.bufBits >>= nb
+	br.numBits -= nb
+	return uint(chunk >> prefixCountBits), true
+}
+
 // ReadSymbol reads the next prefix symbol using the provided prefixDecoder.
-// If an IO error occurs, then it panics.
 func (br *bitReader) ReadSymbol(pd *prefixDecoder) uint {
 	if len(pd.chunks) == 0 {
 		panic(ErrCorrupt) // Decode with empty tree
@@ -82,25 +206,12 @@ func (br *bitReader) ReadSymbol(pd *prefixDecoder) uint {
 
 	nb := uint(pd.minBits)
 	for {
-		for br.numBits < nb {
-			// This section is an inlined version of the inner loop of ReadBits
-			// for performance reasons.
-			c, err := br.rd.ReadByte()
-			if err != nil {
-				if err == io.EOF {
-					err = io.ErrUnexpectedEOF
-				}
-				panic(err)
-			}
-			br.offset++
-			br.bufBits |= uint32(c) << br.numBits
-			br.numBits += 8
-		}
-		chunk := pd.chunks[uint16(br.bufBits)&pd.chunkMask]
+		br.FeedBits(nb)
+		chunk := pd.chunks[uint32(br.bufBits)&pd.chunkMask]
 		nb = uint(chunk & prefixCountMask)
 		if nb > uint(pd.chunkBits) {
 			linkIdx := chunk >> prefixCountBits
-			chunk = pd.links[linkIdx][uint16(br.bufBits>>pd.chunkBits)&pd.linkMask]
+			chunk = pd.links[linkIdx][uint32(br.bufBits>>pd.chunkBits)&pd.linkMask]
 			nb = uint(chunk & prefixCountMask)
 		}
 		if nb <= br.numBits {
@@ -135,14 +246,14 @@ func (br *bitReader) ReadPrefixCode(pd *prefixDecoder, maxSyms uint) {
 func (br *bitReader) readSimplePrefixCode(pd *prefixDecoder, maxSyms uint) {
 	var codes [4]prefixCode
 	nsym := int(br.ReadBits(2)) + 1
-	clen := neededBits(uint16(maxSyms))
+	clen := neededBits(uint32(maxSyms))
 	for i := 0; i < nsym; i++ {
-		codes[i].sym = uint16(br.ReadBits(clen))
+		codes[i].sym = uint32(br.ReadBits(clen))
 	}
 
 	var copyLens = func(lens []uint) {
 		for i := 0; i < nsym; i++ {
-			codes[i].len = uint8(lens[i])
+			codes[i].len = uint32(lens[i])
 		}
 	}
 	var compareSwap = func(i, j int) {
@@ -188,7 +299,7 @@ func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, maxSyms, hskip uin
 	for _, sym := range complexLens[hskip:] {
 		clen := br.ReadSymbol(&decCLens)
 		if clen > 0 {
-			codeCLensArr[sym] = prefixCode{sym: uint16(sym), len: uint8(clen)}
+			codeCLensArr[sym] = prefixCode{sym: uint32(sym), len: uint32(clen)}
 			if sum -= 32 >> clen; sum <= 0 {
 				break
 			}
@@ -214,7 +325,7 @@ func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, maxSyms, hskip uin
 		if clen < 16 {
 			// Literal bit-length symbol used.
 			if clen > 0 {
-				codes = append(codes, prefixCode{sym: uint16(sym), len: uint8(clen)})
+				codes = append(codes, prefixCode{sym: uint32(sym), len: uint32(clen)})
 				clenLast = clen
 				sum -= 32768 >> clen
 			}
@@ -242,7 +353,7 @@ func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, maxSyms, hskip uin
 			if repSym == 16 {
 				clen := clenLast
 				for symEnd := sym + repDiff; sym < symEnd; sym++ {
-					codes = append(codes, prefixCode{sym: uint16(sym), len: uint8(clen)})
+					codes = append(codes, prefixCode{sym: uint32(sym), len: uint32(clen)})
 				}
 				sum -= int(repDiff) * (32768 >> clen)
 			} else {
@@ -254,39 +365,4 @@ func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, maxSyms, hskip uin
 		panic(ErrCorrupt)
 	}
 	pd.Init(codes, true) // Must have 2..maxSyms symbols
-}
-
-// ReadContextMap reads the context map according to RFC section 7.3.
-func (br *bitReader) ReadContextMap(cm []uint8, numTrees uint) {
-	// TODO(dsnet): Test the following edge cases:
-	// * Test with largest and smallest MAXRLE sizes
-	// * Test with with very large MAXRLE value
-	// * Test inverseMoveToFront
-
-	maxRLE := br.ReadSymbol(&decMaxRLE)
-	br.ReadPrefixCode(&br.prefix, maxRLE+numTrees)
-	for i := 0; i < len(cm); {
-		sym := br.ReadSymbol(&br.prefix)
-		if sym == 0 || sym > maxRLE {
-			// Single non-zero value.
-			if sym > 0 {
-				sym -= maxRLE
-			}
-			cm[i] = uint8(sym)
-			i++
-		} else {
-			// Repeated zeros.
-			n := int(br.ReadOffset(sym-1, maxRLERanges))
-			if i+n > len(cm) {
-				panic(ErrCorrupt)
-			}
-			for j := i + n; i < j; i++ {
-				cm[i] = 0
-			}
-		}
-	}
-
-	if invert := br.ReadBits(1) == 1; invert {
-		br.mtf.Decode(cm)
-	}
 }

@@ -4,11 +4,6 @@
 
 package brotli
 
-import "math"
-
-// TODO(dsnet): Almost all of this logic is identical to compress/flate.
-// Centralize common logic to compress/internal/prefix.
-
 // The algorithm used to decode variable length codes is based on the lookup
 // method in zlib. If the code is less-than-or-equal to prefixMaxChunkBits,
 // then the symbol can be decoded using a single lookup into the chunks table.
@@ -36,22 +31,22 @@ import "math"
 //	http://www.gzip.org/algorithm.txt
 
 const (
-	// These values add up to the width of a uint16 integer.
-	prefixCountBits  = 4  // Number of bits to store the bit-width of the code
-	prefixSymbolBits = 12 // Number of bits to store the symbol value
+	// These values add up to the width of a uint32 integer.
+	prefixCountBits  = 5  // Number of bits to store the bit-width of the code
+	prefixSymbolBits = 27 // Number of bits to store the symbol value
 
 	prefixCountMask    = (1 << prefixCountBits) - 1
 	prefixMaxChunkBits = 9 // This can be tuned for better performance
 )
 
 type prefixDecoder struct {
-	chunks    []uint16   // First-level lookup map
-	links     [][]uint16 // Second-level lookup map
-	chunkMask uint16     // Mask the width of the chunks table
-	linkMask  uint16     // Mask the width of the link table
-	numSyms   uint16     // Number of symbols
-	chunkBits uint8      // Bit-width of the chunks table
-	minBits   uint8      // The minimum number of bits to safely make progress
+	chunks    []uint32   // First-level lookup map
+	links     [][]uint32 // Second-level lookup map
+	chunkMask uint32     // Mask the width of the chunks table
+	linkMask  uint32     // Mask the width of the link table
+	chunkBits uint32     // Bit-width of the chunks table
+	minBits   uint32     // The minimum number of bits to safely make progress
+	numSyms   uint32     // Number of symbols
 }
 
 // Init initializes prefixDecoder according to the codes provided.
@@ -80,9 +75,10 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 
 	// Compute basic statistics on the symbols.
 	var bitCnts [maxPrefixBits + 1]uint
-	var minBits, maxBits uint8 = math.MaxUint8, 0
-	symLast := -1
-	for _, c := range codes {
+	c0 := codes[0]
+	bitCnts[c0.len]++
+	minBits, maxBits, symLast := c0.len, c0.len, int(c0.sym)
+	for _, c := range codes[1:] {
 		if int(c.sym) <= symLast {
 			panic(ErrCorrupt) // Non-unique or non-monotonically increasing
 		}
@@ -115,30 +111,30 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 	}
 
 	// Allocate chunks table if necessary.
-	pd.numSyms = uint16(len(codes))
+	pd.numSyms = uint32(len(codes))
 	pd.minBits = minBits
 	pd.chunkBits = maxBits
 	if pd.chunkBits > prefixMaxChunkBits {
 		pd.chunkBits = prefixMaxChunkBits
 	}
 	numChunks := 1 << pd.chunkBits
-	pd.chunks = extendUint16s(pd.chunks, numChunks)
-	pd.chunkMask = uint16(numChunks - 1)
+	pd.chunks = allocUint32s(pd.chunks, numChunks)
+	pd.chunkMask = uint32(numChunks - 1)
 
 	// Allocate links tables if necessary.
 	pd.links = pd.links[:0]
 	pd.linkMask = 0
 	if pd.chunkBits < maxBits {
 		numLinks := 1 << (maxBits - pd.chunkBits)
-		pd.linkMask = uint16(numLinks - 1)
+		pd.linkMask = uint32(numLinks - 1)
 
 		if assignCodes {
 			baseCode := nextCodes[pd.chunkBits+1] >> 1
-			pd.links = extendSliceUints16s(pd.links, numChunks-int(baseCode))
+			pd.links = extendSliceUints32s(pd.links, numChunks-int(baseCode))
 			for linkIdx := range pd.links {
-				code := reverseBits(uint16(baseCode)+uint16(linkIdx), uint(pd.chunkBits))
-				pd.links[linkIdx] = extendUint16s(pd.links[linkIdx], numLinks)
-				pd.chunks[code] = uint16(linkIdx<<prefixCountBits) | uint16(pd.chunkBits+1)
+				code := reverseBits(uint32(baseCode)+uint32(linkIdx), uint(pd.chunkBits))
+				pd.links[linkIdx] = allocUint32s(pd.links[linkIdx], numLinks)
+				pd.chunks[code] = uint32(linkIdx<<prefixCountBits) | uint32(pd.chunkBits+1)
 			}
 		} else {
 			for i := range pd.chunks {
@@ -153,18 +149,18 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 					continue // Link table already initialized
 				}
 				linkIdx := len(pd.links)
-				pd.links = extendSliceUints16s(pd.links, len(pd.links)+1)
-				pd.links[linkIdx] = extendUint16s(pd.links[linkIdx], numLinks)
-				pd.chunks[code] = uint16(linkIdx<<prefixCountBits) | uint16(pd.chunkBits+1)
+				pd.links = extendSliceUints32s(pd.links, len(pd.links)+1)
+				pd.links[linkIdx] = allocUint32s(pd.links[linkIdx], numLinks)
+				pd.chunks[code] = uint32(linkIdx<<prefixCountBits) | uint32(pd.chunkBits+1)
 			}
 		}
 	}
 
 	// Fill out chunks and links tables with values.
 	for i, c := range codes {
-		chunk := c.sym<<prefixCountBits | uint16(c.len)
+		chunk := c.sym<<prefixCountBits | uint32(c.len)
 		if assignCodes {
-			codes[i].val = reverseBits(uint16(nextCodes[c.len]), uint(c.len))
+			codes[i].val = reverseBits(uint32(nextCodes[c.len]), uint(c.len))
 			nextCodes[c.len]++
 			c = codes[i]
 		}
@@ -184,8 +180,7 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 		}
 	}
 
-	const sanity = false
-	if sanity && !checkPrefixes(codes) {
+	if debug && !checkPrefixes(codes) {
 		panic(ErrCorrupt) // The codes do not form a valid prefix tree.
 	}
 }
@@ -195,25 +190,11 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 func checkPrefixes(codes []prefixCode) bool {
 	for i, c1 := range codes {
 		for j, c2 := range codes {
-			mask := uint16(1)<<c1.len - 1
+			mask := uint32(1)<<c1.len - 1
 			if i != j && c1.len <= c2.len && c1.val&mask == c2.val&mask {
 				return false
 			}
 		}
 	}
 	return true
-}
-
-func extendUint16s(s []uint16, n int) []uint16 {
-	if cap(s) >= n {
-		return s[:n]
-	}
-	return append(s[:cap(s)], make([]uint16, n-cap(s))...)
-}
-
-func extendSliceUints16s(s [][]uint16, n int) [][]uint16 {
-	if cap(s) >= n {
-		return s[:n]
-	}
-	return append(s[:cap(s)], make([][]uint16, n-cap(s))...)
 }
