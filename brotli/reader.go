@@ -78,6 +78,7 @@ func (br *Reader) Read(buf []byte) (int, error) {
 		}
 
 		// Perform next step in decompression process.
+		br.rd.offset = br.InputOffset
 		func() {
 			defer errRecover(&br.err)
 			br.step()
