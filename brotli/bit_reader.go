@@ -28,13 +28,10 @@ type byteReader interface {
 
 type bitReader struct {
 	rd      byteReader
-	bufBits uint64 // Buffer to hold some bits
-	numBits uint   // Number of valid bits in bufBits
-	offset  int64  // Number of bytes read from the underlying io.Reader
-
-	// Local copies of decoders to reduce memory allocation.
-	mtf    moveToFront   // Local move-to-front decoder
-	prefix prefixDecoder // Local prefix decoder
+	prefix  prefixDecoder // Local prefix decoder
+	bufBits uint64        // Buffer to hold some bits
+	numBits uint          // Number of valid bits in bufBits
+	offset  int64         // Number of bytes read from the underlying io.Reader
 
 	// These fields are only used if rd is a bufio.Reader.
 	bufRd       *bufio.Reader // Is the byteReader a bufio.Reader?
@@ -369,39 +366,4 @@ func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, maxSyms, hskip uin
 		panic(ErrCorrupt)
 	}
 	pd.Init(codes, true) // Must have 2..maxSyms symbols
-}
-
-// ReadContextMap reads the context map according to RFC section 7.3.
-func (br *bitReader) ReadContextMap(cm []uint8, numTrees uint) {
-	// TODO(dsnet): Test the following edge cases:
-	// * Test with largest and smallest MAXRLE sizes
-	// * Test with with very large MAXRLE value
-	// * Test inverseMoveToFront
-
-	maxRLE := br.ReadSymbol(&decMaxRLE)
-	br.ReadPrefixCode(&br.prefix, maxRLE+numTrees)
-	for i := 0; i < len(cm); {
-		sym := br.ReadSymbol(&br.prefix)
-		if sym == 0 || sym > maxRLE {
-			// Single non-zero value.
-			if sym > 0 {
-				sym -= maxRLE
-			}
-			cm[i] = uint8(sym)
-			i++
-		} else {
-			// Repeated zeros.
-			n := int(br.ReadOffset(sym-1, maxRLERanges))
-			if i+n > len(cm) {
-				panic(ErrCorrupt)
-			}
-			for j := i + n; i < j; i++ {
-				cm[i] = 0
-			}
-		}
-	}
-
-	if invert := br.ReadBits(1) == 1; invert {
-		br.mtf.Decode(cm)
-	}
 }

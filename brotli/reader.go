@@ -22,6 +22,7 @@ type Reader struct {
 	step      func() // Single step of decompression work (can panic)
 	stepState int    // The sub-step state for certain steps
 
+	mtf     moveToFront  // Local move-to-front decoder
 	dict    dictDecoder  // Dynamic sliding dictionary
 	iacBlk  blockDecoder // Insert-and-copy block decoder
 	litBlk  blockDecoder // Literal block decoder
@@ -267,7 +268,7 @@ func (br *Reader) readPrefixCodes() {
 	numLitTrees := int(br.rd.ReadSymbol(&decCounts)) // 1..256
 	br.litMap = extendUint8s(br.litMap, maxLitContextIDs*br.litBlk.numTypes)
 	if numLitTrees >= 2 {
-		br.rd.ReadContextMap(br.litMap, uint(numLitTrees))
+		br.readContextMap(br.litMap, uint(numLitTrees))
 	} else {
 		for i := range br.litMap {
 			br.litMap[i] = 0
@@ -279,7 +280,7 @@ func (br *Reader) readPrefixCodes() {
 	numDistTrees := int(br.rd.ReadSymbol(&decCounts)) // 1..256
 	br.distMap = extendUint8s(br.distMap, maxDistContextIDs*br.distBlk.numTypes)
 	if numDistTrees >= 2 {
-		br.rd.ReadContextMap(br.distMap, uint(numDistTrees))
+		br.readContextMap(br.distMap, uint(numDistTrees))
 	} else {
 		for i := range br.distMap {
 			br.distMap[i] = 0
@@ -370,7 +371,7 @@ startCommand:
 	// Read the insert and copy lengths according to RFC section 5.
 	{
 		if br.iacBlk.typeLen == 0 {
-			br.iacBlk.readBlockSwitch(&br.rd)
+			br.readBlockSwitch(&br.iacBlk)
 		}
 		br.iacBlk.typeLen--
 
@@ -409,7 +410,7 @@ readLiterals:
 		p1, p2 := br.dict.LastBytes()
 		for i := range buf {
 			if br.litBlk.typeLen == 0 {
-				br.litBlk.readBlockSwitch(&br.rd)
+				br.readBlockSwitch(&br.litBlk)
 				br.litMapType = br.litMap[64*int(br.litBlk.types[0]):]
 				br.cmode = br.cmodes[br.litBlk.types[0]] // 0..3
 			}
@@ -447,7 +448,7 @@ readDistance:
 			br.dist = br.dists[0]
 		} else {
 			if br.distBlk.typeLen == 0 {
-				br.distBlk.readBlockSwitch(&br.rd)
+				br.readBlockSwitch(&br.distBlk)
 				br.distMapType = br.distMap[4*int(br.distBlk.types[0]):]
 			}
 			br.distBlk.typeLen--
@@ -553,9 +554,44 @@ finishCommand:
 	return
 }
 
+// readContextMap reads the context map according to RFC section 7.3.
+func (br *Reader) readContextMap(cm []uint8, numTrees uint) {
+	// TODO(dsnet): Test the following edge cases:
+	// * Test with largest and smallest MAXRLE sizes
+	// * Test with with very large MAXRLE value
+	// * Test inverseMoveToFront
+
+	maxRLE := br.rd.ReadSymbol(&decMaxRLE)
+	br.rd.ReadPrefixCode(&br.rd.prefix, maxRLE+numTrees)
+	for i := 0; i < len(cm); {
+		sym := br.rd.ReadSymbol(&br.rd.prefix)
+		if sym == 0 || sym > maxRLE {
+			// Single non-zero value.
+			if sym > 0 {
+				sym -= maxRLE
+			}
+			cm[i] = uint8(sym)
+			i++
+		} else {
+			// Repeated zeros.
+			n := int(br.rd.ReadOffset(sym-1, maxRLERanges))
+			if i+n > len(cm) {
+				panic(ErrCorrupt)
+			}
+			for j := i + n; i < j; i++ {
+				cm[i] = 0
+			}
+		}
+	}
+
+	if invert := br.rd.ReadBits(1) == 1; invert {
+		br.mtf.Decode(cm)
+	}
+}
+
 // readBlockSwitch handles a block switch command according to RFC section 6.
-func (bd *blockDecoder) readBlockSwitch(r *bitReader) {
-	symType := r.ReadSymbol(&bd.decType)
+func (br *Reader) readBlockSwitch(bd *blockDecoder) {
+	symType := br.rd.ReadSymbol(&bd.decType)
 	switch symType {
 	case 0:
 		symType = uint(bd.types[1])
@@ -569,8 +605,8 @@ func (bd *blockDecoder) readBlockSwitch(r *bitReader) {
 	}
 	bd.types = [2]uint8{uint8(symType), bd.types[0]}
 
-	symLen := r.ReadSymbol(&bd.decLen)
-	bd.typeLen = int(r.ReadOffset(symLen, blkLenRanges))
+	symLen := br.rd.ReadSymbol(&bd.decLen)
+	bd.typeLen = int(br.rd.ReadOffset(symLen, blkLenRanges))
 }
 
 func extendUint8s(s []uint8, n int) []uint8 {
