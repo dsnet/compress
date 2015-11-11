@@ -307,23 +307,10 @@ func (br *Reader) readPrefixCodes() {
 
 // readCommands reads block commands according to RFC section 9.3.
 func (br *Reader) readCommands() {
-	br.step = br.readCommands // Assume we may need to continue this function
-
-	const (
-		stateInit = iota
-		stateLiterals
-		stateDynamicDict
-		stateStaticDict
-	)
-
 	// Since Go does not support tail call optimization, we use goto statements
 	// to achieve higher performance processing each command. Each label can be
 	// thought of as a mini function, and each goto as a cheap function call.
 	// The following code follows this control flow.
-	//
-	// Some labels (readLiterals, copyDynamicDict, copyStaticDict) require work
-	// to be continued if more buffer space is needed. This is achieved by the
-	// switch block right below, which continues the work at the right sub-step.
 	//
 	// The bulk of the action will be in the following loop:
 	//	startCommand -> readLiterals -> readDistance -> copyDynamicDict ->
@@ -355,6 +342,18 @@ func (br *Reader) readCommands() {
 		                   V
 		           readBlockHeader()
 	*/
+
+	const (
+		stateInit = iota // Zero value must be stateInit
+
+		// Some labels (readLiterals, copyDynamicDict, copyStaticDict) require
+		// work to be continued if more buffer space is needed. This is achieved
+		// by the  switch block right below, which continues the work at the
+		// right label based on the given sub-step value.
+		stateLiterals
+		stateDynamicDict
+		stateStaticDict
+	)
 
 	switch br.stepState {
 	case stateInit:
@@ -432,6 +431,7 @@ readLiterals:
 
 		if br.insLen > 0 {
 			br.toRead = br.dict.ReadFlush()
+			br.step = br.readCommands
 			br.stepState = stateLiterals // Need to continue work here
 			return
 		} else if br.blkLen > 0 {
@@ -501,6 +501,7 @@ copyDynamicDict:
 
 		if br.cpyLen > 0 {
 			br.toRead = br.dict.ReadFlush()
+			br.step = br.readCommands
 			br.stepState = stateDynamicDict // Need to continue work here
 			return
 		} else {
@@ -535,6 +536,7 @@ copyStaticDict:
 
 		if len(br.word) > 0 {
 			br.toRead = br.dict.ReadFlush()
+			br.step = br.readCommands
 			br.stepState = stateStaticDict // Need to continue work here
 			return
 		} else {
@@ -544,13 +546,13 @@ copyStaticDict:
 
 finishCommand:
 	// Finish off this command and check if we need to loop again.
-	br.stepState = stateInit
 	if br.blkLen < 0 {
 		panic(ErrCorrupt)
 	} else if br.blkLen > 0 {
 		goto startCommand // More commands in this block
 	}
 	br.step = br.readBlockHeader // Done with this block
+	br.stepState = stateInit     // Next call to readCommands must start here
 	return
 }
 
