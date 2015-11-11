@@ -19,8 +19,8 @@ type Reader struct {
 	last   bool      // Last block bit detected
 	err    error     // Persistent error
 
-	step      func() // Single step of decompression work (can panic)
-	stepState int    // The sub-step state for certain steps
+	step      func(*Reader) // Single step of decompression work (can panic)
+	stepState int           // The sub-step state for certain steps
 
 	mtf     moveToFront  // Local move-to-front decoder
 	dict    dictDecoder  // Dynamic sliding dictionary
@@ -82,7 +82,7 @@ func (br *Reader) Read(buf []byte) (int, error) {
 		br.rd.offset = br.InputOffset
 		func() {
 			defer errRecover(&br.err)
-			br.step()
+			br.step(br)
 		}()
 		br.InputOffset = br.rd.FlushOffset()
 		if br.err != nil {
@@ -103,7 +103,7 @@ func (br *Reader) Close() error {
 func (br *Reader) Reset(r io.Reader) error {
 	*br = Reader{
 		rd:   br.rd,
-		step: br.readStreamHeader,
+		step: (*Reader).readStreamHeader,
 
 		dict:    br.dict,
 		iacBlk:  br.iacBlk,
@@ -204,7 +204,7 @@ func (br *Reader) readMetaData() {
 	} else if cnt < int64(br.blkLen) {
 		panic(io.ErrUnexpectedEOF)
 	}
-	br.step = br.readBlockHeader
+	br.step = (*Reader).readBlockHeader
 }
 
 // readRawData reads raw data according to RFC section 9.2.
@@ -226,10 +226,10 @@ func (br *Reader) readRawData() {
 
 	if br.blkLen > 0 {
 		br.toRead = br.dict.ReadFlush()
-		br.step = br.readRawData // We need to continue this work
+		br.step = (*Reader).readRawData // We need to continue this work
 		return
 	}
-	br.step = br.readBlockHeader
+	br.step = (*Reader).readBlockHeader
 }
 
 // readPrefixCodes reads the prefix codes according to RFC section 9.2.
@@ -302,7 +302,7 @@ func (br *Reader) readPrefixCodes() {
 		br.rd.ReadPrefixCode(&br.distBlk.prefixes[i], numDistSyms)
 	}
 
-	br.step = br.readCommands
+	br.step = (*Reader).readCommands
 }
 
 // readCommands reads block commands according to RFC section 9.3.
@@ -431,7 +431,7 @@ readLiterals:
 
 		if br.insLen > 0 {
 			br.toRead = br.dict.ReadFlush()
-			br.step = br.readCommands
+			br.step = (*Reader).readCommands
 			br.stepState = stateLiterals // Need to continue work here
 			return
 		} else if br.blkLen > 0 {
@@ -501,7 +501,7 @@ copyDynamicDict:
 
 		if br.cpyLen > 0 {
 			br.toRead = br.dict.ReadFlush()
-			br.step = br.readCommands
+			br.step = (*Reader).readCommands
 			br.stepState = stateDynamicDict // Need to continue work here
 			return
 		} else {
@@ -536,7 +536,7 @@ copyStaticDict:
 
 		if len(br.word) > 0 {
 			br.toRead = br.dict.ReadFlush()
-			br.step = br.readCommands
+			br.step = (*Reader).readCommands
 			br.stepState = stateStaticDict // Need to continue work here
 			return
 		} else {
@@ -551,8 +551,8 @@ finishCommand:
 	} else if br.blkLen > 0 {
 		goto startCommand // More commands in this block
 	}
-	br.step = br.readBlockHeader // Done with this block
-	br.stepState = stateInit     // Next call to readCommands must start here
+	br.step = (*Reader).readBlockHeader // Done with this block
+	br.stepState = stateInit            // Next call to readCommands must start here
 	return
 }
 
