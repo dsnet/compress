@@ -60,21 +60,25 @@ func initCommonLUTs() {
 }
 
 // neededBits computes the minimum number of bits needed to encode n elements.
-func neededBits(n uint16) (nb uint) {
+func neededBits(n uint32) (nb uint) {
 	for n -= 1; n > 0; n >>= 1 {
 		nb++
 	}
 	return
 }
 
-// reverseUint16 reverses all bits of v.
-func reverseUint16(v uint16) uint16 {
-	return uint16(reverseLUT[v>>8]) | uint16(reverseLUT[v&0xff])<<8
+// reverseUint32 reverses all bits of v.
+func reverseUint32(v uint32) (x uint32) {
+	x |= uint32(reverseLUT[byte(v>>0)]) << 24
+	x |= uint32(reverseLUT[byte(v>>8)]) << 16
+	x |= uint32(reverseLUT[byte(v>>16)]) << 8
+	x |= uint32(reverseLUT[byte(v>>24)]) << 0
+	return x
 }
 
 // reverseBits reverses the lower n bits of v.
-func reverseBits(v uint16, n uint) uint16 {
-	return reverseUint16(v << (16 - n))
+func reverseBits(v uint32, n uint) uint32 {
+	return reverseUint32(v << (32 - n))
 }
 
 // moveToFront is a data structure that allows for more efficient move-to-front
@@ -133,18 +137,18 @@ func allocUint8s(s []uint8, n int) []uint8 {
 	return make([]uint8, n, n*3/2)
 }
 
-func allocUint16s(s []uint16, n int) []uint16 {
+func allocUint32s(s []uint32, n int) []uint32 {
 	if cap(s) >= n {
 		return s[:n]
 	}
-	return make([]uint16, n, n*3/2)
+	return make([]uint32, n, n*3/2)
 }
 
-func extendSliceUints16s(s [][]uint16, n int) [][]uint16 {
+func extendSliceUints32s(s [][]uint32, n int) [][]uint32 {
 	if cap(s) >= n {
 		return s[:n]
 	}
-	ss := make([][]uint16, n, n*3/2)
+	ss := make([][]uint32, n, n*3/2)
 	copy(ss, s[:cap(s)])
 	return ss
 }

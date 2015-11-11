@@ -7,7 +7,7 @@ package brotli
 const (
 	// RFC section 3.5.
 	// This is the maximum bit-width of a prefix code.
-	// Thus, it is okay to use uint16 to store codes.
+	// Thus, it is okay to use uint32 to store codes.
 	maxPrefixBits = 15
 
 	// RFC section 3.3.
@@ -41,7 +41,7 @@ var (
 
 type rangeCode struct {
 	base uint32 // Starting base offset of the range
-	bits uint8  // Bit-width of a subsequent integer to add to base offset
+	bits uint32 // Bit-width of a subsequent integer to add to base offset
 }
 
 var (
@@ -63,9 +63,9 @@ var (
 )
 
 type prefixCode struct {
-	sym uint16 // The symbol being mapped
-	val uint16 // Value of the prefix code (must be in [0..1<<len])
-	len uint8  // Bit length of the prefix code
+	sym uint32 // The symbol being mapped
+	val uint32 // Value of the prefix code (must be in [0..1<<len])
+	len uint32 // Bit length of the prefix code
 }
 
 var (
@@ -134,7 +134,7 @@ func initPrefixLUTs() {
 func initPrefixRangeLUTs() {
 	var makeRanges = func(base uint, bits []uint) (rc []rangeCode) {
 		for _, nb := range bits {
-			rc = append(rc, rangeCode{base: uint32(base), bits: uint8(nb)})
+			rc = append(rc, rangeCode{base: uint32(base), bits: uint32(nb)})
 			base += 1 << nb
 		}
 		return rc
@@ -158,7 +158,7 @@ func initPrefixCodeLUTs() {
 	// Prefix code for reading code lengths in RFC section 3.5.
 	codeCLens = nil
 	for sym, clen := range []uint{2, 4, 3, 2, 2, 4} {
-		var code = prefixCode{sym: uint16(sym), len: uint8(clen)}
+		var code = prefixCode{sym: uint32(sym), len: uint32(clen)}
 		codeCLens = append(codeCLens, code)
 	}
 	decCLens.Init(codeCLens, true)
@@ -166,7 +166,7 @@ func initPrefixCodeLUTs() {
 
 	// Prefix code for reading RLEMAX in RFC section 7.3.
 	codeMaxRLE = []prefixCode{{sym: 0, val: 0, len: 1}}
-	for i := uint16(0); i < 16; i++ {
+	for i := uint32(0); i < 16; i++ {
 		var code = prefixCode{sym: i + 1, val: i<<1 | 1, len: 5}
 		codeMaxRLE = append(codeMaxRLE, code)
 	}
@@ -175,7 +175,7 @@ func initPrefixCodeLUTs() {
 
 	// Prefix code for reading WBITS in RFC section 9.1.
 	codeWinBits = nil
-	for i := uint16(9); i <= 24; i++ {
+	for i := uint32(9); i <= 24; i++ {
 		var code prefixCode
 		switch {
 		case i == 16:
@@ -197,11 +197,11 @@ func initPrefixCodeLUTs() {
 	// This is used for: NBLTYPESL, NBLTYPESI, NBLTYPESD, NTREESL, and NTREESD.
 	codeCounts = []prefixCode{{sym: 1, val: 0, len: 1}}
 	var code = codeCounts[len(codeCounts)-1]
-	for i := uint16(0); i < 8; i++ {
-		for j := uint16(0); j < 1<<i; j++ {
+	for i := uint32(0); i < 8; i++ {
+		for j := uint32(0); j < 1<<i; j++ {
 			code.sym = code.sym + 1
 			code.val = j<<4 | i<<1 | 1
-			code.len = uint8(i + 4)
+			code.len = uint32(i + 4)
 			codeCounts = append(codeCounts, code)
 		}
 	}
@@ -282,7 +282,7 @@ func initLengthLUTs() {
 			offset := ((2 + (hcode & 1)) << uint(nbits)) - 4
 			distLongLUT[npostfix][distSym] = rangeCode{
 				base: uint32(offset<<uint(npostfix) + lcode + 1),
-				bits: uint8(nbits),
+				bits: uint32(nbits),
 			}
 		}
 	}

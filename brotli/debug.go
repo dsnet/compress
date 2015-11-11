@@ -192,9 +192,9 @@ func (pd prefixDecoder) String() string {
 		}
 		ss = append(ss, fmt.Sprintf("\tchunkMask: %b,", pd.chunkMask))
 		ss = append(ss, fmt.Sprintf("\tlinkMask: %b,", pd.linkMask))
-		ss = append(ss, fmt.Sprintf("\tnumSyms: %d,", pd.numSyms))
 		ss = append(ss, fmt.Sprintf("\tchunkBits: %d,", pd.chunkBits))
 		ss = append(ss, fmt.Sprintf("\tminBits: %d,", pd.minBits))
+		ss = append(ss, fmt.Sprintf("\tnumSyms: %d,", pd.numSyms))
 	}
 	ss = append(ss, "}")
 	return strings.Join(ss, "\n")

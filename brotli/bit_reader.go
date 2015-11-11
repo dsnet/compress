@@ -188,7 +188,7 @@ func (br *bitReader) TryReadSymbol(pd *prefixDecoder) (uint, bool) {
 	if br.numBits < uint(pd.minBits) || len(pd.chunks) == 0 {
 		return 0, false
 	}
-	chunk := pd.chunks[uint16(br.bufBits)&pd.chunkMask]
+	chunk := pd.chunks[uint32(br.bufBits)&pd.chunkMask]
 	nb := uint(chunk & prefixCountMask)
 	if nb > br.numBits || nb > uint(pd.chunkBits) {
 		return 0, false
@@ -207,11 +207,11 @@ func (br *bitReader) ReadSymbol(pd *prefixDecoder) uint {
 	nb := uint(pd.minBits)
 	for {
 		br.FeedBits(nb)
-		chunk := pd.chunks[uint16(br.bufBits)&pd.chunkMask]
+		chunk := pd.chunks[uint32(br.bufBits)&pd.chunkMask]
 		nb = uint(chunk & prefixCountMask)
 		if nb > uint(pd.chunkBits) {
 			linkIdx := chunk >> prefixCountBits
-			chunk = pd.links[linkIdx][uint16(br.bufBits>>pd.chunkBits)&pd.linkMask]
+			chunk = pd.links[linkIdx][uint32(br.bufBits>>pd.chunkBits)&pd.linkMask]
 			nb = uint(chunk & prefixCountMask)
 		}
 		if nb <= br.numBits {
@@ -246,14 +246,14 @@ func (br *bitReader) ReadPrefixCode(pd *prefixDecoder, maxSyms uint) {
 func (br *bitReader) readSimplePrefixCode(pd *prefixDecoder, maxSyms uint) {
 	var codes [4]prefixCode
 	nsym := int(br.ReadBits(2)) + 1
-	clen := neededBits(uint16(maxSyms))
+	clen := neededBits(uint32(maxSyms))
 	for i := 0; i < nsym; i++ {
-		codes[i].sym = uint16(br.ReadBits(clen))
+		codes[i].sym = uint32(br.ReadBits(clen))
 	}
 
 	var copyLens = func(lens []uint) {
 		for i := 0; i < nsym; i++ {
-			codes[i].len = uint8(lens[i])
+			codes[i].len = uint32(lens[i])
 		}
 	}
 	var compareSwap = func(i, j int) {
@@ -299,7 +299,7 @@ func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, maxSyms, hskip uin
 	for _, sym := range complexLens[hskip:] {
 		clen := br.ReadSymbol(&decCLens)
 		if clen > 0 {
-			codeCLensArr[sym] = prefixCode{sym: uint16(sym), len: uint8(clen)}
+			codeCLensArr[sym] = prefixCode{sym: uint32(sym), len: uint32(clen)}
 			if sum -= 32 >> clen; sum <= 0 {
 				break
 			}
@@ -325,7 +325,7 @@ func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, maxSyms, hskip uin
 		if clen < 16 {
 			// Literal bit-length symbol used.
 			if clen > 0 {
-				codes = append(codes, prefixCode{sym: uint16(sym), len: uint8(clen)})
+				codes = append(codes, prefixCode{sym: uint32(sym), len: uint32(clen)})
 				clenLast = clen
 				sum -= 32768 >> clen
 			}
@@ -353,7 +353,7 @@ func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, maxSyms, hskip uin
 			if repSym == 16 {
 				clen := clenLast
 				for symEnd := sym + repDiff; sym < symEnd; sym++ {
-					codes = append(codes, prefixCode{sym: uint16(sym), len: uint8(clen)})
+					codes = append(codes, prefixCode{sym: uint32(sym), len: uint32(clen)})
 				}
 				sum -= int(repDiff) * (32768 >> clen)
 			} else {
