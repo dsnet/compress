@@ -65,32 +65,44 @@ func printLUTs() {
 	printVar("complexLens", complexLens)
 	fmt.Fprintln(output)
 
-	printVar("insLenRanges", insLenRanges)
-	printVar("cpyLenRanges", cpyLenRanges)
-	printVar("blkLenRanges", blkLenRanges)
-	printVar("maxRLERanges", maxRLERanges)
+	printVar("insLenRanges", rangeCodes(insLenRanges))
+	printVar("cpyLenRanges", rangeCodes(cpyLenRanges))
+	printVar("blkLenRanges", rangeCodes(blkLenRanges))
+	printVar("maxRLERanges", rangeCodes(maxRLERanges))
 	fmt.Fprintln(output)
 
-	printVar("codeCLens", codeCLens)
+	printVar("codeCLens", prefixCodes(codeCLens))
 	printVar("decCLens", decCLens)
 	printVar("encCLens", encCLens)
 	fmt.Fprintln(output)
 
-	printVar("codeMaxRLE", codeMaxRLE)
+	printVar("codeMaxRLE", prefixCodes(codeMaxRLE))
 	printVar("decMaxRLE", decMaxRLE)
 	printVar("encMaxRLE", encMaxRLE)
 	fmt.Fprintln(output)
 
-	printVar("codeWinBits", codeWinBits)
+	printVar("codeWinBits", prefixCodes(codeWinBits))
 	printVar("decWinBits", decWinBits)
 	printVar("encWinBits", encWinBits)
 	fmt.Fprintln(output)
 
-	printVar("codeCounts", codeCounts)
+	printVar("codeCounts", prefixCodes(codeCounts))
 	printVar("decCounts", decCounts)
 	printVar("encCounts", encCounts)
 	fmt.Fprintln(output)
+
+	printVar("iacLUT", typeIaCLUT(iacLUT))
+	printVar("distShortLUT", typeDistShortLUT(distShortLUT))
+	printVar("distLongLUT", typeDistLongLUT(distLongLUT))
+	fmt.Fprintln(output)
 }
+
+func tabs(s string, n int) string {
+	tabs := strings.Repeat("\t", n)
+	return strings.Join(strings.Split(s, "\n"), "\n"+tabs)
+}
+
+type rangeCodes []rangeCode
 
 func (rc rangeCodes) String() (s string) {
 	var maxBits, maxBase int
@@ -122,6 +134,8 @@ func (rc rangeCodes) String() (s string) {
 	ss = append(ss, "}")
 	return strings.Join(ss, "\n")
 }
+
+type prefixCodes []prefixCode
 
 func (pc prefixCodes) String() (s string) {
 	var maxSym, maxLen int
@@ -181,6 +195,46 @@ func (pd prefixDecoder) String() string {
 		ss = append(ss, fmt.Sprintf("\tnumSyms: %d,", pd.numSyms))
 		ss = append(ss, fmt.Sprintf("\tchunkBits: %d,", pd.chunkBits))
 		ss = append(ss, fmt.Sprintf("\tminBits: %d,", pd.minBits))
+	}
+	ss = append(ss, "}")
+	return strings.Join(ss, "\n")
+}
+
+type typeIaCLUT [numIaCSyms]struct{ ins, cpy rangeCode }
+
+func (t typeIaCLUT) String() string {
+	var ss []string
+	var ins, cpy rangeCodes
+	for _, rec := range t {
+		ins = append(ins, rec.ins)
+		cpy = append(cpy, rec.cpy)
+	}
+	ss = append(ss, "{")
+	ss = append(ss, "\tins: "+tabs(ins.String(), 1)+",")
+	ss = append(ss, "\tcpy: "+tabs(cpy.String(), 1)+",")
+	ss = append(ss, "}")
+	return strings.Join(ss, "\n")
+}
+
+type typeDistShortLUT [16]struct{ index, delta int }
+
+func (t typeDistShortLUT) String() string {
+	var ss []string
+	ss = append(ss, "{")
+	for i, rec := range t {
+		ss = append(ss, fmt.Sprintf("\t%2d: {index: %d, delta: %+2d},", i, rec.index, rec.delta))
+	}
+	ss = append(ss, "}")
+	return strings.Join(ss, "\n")
+}
+
+type typeDistLongLUT [4][]rangeCode
+
+func (t typeDistLongLUT) String() string {
+	var ss []string
+	ss = append(ss, "{")
+	for i, rc := range t {
+		ss = append(ss, fmt.Sprintf("\t%d: %s,", i, tabs(rangeCodes(rc).String(), 1)))
 	}
 	ss = append(ss, "}")
 	return strings.Join(ss, "\n")

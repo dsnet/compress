@@ -46,24 +46,23 @@ type rangeCode struct {
 	base uint32 // Starting base offset of the range
 	bits uint8  // Bit-width of a subsequent integer to add to base offset
 }
-type rangeCodes []rangeCode
 
 var (
 	// RFC section 5.
 	// LUT to convert an insert symbol to an actual insert length.
-	insLenRanges rangeCodes
+	insLenRanges []rangeCode
 
 	// RFC section 5.
 	// LUT to convert an copy symbol to an actual copy length.
-	cpyLenRanges rangeCodes
+	cpyLenRanges []rangeCode
 
 	// RFC section 6.
 	// LUT to convert an block-type length symbol to an actual length.
-	blkLenRanges rangeCodes
+	blkLenRanges []rangeCode
 
 	// RFC section 7.3.
 	// LUT to convert RLE symbol to an actual repeat length.
-	maxRLERanges rangeCodes
+	maxRLERanges []rangeCode
 )
 
 type prefixCode struct {
@@ -71,30 +70,29 @@ type prefixCode struct {
 	val uint16 // Value of the prefix code (must be in [0..1<<len])
 	len uint8  // Bit length of the prefix code
 }
-type prefixCodes []prefixCode
 
 var (
 	// RFC section 3.5.
 	// Prefix codecs for code lengths in complex prefix definition.
-	codeCLens prefixCodes
+	codeCLens []prefixCode
 	decCLens  prefixDecoder
 	encCLens  prefixEncoder
 
 	// RFC section 7.3.
 	// Prefix codecs for RLEMAX in context map definition.
-	codeMaxRLE prefixCodes
+	codeMaxRLE []prefixCode
 	decMaxRLE  prefixDecoder
 	encMaxRLE  prefixEncoder
 
 	// RFC section 9.1.
 	// Prefix codecs for WBITS in stream header definition.
-	codeWinBits prefixCodes
+	codeWinBits []prefixCode
 	decWinBits  prefixDecoder
 	encWinBits  prefixEncoder
 
 	// RFC section 9.2.
 	// Prefix codecs used for size fields in meta-block header definition.
-	codeCounts prefixCodes
+	codeCounts []prefixCode
 	decCounts  prefixDecoder
 	encCounts  prefixEncoder
 )
@@ -112,7 +110,7 @@ var (
 	// RFC section 4.
 	// Table to help convert long-codes to distances. This is two dimensional
 	// slice keyed by the NPOSTFIX and the normalized distance symbol.
-	distLongLUT [4]rangeCodes
+	distLongLUT [4][]rangeCode
 )
 
 func initPrefixLUTs() {
