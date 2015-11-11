@@ -125,3 +125,35 @@ func (m *moveToFront) Decode(idxs []uint8) {
 	}
 	m.tail = 256 - max - 1
 }
+
+func allocUint8s(s []uint8, n int) []uint8 {
+	if cap(s) >= n {
+		return s[:n]
+	}
+	return make([]uint8, n, n*3/2)
+}
+
+func allocUint16s(s []uint16, n int) []uint16 {
+	if cap(s) >= n {
+		return s[:n]
+	}
+	return make([]uint16, n, n*3/2)
+}
+
+func extendSliceUints16s(s [][]uint16, n int) [][]uint16 {
+	if cap(s) >= n {
+		return s[:n]
+	}
+	ss := make([][]uint16, n, n*3/2)
+	copy(ss, s[:cap(s)])
+	return ss
+}
+
+func extendDecoders(s []prefixDecoder, n int) []prefixDecoder {
+	if cap(s) >= n {
+		return s[:n]
+	}
+	ss := make([]prefixDecoder, n, n*3/2)
+	copy(ss, s[:cap(s)])
+	return ss
+}

@@ -25,17 +25,19 @@ type byteReader interface {
 
 type bitReader struct {
 	rd      byteReader
-	prefix  prefixDecoder // Local prefix decoder
-	bufBits uint64        // Buffer to hold some bits
-	numBits uint          // Number of valid bits in bufBits
-	offset  int64         // Number of bytes read from the underlying io.Reader
+	bufBits uint64 // Buffer to hold some bits
+	numBits uint   // Number of valid bits in bufBits
+	offset  int64  // Number of bytes read from the underlying io.Reader
 
 	// These fields are only used if rd is a bufio.Reader.
-	bufRd       *bufio.Reader // Is the byteReader a bufio.Reader?
-	fedBits     uint          // Number of bits fed in last call to FeedBits
-	discardBits int           // Number of bits to discard from bufio.Reader
-	idxPeek     int           // The current index into the Peek buffer
-	bufPeek     []byte        // Buffer for the Peek data
+	bufRd       *bufio.Reader
+	bufPeek     []byte // Buffer for the Peek data
+	idxPeek     int    // The current index into the Peek buffer
+	discardBits int    // Number of bits to discard from bufio.Reader
+	fedBits     uint   // Number of bits fed in last call to FeedBits
+
+	// Local copy of decoders to reduce memory allocations.
+	prefix prefixDecoder
 }
 
 func (br *bitReader) Init(r io.Reader) {

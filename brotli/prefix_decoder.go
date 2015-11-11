@@ -118,7 +118,7 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 		pd.chunkBits = prefixMaxChunkBits
 	}
 	numChunks := 1 << pd.chunkBits
-	pd.chunks = extendUint16s(pd.chunks, numChunks)
+	pd.chunks = allocUint16s(pd.chunks, numChunks)
 	pd.chunkMask = uint16(numChunks - 1)
 
 	// Allocate links tables if necessary.
@@ -133,7 +133,7 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 			pd.links = extendSliceUints16s(pd.links, numChunks-int(baseCode))
 			for linkIdx := range pd.links {
 				code := reverseBits(uint16(baseCode)+uint16(linkIdx), uint(pd.chunkBits))
-				pd.links[linkIdx] = extendUint16s(pd.links[linkIdx], numLinks)
+				pd.links[linkIdx] = allocUint16s(pd.links[linkIdx], numLinks)
 				pd.chunks[code] = uint16(linkIdx<<prefixCountBits) | uint16(pd.chunkBits+1)
 			}
 		} else {
@@ -150,7 +150,7 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 				}
 				linkIdx := len(pd.links)
 				pd.links = extendSliceUints16s(pd.links, len(pd.links)+1)
-				pd.links[linkIdx] = extendUint16s(pd.links[linkIdx], numLinks)
+				pd.links[linkIdx] = allocUint16s(pd.links[linkIdx], numLinks)
 				pd.chunks[code] = uint16(linkIdx<<prefixCountBits) | uint16(pd.chunkBits+1)
 			}
 		}
@@ -197,18 +197,4 @@ func checkPrefixes(codes []prefixCode) bool {
 		}
 	}
 	return true
-}
-
-func extendUint16s(s []uint16, n int) []uint16 {
-	if cap(s) >= n {
-		return s[:n]
-	}
-	return append(s[:cap(s)], make([]uint16, n-cap(s))...)
-}
-
-func extendSliceUints16s(s [][]uint16, n int) [][]uint16 {
-	if cap(s) >= n {
-		return s[:n]
-	}
-	return append(s[:cap(s)], make([][]uint16, n-cap(s))...)
 }

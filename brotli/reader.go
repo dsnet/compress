@@ -47,8 +47,10 @@ type Reader struct {
 	word    []byte            // Transformed word obtained from static dictionary
 	wordBuf [maxWordSize]byte // Buffer to write a transformed word into
 
-	metaWr  io.Writer // Writer to write meta data to
-	metaBuf []byte    // Scratch space for reading meta data
+	// Meta data fields.
+	metaRd  io.LimitedReader // Local LimitedReader to reduce allocation
+	metaWr  io.Writer        // Writer to write meta data to
+	metaBuf []byte           // Scratch space for reading meta data
 }
 
 type blockDecoder struct {
@@ -197,10 +199,13 @@ func (br *Reader) readBlockHeader() {
 
 // readMetaData reads meta data according to RFC section 9.2.
 func (br *Reader) readMetaData() {
-	rd := io.LimitReader(&br.rd, int64(br.blkLen))
-	br.metaBuf = extendUint8s(br.metaBuf, 4096) // Lazy allocate
-	if cnt, err := io.CopyBuffer(br.metaWr, rd, br.metaBuf); err != nil {
-		panic(err)
+	br.metaRd.R = &br.rd
+	br.metaRd.N = int64(br.blkLen)
+	if br.metaBuf == nil {
+		br.metaBuf = make([]byte, 4096) // Lazy allocate
+	}
+	if cnt, err := io.CopyBuffer(br.metaWr, &br.metaRd, br.metaBuf); err != nil {
+		panic(err) // Will never panic with io.EOF
 	} else if cnt < int64(br.blkLen) {
 		panic(io.ErrUnexpectedEOF)
 	}
@@ -258,7 +263,7 @@ func (br *Reader) readPrefixCodes() {
 	numDistSyms := 16 + ndirect + 48<<npostfix
 
 	// Read CMODE, the literal context modes.
-	br.cmodes = extendUint8s(br.cmodes, br.litBlk.numTypes)
+	br.cmodes = allocUint8s(br.cmodes, br.litBlk.numTypes)
 	for i := range br.cmodes {
 		br.cmodes[i] = uint8(br.rd.ReadBits(2))
 	}
@@ -266,7 +271,7 @@ func (br *Reader) readPrefixCodes() {
 
 	// Read CMAPL, the literal context map.
 	numLitTrees := int(br.rd.ReadSymbol(&decCounts)) // 1..256
-	br.litMap = extendUint8s(br.litMap, maxLitContextIDs*br.litBlk.numTypes)
+	br.litMap = allocUint8s(br.litMap, maxLitContextIDs*br.litBlk.numTypes)
 	if numLitTrees >= 2 {
 		br.readContextMap(br.litMap, uint(numLitTrees))
 	} else {
@@ -278,7 +283,7 @@ func (br *Reader) readPrefixCodes() {
 
 	// Read CMAPD, the distance context map.
 	numDistTrees := int(br.rd.ReadSymbol(&decCounts)) // 1..256
-	br.distMap = extendUint8s(br.distMap, maxDistContextIDs*br.distBlk.numTypes)
+	br.distMap = allocUint8s(br.distMap, maxDistContextIDs*br.distBlk.numTypes)
 	if numDistTrees >= 2 {
 		br.readContextMap(br.distMap, uint(numDistTrees))
 	} else {
@@ -609,18 +614,4 @@ func (br *Reader) readBlockSwitch(bd *blockDecoder) {
 
 	symLen := br.rd.ReadSymbol(&bd.decLen)
 	bd.typeLen = int(br.rd.ReadOffset(symLen, blkLenRanges))
-}
-
-func extendUint8s(s []uint8, n int) []uint8 {
-	if cap(s) >= n {
-		return s[:n]
-	}
-	return append(s[:cap(s)], make([]uint8, n-cap(s))...)
-}
-
-func extendDecoders(s []prefixDecoder, n int) []prefixDecoder {
-	if cap(s) >= n {
-		return s[:n]
-	}
-	return append(s[:cap(s)], make([]prefixDecoder, n-cap(s))...)
 }
