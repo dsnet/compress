@@ -32,7 +32,6 @@ type bitReader struct {
 	// These fields are only used if rd is a bufio.Reader.
 	bufRd       *bufio.Reader
 	bufPeek     []byte // Buffer for the Peek data
-	idxPeek     int    // The current index into the Peek buffer
 	discardBits int    // Number of bits to discard from bufio.Reader
 	fedBits     uint   // Number of bits fed in last call to FeedBits
 
@@ -72,8 +71,6 @@ func (br *bitReader) FlushOffset() int64 {
 
 	// These are invalid after Discard.
 	br.bufPeek = nil
-	br.idxPeek = 0
-
 	return br.offset
 }
 
@@ -85,8 +82,8 @@ func (br *bitReader) FlushOffset() int64 {
 func (br *bitReader) FeedBits(nb uint) {
 	if br.bufRd != nil {
 		br.discardBits += int(br.fedBits - br.numBits)
-		for br.numBits <= 56 {
-			if len(br.bufPeek) <= br.idxPeek {
+		for {
+			if len(br.bufPeek) == 0 {
 				br.fedBits = br.numBits // Don't discard bits just added
 				br.FlushOffset()
 
@@ -96,9 +93,8 @@ func (br *bitReader) FeedBits(nb uint) {
 					cntPeek = br.bufRd.Buffered()
 				}
 				br.bufPeek, err = br.bufRd.Peek(cntPeek)
-
-				br.idxPeek = int(br.numBits / 8)
-				if len(br.bufPeek) <= br.idxPeek {
+				br.bufPeek = br.bufPeek[int(br.numBits/8):] // Skip buffered bits
+				if len(br.bufPeek) == 0 {
 					if br.numBits >= nb {
 						break
 					}
@@ -108,9 +104,18 @@ func (br *bitReader) FeedBits(nb uint) {
 					panic(err)
 				}
 			}
-			br.bufBits |= uint64(br.bufPeek[br.idxPeek]) << br.numBits
-			br.numBits += 8
-			br.idxPeek++
+			cnt := int(64-br.numBits) / 8
+			if cnt > len(br.bufPeek) {
+				cnt = len(br.bufPeek)
+			}
+			for _, c := range br.bufPeek[:cnt] {
+				br.bufBits |= uint64(c) << br.numBits
+				br.numBits += 8
+			}
+			br.bufPeek = br.bufPeek[cnt:]
+			if br.numBits > 56 {
+				break
+			}
 		}
 		br.fedBits = br.numBits
 	} else {
