@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE.md file.
 
+// Package flate implements the DEFLATE compressed data format,
+// described in RFC 1951.
 package flate
 
 import "runtime"

@@ -4,6 +4,18 @@
 
 package flate
 
+// The dictDecoder implements the LZ77 sliding dictionary that is commonly used
+// in various compression formats. For performance reasons, this implementation
+// performs little to no sanity checks about the arguments. As such, the
+// invariants documented for each method call must be respected. Furthermore,
+// to reduce the memory footprint decompressing short streams, the dictionary
+// starts with a relatively small size and then lazily grows.
+
+const (
+	initSize   = 4096 // Initial size allocated for sliding dictionary
+	growFactor = 4    // Rate the dictionary is grown to match expected size
+)
+
 type dictDecoder struct {
 	// Invariant: len(hist) <= size
 	size int    // Sliding window size
@@ -22,7 +34,7 @@ func (dd *dictDecoder) Init(size int) {
 	// denial-of-service attacks with large memory allocation.
 	dd.size = size
 	if dd.hist == nil {
-		dd.hist = make([]byte, 1024)
+		dd.hist = make([]byte, initSize)
 	}
 	dd.hist = dd.hist[:cap(dd.hist)]
 	if len(dd.hist) > dd.size {
@@ -59,7 +71,7 @@ func (dd *dictDecoder) WriteMark(cnt int) {
 
 // WriteByte writes a single byte to the dictionary.
 //
-// This invariant must be kept: AvailSize() > 0
+// This invariant must be kept: 0 < AvailSize()
 func (dd *dictDecoder) WriteByte(c byte) {
 	dd.hist[dd.wrPos] = c
 	dd.wrPos++
@@ -104,7 +116,7 @@ func (dd *dictDecoder) ReadFlush() []byte {
 			dd.full = true
 		} else {
 			// Allocate a larger history buffer.
-			size := cap(dd.hist) * 4
+			size := cap(dd.hist) * growFactor
 			if size > dd.size {
 				size = dd.size
 			}

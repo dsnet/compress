@@ -7,24 +7,23 @@ package flate
 import "io"
 
 type Reader struct {
-	InputOffset  int64
-	OutputOffset int64
+	InputOffset  int64 // Total number of bytes read from underlying io.Reader
+	OutputOffset int64 // Total number of bytes emitted from Read
 
-	rd     bitReader
-	toRead []byte
-	dist   int
-	blkLen int
-	cpyLen int
-	last   bool
-	err    error
+	rd     bitReader // Input source
+	toRead []byte    // Uncompressed data ready to be emitted from Read
+	dist   int       // The current distance
+	blkLen int       // Uncompressed bytes left to read in meta-block
+	cpyLen int       // Bytes left to backward dictionary copy
+	last   bool      // Last block bit detected
+	err    error     // Persistent error
 
-	dict     dictDecoder
-	clenTree prefixDecoder
-	litTree  prefixDecoder
-	distTree prefixDecoder
+	step      func(*Reader) // Single step of decompression work (can panic)
+	stepState int           // The sub-step state for certain steps
 
-	step      func(*Reader)
-	stepState int
+	dict     dictDecoder   // Dynamic sliding dictionary
+	litTree  prefixDecoder // Literal and length symbol prefix decoder
+	distTree prefixDecoder // Backward distance symbol prefix decoder
 }
 
 func NewReader(r io.Reader) *Reader {
@@ -159,6 +158,7 @@ func (fr *Reader) readBlock() {
 	}
 
 readLiteral:
+	// Read literal and/or (length, distance) according to RFC section 3.2.3.
 	{
 		if fr.dict.AvailSize() == 0 {
 			fr.toRead = fr.dict.ReadFlush()
@@ -213,6 +213,7 @@ readLiteral:
 	}
 
 copyDistance:
+	// Perform a backwards copy according to RFC section 3.2.3.
 	{
 		cnt := fr.dict.WriteCopy(fr.dist, fr.cpyLen)
 		fr.cpyLen -= cnt
