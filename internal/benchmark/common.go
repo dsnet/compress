@@ -252,14 +252,14 @@ func benchmarkSuite(codecs, files []string, levels, sizes []int, tick func(), ru
 				b, err := LoadFile(f, n)
 				name := getName(f, l, len(b))
 				for j, c := range codecs {
+					if tick != nil {
+						tick()
+					}
 					names[i] = name
 					if err == nil {
 						results[i][j] = run(b, c, l)
 					}
 					results[i][j].D = results[i][j].R / results[i][0].R
-					if tick != nil {
-						tick()
-					}
 				}
 				i++
 			}

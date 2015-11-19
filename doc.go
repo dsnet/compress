@@ -18,7 +18,7 @@ type ByteReader interface {
 
 var _ ByteReader = (*bufio.Reader)(nil)
 
-// BufferedReader is a another interface accepted by all compression Readers.
+// BufferedReader is another interface accepted by all compression Readers.
 // It guarantees that the decompressor never reads more data than is necessary
 // from the underlying io.Reader. Since BufferedReader allows a decompressor
 // to peek at bytes further along in the stream without advancing the read

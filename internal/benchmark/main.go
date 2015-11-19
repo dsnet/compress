@@ -143,7 +143,7 @@ func main() {
 	}
 	for _, s := range sep.Split(*f2, -1) {
 		lvl, err := strconv.ParsePrefix(s, strconv.AutoParse)
-		if err != nil || int(lvl) < 1 || int(lvl) > 9 {
+		if err != nil {
 			panic("invalid level")
 		}
 		levels = append(levels, int(lvl))
@@ -200,10 +200,10 @@ func runBenchmarks(files, codecs []string, tests, levels, sizes, fmts []int) {
 			// Progress ticker.
 			var cnt int
 			tick := func() {
-				cnt++
 				total := len(codecs) * len(files) * len(levels) * len(sizes)
 				pct := 100.0 * float64(cnt) / float64(total)
 				fmt.Printf("\t[%6.2f%%] %d of %d\r", pct, cnt, total)
+				cnt++
 			}
 
 			// Perform the benchmark. This may take some time.
