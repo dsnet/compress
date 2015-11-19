@@ -4,6 +4,44 @@
 
 // +build ignore
 
+// Benchmark tool to compare performance between multiple compression
+// implementations. Individual implementations are referred to as codecs.
+//
+// Example usage:
+//	$ ./main \
+//		-tests encRate,decRate  \
+//		-files twain.txt        \
+//		-levels 1,6,9           \
+//		-sizes 1e4,1e5,1e6      \
+//		-codecs std,ds,cgo      \
+//		-fmts fl
+//
+//	BENCHMARK: fl:encRate
+//		benchmark             std MB/s  delta      cgo MB/s  delta
+//		twain.txt:1:1e4           9.88  1.00x         48.89  4.95x
+//		twain.txt:1:1e5          26.70  1.00x         64.99  2.43x
+//		twain.txt:1:1e6          31.95  1.00x         65.56  2.05x
+//		twain.txt:6:1e4           7.31  1.00x         30.67  4.19x
+//		twain.txt:6:1e5           8.33  1.00x         17.22  2.07x
+//		twain.txt:6:1e6           8.05  1.00x         15.99  1.99x
+//		twain.txt:9:1e4           8.15  1.00x         30.04  3.69x
+//		twain.txt:9:1e5           6.59  1.00x         12.82  1.95x
+//		twain.txt:9:1e6           6.32  1.00x         11.40  1.80x
+//
+//	BENCHMARK: fl:decRate
+//		benchmark             std MB/s  delta      ds MB/s  delta      cgo MB/s  delta
+//		twain.txt:1:1e4          49.61  1.00x        74.15  1.49x        163.81  3.30x
+//		twain.txt:1:1e5          60.25  1.00x        91.25  1.51x        177.38  2.94x
+//		twain.txt:1:1e6          61.75  1.00x        95.82  1.55x        181.11  2.93x
+//		twain.txt:6:1e4          52.16  1.00x        77.25  1.48x        174.30  3.34x
+//		twain.txt:6:1e5          72.23  1.00x       108.01  1.50x        195.31  2.70x
+//		twain.txt:6:1e6          76.59  1.00x       116.80  1.53x        203.88  2.66x
+//		twain.txt:9:1e4          52.97  1.00x        77.58  1.46x        172.88  3.26x
+//		twain.txt:9:1e5          72.35  1.00x       108.37  1.50x        197.15  2.72x
+//		twain.txt:9:1e6          76.82  1.00x       118.02  1.54x        204.87  2.67x
+//
+//
+//	RUNTIME: 2m42.434570856s
 package main
 
 import "os"
@@ -11,6 +49,7 @@ import "fmt"
 import "flag"
 import "sort"
 import "math"
+import "time"
 import "regexp"
 import "strings"
 import "go/build"
@@ -32,7 +71,7 @@ var encRefs = []string{"std", "cgo", "ds"}
 const (
 	defaultTests  = "encRate,decRate,ratio"
 	defaultFiles  = "zeros.bin,random.bin,binary.bin,repeats.bin,huffman.txt,digits.txt,twain.txt"
-	defaultLevels = "1,5,9"
+	defaultLevels = "1,6,9"
 	defaultSizes  = "1e4,1e5,1e6"
 )
 
@@ -162,8 +201,11 @@ func main() {
 		fmts = append(fmts, fmtToEnum[s])
 	}
 
+	ts := time.Now()
 	benchmark.Paths = paths
 	runBenchmarks(files, codecs, tests, levels, sizes, fmts)
+	te := time.Now()
+	fmt.Printf("RUNTIME: %v\n", te.Sub(ts))
 }
 
 func runBenchmarks(files, codecs []string, tests, levels, sizes, fmts []int) {
