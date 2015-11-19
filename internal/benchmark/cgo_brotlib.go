@@ -11,13 +11,13 @@ import "gopkg.in/kothar/brotli-go.v0/enc"
 import "gopkg.in/kothar/brotli-go.v0/dec"
 
 func init() {
-	registerEncoder(FormatBrotli, "cgo",
+	RegisterEncoder(FormatBrotli, "cgo",
 		func(w io.Writer, lvl int) io.WriteCloser {
 			c := enc.NewBrotliParams()
 			c.SetQuality(lvl)
 			return enc.NewBrotliWriter(c, w)
 		})
-	registerDecoder(FormatBrotli, "cgo",
+	RegisterDecoder(FormatBrotli, "cgo",
 		func(r io.Reader) io.ReadCloser {
 			return dec.NewBrotliReaderSize(r, 4096)
 		})

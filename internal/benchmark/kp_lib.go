@@ -10,7 +10,7 @@ import "io"
 import "github.com/klauspost/compress/flate"
 
 func init() {
-	registerEncoder(FormatFlate, "kp",
+	RegisterEncoder(FormatFlate, "kp",
 		func(w io.Writer, lvl int) io.WriteCloser {
 			zw, err := flate.NewWriter(w, lvl)
 			if err != nil {
@@ -18,7 +18,7 @@ func init() {
 			}
 			return zw
 		})
-	registerDecoder(FormatFlate, "kp",
+	RegisterDecoder(FormatFlate, "kp",
 		func(r io.Reader) io.ReadCloser {
 			return flate.NewReader(r)
 		})

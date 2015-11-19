@@ -8,13 +8,15 @@
 // implementations. Individual implementations are referred to as codecs.
 //
 // Example usage:
-//	$ ./main \
-//		-tests encRate,decRate  \
-//		-files twain.txt        \
-//		-levels 1,6,9           \
-//		-sizes 1e4,1e5,1e6      \
-//		-codecs std,ds,cgo      \
-//		-fmts fl
+//	$ go build -o benchmark main.go
+//	$ ./benchmark \
+//		-formats fl              \
+//		-tests   encRate,decRate \
+//		-codecs  std,ds,cgo      \
+//		-files   twain.txt       \
+//		-levels  1,6,9           \
+//		-sizes   1e4,1e5,1e6
+//
 //
 //	BENCHMARK: fl:encRate
 //		benchmark             std MB/s  delta      cgo MB/s  delta
@@ -44,7 +46,6 @@
 //	RUNTIME: 2m42.434570856s
 package main
 
-import "os"
 import "fmt"
 import "flag"
 import "sort"
@@ -52,12 +53,18 @@ import "math"
 import "time"
 import "regexp"
 import "strings"
+import "io/ioutil"
 import "go/build"
 import "github.com/dsnet/golib/strconv"
 import "github.com/dsnet/compress/internal/benchmark"
 
 // By default, the benchmark tool will look for test data in this "package".
 const testPkg = "github.com/dsnet/compress/testdata"
+
+const (
+	defaultLevels = "1,6,9"
+	defaultSizes  = "1e4,1e5,1e6"
+)
 
 // The decompression speed benchmark works by decompressing some pre-compressed
 // data. In order for the benchmarks to be consistent, the same encoder should
@@ -67,13 +74,6 @@ const testPkg = "github.com/dsnet/compress/testdata"
 // reference compressor. If no compressor is found for any of the listed codecs,
 // then a random encoder will be chosen.
 var encRefs = []string{"std", "cgo", "ds"}
-
-const (
-	defaultTests  = "encRate,decRate,ratio"
-	defaultFiles  = "zeros.bin,random.bin,binary.bin,repeats.bin,huffman.txt,digits.txt,twain.txt"
-	defaultLevels = "1,6,9"
-	defaultSizes  = "1e4,1e5,1e6"
-)
 
 var (
 	fmtToEnum = map[string]int{
@@ -99,6 +99,34 @@ var (
 		benchmark.TestCompressRatio: "ratio",
 	}
 )
+
+func defaultTests() string {
+	var d []int
+	for k := range enumToTest {
+		d = append(d, k)
+	}
+	sort.Ints(d)
+	var s []string
+	for _, v := range d {
+		s = append(s, enumToTest[v])
+	}
+	return strings.Join(s, ",")
+}
+
+func defaultFiles() string {
+	p := strings.Split(defaultPaths(), ",")[0]
+	fis, err := ioutil.ReadDir(p)
+	if err != nil {
+		return ""
+	}
+	var s []string
+	for _, fi := range fis {
+		if !strings.HasSuffix(fi.Name(), ".go") {
+			s = append(s, fi.Name())
+		}
+	}
+	return strings.Join(s, ",")
+}
 
 func defaultCodecs() string {
 	m := make(map[string]bool)
@@ -133,83 +161,80 @@ func defaultFormats() string {
 	for k := range benchmark.Decoders {
 		m[k] = true
 	}
-	s := make([]string, 0, len(m))
+	var d []int
 	for k := range m {
-		if _, ok := enumToFmt[k]; !ok {
-			panic("unknown format")
-		}
-		s = append(s, enumToFmt[k])
+		d = append(d, k)
 	}
-	sort.Strings(s)
+	sort.Ints(d)
+	var s []string
+	for _, v := range d {
+		s = append(s, enumToFmt[v])
+	}
 	return strings.Join(s, ",")
 }
 
 func defaultPaths() string {
-	cwd, err := os.Getwd()
+	pkg, err := build.Import(testPkg, "", build.FindOnly)
 	if err != nil {
 		return ""
 	}
-	pkg, err := build.Import(testPkg, "", build.FindOnly)
-	if err != nil {
-		return cwd
-	}
-	return pkg.Dir + ":" + cwd
+	return pkg.Dir
 }
 
 func main() {
 	// Setup flag arguments.
-	f0 := flag.String("tests", defaultTests, "List of different benchmark tests")
-	f1 := flag.String("files", defaultFiles, "List of input files to benchmark")
-	f2 := flag.String("levels", defaultLevels, "List of compression levels to benchmark")
-	f3 := flag.String("sizes", defaultSizes, "List of input sizes to benchmark")
-	f4 := flag.String("codecs", defaultCodecs(), "List of codecs to benchmark")
-	f5 := flag.String("fmts", defaultFormats(), "List of formats to benchmark")
-	f6 := flag.String("paths", defaultPaths(), "List of paths to search for test files")
+	f0 := flag.String("formats", defaultFormats(), "List of formats to benchmark")
+	f1 := flag.String("tests", defaultTests(), "List of different benchmark tests")
+	f2 := flag.String("codecs", defaultCodecs(), "List of codecs to benchmark")
+	f3 := flag.String("paths", defaultPaths(), "List of paths to search for test files")
+	f4 := flag.String("files", defaultFiles(), "List of input files to benchmark")
+	f5 := flag.String("levels", defaultLevels, "List of compression levels to benchmark")
+	f6 := flag.String("sizes", defaultSizes, "List of input sizes to benchmark")
 	flag.Parse()
 
 	// Parse the flag arguments.
 	var sep = regexp.MustCompile("[,:]")
-	var files, codecs, paths []string
-	var tests, levels, sizes, fmts []int
-	files = sep.Split(*f1, -1)
-	codecs = sep.Split(*f4, -1)
-	paths = sep.Split(*f6, -1)
+	var codecs, paths, files []string
+	var formats, tests, levels, sizes []int
+	codecs = sep.Split(*f2, -1)
+	paths = sep.Split(*f3, -1)
+	files = sep.Split(*f4, -1)
 	for _, s := range sep.Split(*f0, -1) {
+		if _, ok := fmtToEnum[s]; !ok {
+			panic("invalid format")
+		}
+		formats = append(formats, fmtToEnum[s])
+	}
+	for _, s := range sep.Split(*f1, -1) {
 		if _, ok := testToEnum[s]; !ok {
 			panic("invalid test")
 		}
 		tests = append(tests, testToEnum[s])
 	}
-	for _, s := range sep.Split(*f2, -1) {
+	for _, s := range sep.Split(*f5, -1) {
 		lvl, err := strconv.ParsePrefix(s, strconv.AutoParse)
 		if err != nil {
 			panic("invalid level")
 		}
 		levels = append(levels, int(lvl))
 	}
-	for _, s := range sep.Split(*f3, -1) {
+	for _, s := range sep.Split(*f6, -1) {
 		var size int
 		if nf, err := strconv.ParsePrefix(s, strconv.AutoParse); err == nil {
 			size = int(nf)
 		}
 		sizes = append(sizes, size)
 	}
-	for _, s := range sep.Split(*f5, -1) {
-		if _, ok := fmtToEnum[s]; !ok {
-			panic("invalid format")
-		}
-		fmts = append(fmts, fmtToEnum[s])
-	}
 
 	ts := time.Now()
 	benchmark.Paths = paths
-	runBenchmarks(files, codecs, tests, levels, sizes, fmts)
+	runBenchmarks(files, codecs, formats, tests, levels, sizes)
 	te := time.Now()
 	fmt.Printf("RUNTIME: %v\n", te.Sub(ts))
 }
 
-func runBenchmarks(files, codecs []string, tests, levels, sizes, fmts []int) {
-	for _, f := range fmts {
+func runBenchmarks(files, codecs []string, formats, tests, levels, sizes []int) {
+	for _, f := range formats {
 		// Get lists of encoders and decoders that exist.
 		var encs, decs []string
 		for _, c := range codecs {

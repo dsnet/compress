@@ -43,24 +43,24 @@ var (
 	Paths []string
 )
 
-func registerEncoder(fmt int, name string, enc Encoder) {
+func RegisterEncoder(format int, name string, enc Encoder) {
 	if Encoders == nil {
 		Encoders = make(map[int]map[string]Encoder)
 	}
-	if Encoders[fmt] == nil {
-		Encoders[fmt] = make(map[string]Encoder)
+	if Encoders[format] == nil {
+		Encoders[format] = make(map[string]Encoder)
 	}
-	Encoders[fmt][name] = enc
+	Encoders[format][name] = enc
 }
 
-func registerDecoder(fmt int, name string, dec Decoder) {
+func RegisterDecoder(format int, name string, dec Decoder) {
 	if Decoders == nil {
 		Decoders = make(map[int]map[string]Decoder)
 	}
-	if Decoders[fmt] == nil {
-		Decoders[fmt] = make(map[string]Decoder)
+	if Decoders[format] == nil {
+		Decoders[format] = make(map[string]Decoder)
 	}
-	Decoders[fmt][name] = dec
+	Decoders[format][name] = dec
 }
 
 // LoadFile loads the first n bytes of the input file. If n is less than zero,
@@ -143,10 +143,10 @@ type Result struct {
 // The values returned have the following structure:
 //	results: [len(files)*len(levels)*len(sizes)][len(encs)]Result
 //	names:   [len(files)*len(levels)*len(sizes)]string
-func BenchmarkEncoderSuite(fmt int, encs, files []string, levels, sizes []int, tick func()) (results [][]Result, names []string) {
+func BenchmarkEncoderSuite(format int, encs, files []string, levels, sizes []int, tick func()) (results [][]Result, names []string) {
 	return benchmarkSuite(encs, files, levels, sizes, tick,
 		func(input []byte, enc string, lvl int) Result {
-			result := BenchmarkEncoder(input, Encoders[fmt][enc], lvl)
+			result := BenchmarkEncoder(input, Encoders[format][enc], lvl)
 			if result.N == 0 {
 				return Result{}
 			}
@@ -186,7 +186,7 @@ func BenchmarkDecoder(input []byte, dec Decoder) testing.BenchmarkResult {
 // The values returned have the following structure:
 //	results: [len(files)*len(levels)*len(sizes)][len(decs)]Result
 //	names:   [len(files)*len(levels)*len(sizes)]string
-func BenchmarkDecoderSuite(fmt int, decs, files []string, levels, sizes []int, ref Encoder, tick func()) (results [][]Result, names []string) {
+func BenchmarkDecoderSuite(format int, decs, files []string, levels, sizes []int, ref Encoder, tick func()) (results [][]Result, names []string) {
 	return benchmarkSuite(decs, files, levels, sizes, tick,
 		func(input []byte, dec string, lvl int) Result {
 			buf := new(bytes.Buffer)
@@ -199,7 +199,7 @@ func BenchmarkDecoderSuite(fmt int, decs, files []string, levels, sizes []int, r
 			}
 			output := buf.Bytes()
 
-			result := BenchmarkDecoder(output, Decoders[fmt][dec])
+			result := BenchmarkDecoder(output, Decoders[format][dec])
 			if result.N == 0 {
 				return Result{}
 			}
@@ -215,11 +215,11 @@ func BenchmarkDecoderSuite(fmt int, decs, files []string, levels, sizes []int, r
 // The values returned have the following structure:
 //	results: [len(files)*len(levels)*len(sizes)][len(encs)]Result
 //	names:   [len(files)*len(levels)*len(sizes)]string
-func BenchmarkRatioSuite(fmt int, encs, files []string, levels, sizes []int, tick func()) (results [][]Result, names []string) {
+func BenchmarkRatioSuite(format int, encs, files []string, levels, sizes []int, tick func()) (results [][]Result, names []string) {
 	return benchmarkSuite(encs, files, levels, sizes, tick,
 		func(input []byte, enc string, lvl int) Result {
 			buf := new(bytes.Buffer)
-			wr := Encoders[fmt][enc](buf, lvl)
+			wr := Encoders[format][enc](buf, lvl)
 			if _, err := io.Copy(wr, bytes.NewReader(input)); err != nil {
 				return Result{}
 			}

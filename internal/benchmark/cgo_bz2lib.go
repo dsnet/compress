@@ -208,6 +208,6 @@ func (zr *bz2Reader) Close() error {
 }
 
 func init() {
-	registerEncoder(FormatBZ2, "cgo", newBZ2Writer)
-	registerDecoder(FormatBZ2, "cgo", newBZ2Reader)
+	RegisterEncoder(FormatBZ2, "cgo", newBZ2Writer)
+	RegisterDecoder(FormatBZ2, "cgo", newBZ2Reader)
 }
