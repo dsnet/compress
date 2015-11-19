@@ -206,6 +206,6 @@ func (zr *zReader) Close() error {
 }
 
 func init() {
-	registerEncoder(FormatFlate, "cgo", newZWriter)
-	registerDecoder(FormatFlate, "cgo", newZReader)
+	RegisterEncoder(FormatFlate, "cgo", newZWriter)
+	RegisterDecoder(FormatFlate, "cgo", newZReader)
 }

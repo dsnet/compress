@@ -12,7 +12,7 @@ import "compress/flate"
 import "compress/bzip2"
 
 func init() {
-	registerEncoder(FormatFlate, "std",
+	RegisterEncoder(FormatFlate, "std",
 		func(w io.Writer, lvl int) io.WriteCloser {
 			zw, err := flate.NewWriter(w, lvl)
 			if err != nil {
@@ -20,11 +20,11 @@ func init() {
 			}
 			return zw
 		})
-	registerDecoder(FormatFlate, "std",
+	RegisterDecoder(FormatFlate, "std",
 		func(r io.Reader) io.ReadCloser {
 			return flate.NewReader(r)
 		})
-	registerDecoder(FormatBZ2, "std",
+	RegisterDecoder(FormatBZ2, "std",
 		func(r io.Reader) io.ReadCloser {
 			return ioutil.NopCloser(bzip2.NewReader(r))
 		})
