@@ -19,6 +19,6 @@ func init() {
 		})
 	registerDecoder(FormatBrotli, "cgo",
 		func(r io.Reader) io.ReadCloser {
-			return dec.NewBrotliReader(r)
+			return dec.NewBrotliReaderSize(r, 4096)
 		})
 }

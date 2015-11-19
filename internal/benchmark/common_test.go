@@ -5,7 +5,6 @@
 package benchmark
 
 import "io"
-import "fmt"
 import "bytes"
 import "hash/crc32"
 import "testing"
@@ -18,9 +17,12 @@ func testRoundTrip(t *testing.T, enc Encoder, dec Decoder) {
 		size  int    // The compression level
 	}
 	var vectors []entry
-	for _, f := range []string{"zeros.bin", "random.bin", "binary.bin", "huffman.txt", "digits.txt", "twain.txt"} {
+	for _, f := range []string{
+		"zeros.bin", "random.bin", "binary.bin", "repeats.bin",
+		"huffman.txt", "digits.txt", "twain.txt",
+	} {
 		var l, s int = 6, 1e6
-		vectors = append(vectors, entry{fmt.Sprintf("%s:%d:%d", f, l, s), f, l, s})
+		vectors = append(vectors, entry{getName(f, l, s), f, l, s})
 	}
 
 	for i, v := range vectors {
@@ -33,11 +35,11 @@ func testRoundTrip(t *testing.T, enc Encoder, dec Decoder) {
 		buf := new(bytes.Buffer)
 		wr := enc(buf, v.level)
 		_, err = io.Copy(wr, bytes.NewReader(input))
-		if err != nil {
+		if err := wr.Close(); err != nil {
 			t.Errorf("test %d, %s: unexpected error: %v", i, v.name, err)
 			continue
 		}
-		if err := wr.Close(); err != nil {
+		if err != nil {
 			t.Errorf("test %d, %s: unexpected error: %v", i, v.name, err)
 			continue
 		}
@@ -45,11 +47,11 @@ func testRoundTrip(t *testing.T, enc Encoder, dec Decoder) {
 		hash := crc32.NewIEEE()
 		rd := dec(buf)
 		cnt, err := io.Copy(hash, rd)
-		if err != nil {
+		if err := rd.Close(); err != nil {
 			t.Errorf("test %d, %s: unexpected error: %v", i, v.name, err)
 			continue
 		}
-		if err := rd.Close(); err != nil {
+		if err != nil {
 			t.Errorf("test %d, %s: unexpected error: %v", i, v.name, err)
 			continue
 		}
