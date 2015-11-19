@@ -39,13 +39,13 @@ func main() {
 			for i := 0; i < n; i++ {
 				p := r.Float32()
 				switch {
-				case p < 0.1:
+				case p <= 0.1:
 					// Write any lowercase letter.
 					b = append(b, alpha1[r.Int()%len(alpha1)])
-				case p < 0.7:
+				case p <= 0.7:
 					// Write any lowercase or uppercase letter.
 					b = append(b, alpha2[r.Int()%len(alpha2)])
-				default:
+				case p <= 1.0:
 					// Write any character from the base64 alphabet.
 					b = append(b, alpha3[r.Int()%len(alpha3)])
 				}
