@@ -16,5 +16,5 @@ Run the command:
 
 ## Packages ##
 
-* [brotli](http://godoc.org/github.com/dsnet/compress/brotli): Implementation of
-the Brotli compression format.
+* [brotli](http://godoc.org/github.com/dsnet/compress/brotli): Package brotli implements the Brotli format, described in RFC XXXX.
+* [flate](http://godoc.org/github.com/dsnet/compress/flate): Package flate implements the DEFLATE format, described in RFC 1951.
