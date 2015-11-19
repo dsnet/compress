@@ -168,10 +168,7 @@ readLiteral:
 		}
 
 		// Read the literal symbol.
-		litSym, ok := fr.rd.TryReadSymbol(&fr.litTree)
-		if !ok {
-			litSym = fr.rd.ReadSymbol(&fr.litTree)
-		}
+		litSym := fr.rd.DoReadSymbol(&fr.litTree)
 		switch {
 		case litSym < endBlockSym:
 			fr.dict.WriteByte(byte(litSym))
@@ -183,28 +180,19 @@ readLiteral:
 		case litSym < maxNumLitSyms:
 			// Decode the copy length.
 			rec := lenLUT[litSym-257]
-			extra, ok := fr.rd.TryReadBits(uint(rec.bits))
-			if !ok {
-				extra = fr.rd.ReadBits(uint(rec.bits))
-			}
-			fr.cpyLen = int(rec.base) + int(extra)
+			extra := fr.rd.DoReadBits(rec.bits)
+			fr.cpyLen = rec.base + extra
 
 			// Read the distance symbol.
-			distSym, ok := fr.rd.TryReadSymbol(&fr.distTree)
-			if !ok {
-				distSym = fr.rd.ReadSymbol(&fr.distTree)
-			}
+			distSym := fr.rd.DoReadSymbol(&fr.distTree)
 			if distSym >= maxNumDistSyms {
 				panic(ErrCorrupt)
 			}
 
 			// Decode the copy distance.
 			rec = distLUT[distSym]
-			extra, ok = fr.rd.TryReadBits(uint(rec.bits))
-			if !ok {
-				extra = fr.rd.ReadBits(uint(rec.bits))
-			}
-			fr.dist = int(rec.base) + int(extra)
+			extra = fr.rd.DoReadBits(rec.bits)
+			fr.dist = rec.base + extra
 
 			goto copyDistance
 		default:
