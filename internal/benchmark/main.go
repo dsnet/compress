@@ -143,7 +143,7 @@ func main() {
 	}
 	for _, s := range sep.Split(*f2, -1) {
 		lvl, err := strconv.ParsePrefix(s, strconv.AutoParse)
-		if err != nil || int(lvl) < 1 || int(lvl) > 9 {
+		if err != nil {
 			panic("invalid level")
 		}
 		levels = append(levels, int(lvl))
