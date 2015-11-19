@@ -20,8 +20,8 @@ var (
 )
 
 type rangeCode struct {
-	base uint32 // Starting base offset of the range
-	bits uint32 // Bit-width of a subsequent integer to add to base offset
+	base int // Starting base offset of the range
+	bits uint // Bit-width of a subsequent integer to add to base offset
 }
 
 type prefixCode struct {
@@ -45,7 +45,7 @@ func initPrefixLUTs() {
 		if i < 4 {
 			nb = 0
 		}
-		lenLUT[i] = rangeCode{base: uint32(base), bits: uint32(nb)}
+		lenLUT[i] = rangeCode{base: int(base), bits: uint(nb)}
 		base += 1 << nb
 	}
 	lenLUT[len(lenLUT)-1] = rangeCode{base: 258, bits: 0}
@@ -56,7 +56,7 @@ func initPrefixLUTs() {
 		if i < 2 {
 			nb = 0
 		}
-		distLUT[i] = rangeCode{base: uint32(base), bits: uint32(nb)}
+		distLUT[i] = rangeCode{base: int(base), bits: uint(nb)}
 		base += 1 << nb
 	}
 

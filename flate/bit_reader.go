@@ -157,20 +157,35 @@ func (br *bitReader) Read(buf []byte) (cnt int, err error) {
 // alone. It returns the value and whether it succeeded.
 //
 // This method is designed to be inlined for performance reasons.
-func (br *bitReader) TryReadBits(nb uint) (uint, bool) {
+func (br *bitReader) TryReadBits(nb uint) (int, bool) {
 	if br.numBits < nb {
 		return 0, false
 	}
-	val := uint(br.bufBits & uint64(1<<nb-1))
+	val := int(br.bufBits & uint64(1<<nb-1))
 	br.bufBits >>= nb
 	br.numBits -= nb
 	return val, true
 }
 
+// DoReadBits attempts to read nb bits using the contents of the bit buffer
+// alone.
+// It will advance the stream if unsuccessful
+//
+// This method is designed to be inlined for performance reasons.
+func (br *bitReader) DoReadBits(nb uint) (int) {
+	if br.numBits < nb {
+		return br.ReadBits(nb)
+	}
+	val := int(br.bufBits & uint64(1<<nb-1))
+	br.bufBits >>= nb
+	br.numBits -= nb
+	return val
+}
+
 // ReadBits reads nb bits in LSB order from the underlying reader.
-func (br *bitReader) ReadBits(nb uint) uint {
+func (br *bitReader) ReadBits(nb uint) int {
 	br.FeedBits(nb)
-	val := uint(br.bufBits & uint64(1<<nb-1))
+	val := int(br.bufBits & uint64(1<<nb-1))
 	br.bufBits >>= nb
 	br.numBits -= nb
 	return val
@@ -203,6 +218,25 @@ func (br *bitReader) TryReadSymbol(pd *prefixDecoder) (uint, bool) {
 	return uint(chunk >> prefixCountBits), true
 }
 
+// DoReadSymbol will first attempt to decode the next symbol using the contents of the
+// bit buffer alone.
+// If it doesn't succeeed, it will advance the stream an Read the symbol.
+//
+// This method is designed to be inlined for performance reasons.
+func (br *bitReader) DoReadSymbol(pd *prefixDecoder) (uint) {
+	if br.numBits < uint(pd.minBits) || len(pd.chunks) == 0 {
+		return br.ReadSymbol(pd)
+	}
+	chunk := pd.chunks[uint32(br.bufBits)&pd.chunkMask]
+	nb := uint(chunk & prefixCountMask)
+	if nb > br.numBits || nb > uint(pd.chunkBits) {
+		return br.ReadSymbol(pd)
+	}
+	br.bufBits >>= nb
+	br.numBits -= nb
+	return uint(chunk >> prefixCountBits)
+}
+
 // ReadSymbol reads the next prefix symbol using the provided prefixDecoder.
 func (br *bitReader) ReadSymbol(pd *prefixDecoder) uint {
 	if len(pd.chunks) == 0 {
@@ -229,9 +263,9 @@ func (br *bitReader) ReadSymbol(pd *prefixDecoder) uint {
 
 // ReadOffset reads an offset value using the provided rangesCodes indexed by
 // the given symbol.
-func (br *bitReader) ReadOffset(sym uint, rcs []rangeCode) uint {
+func (br *bitReader) ReadOffset(sym uint, rcs []rangeCode) int {
 	rc := rcs[sym]
-	return uint(rc.base) + br.ReadBits(uint(rc.bits))
+	return rc.base + br.ReadBits(uint(rc.bits))
 }
 
 // ReadPrefixCodes reads the literal and distance prefix codes according to
@@ -267,15 +301,15 @@ func (br *bitReader) ReadPrefixCodes(hl, hd *prefixDecoder) {
 	codeLits := codesArr[:0]
 	codeDists := codesArr[maxNumLitSyms:maxNumLitSyms]
 	appendCode := func(sym, clen uint) {
-		if sym < numLitSyms {
+		if sym < uint(numLitSyms) {
 			pc := prefixCode{sym: uint32(sym), len: uint32(clen)}
 			codeLits = append(codeLits, pc)
 		} else {
-			pc := prefixCode{sym: uint32(sym - numLitSyms), len: uint32(clen)}
+			pc := prefixCode{sym: uint32(sym - uint(numLitSyms)), len: uint32(clen)}
 			codeDists = append(codeDists, pc)
 		}
 	}
-	for sym, maxSyms := uint(0), numLitSyms+numDistSyms; sym < maxSyms; {
+	for sym, maxSyms := uint(0), uint(numLitSyms)+uint(numDistSyms); sym < maxSyms; {
 		clen := br.ReadSymbol(&br.prefix)
 		if clen < 16 {
 			// Literal bit-length symbol used.
@@ -293,13 +327,13 @@ func (br *bitReader) ReadPrefixCodes(hl, hd *prefixDecoder) {
 					panic(ErrCorrupt)
 				}
 				clen = clenLast
-				repCnt = 3 + br.ReadBits(2)
+				repCnt = 3 + uint(br.ReadBits(2))
 			case 17:
 				clen = 0
-				repCnt = 3 + br.ReadBits(3)
+				repCnt = 3 + uint(br.ReadBits(3))
 			case 18:
 				clen = 0
-				repCnt = 11 + br.ReadBits(7)
+				repCnt = 11 + uint(br.ReadBits(7))
 			default:
 				panic(ErrCorrupt)
 			}
