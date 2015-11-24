@@ -52,7 +52,6 @@ func init() {
 	}
 }
 
-
 // ReverseUint32 reverses all bits of v.
 func ReverseUint32(v uint32) (x uint32) {
 	x |= uint32(ReverseLUT[byte(v>>0)]) << 24

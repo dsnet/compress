@@ -38,10 +38,7 @@
 #define SAIS_MYFREE(_ptr, _num, _type) free((_ptr))
 #define chr(_a) (cs == sizeof(int) ? ((int *)T)[(_a)] : ((unsigned char *)T)[(_a)])
 
-static void getCounts(
-	const void *T, int *C,
-	int n, int k, int cs
-) {
+static void getCounts(const void *T, int *C, int n, int k, int cs) {
 	int i;
 	for (i = 0; i < k; ++i) {
 		C[i] = 0;
@@ -51,10 +48,7 @@ static void getCounts(
 	}
 }
 
-static void getBuckets(
-	const int *C, int *B,
-	int k, int end
-) {
+static void getBuckets(const int *C, int *B, int k, int end) {
 	int i, sum = 0;
 	if (end) {
 		for (i = 0; i < k; ++i) {
@@ -69,10 +63,7 @@ static void getBuckets(
 	}
 }
 
-static void sortLMS1(
-	const void *T, int *SA, int *C, int *B,
-	int n, int k, int cs
-) {
+static void sortLMS1(const void *T, int *SA, int *C, int *B, int n, int k, int cs) {
 	int *b, i, j;
 	int c0, c1;
 
@@ -121,10 +112,7 @@ static void sortLMS1(
 	}
 }
 
-static int postProcLMS1(
-	const void *T, int *SA,
-	int n, int m, int cs
-) {
+static int postProcLMS1(const void *T, int *SA, int n, int m, int cs) {
 	int i, j, p, q, plen, qlen, name;
 	int c0, c1;
 	int diff;
@@ -190,10 +178,7 @@ static int postProcLMS1(
 	return name;
 }
 
-static void LMSsort2(
-	const void *T, int *SA, int *C, int *B, int *D,
-	int n, int k, int cs
-) {
+static void LMSsort2(const void *T, int *SA, int *C, int *B, int *D, int n, int k, int cs) {
 	int *b, i, j, t, d;
 	int c0, c1;
 	assert(C != B);
@@ -268,9 +253,8 @@ static void LMSsort2(
 		}
 	}
 }
-static int postProcLMS2(
-	int *SA, int n, int m
-) {
+
+static int postProcLMS2(int *SA, int n, int m) {
 	int i, j, d, name;
 
 	// Compact all the sorted LMS substrings into the first m items of SA.
@@ -321,10 +305,7 @@ static int postProcLMS2(
 	return name;
 }
 
-static void induceSA(
-	const void *T, int *SA, int *C, int *B,
-	int n, int k, int cs
-) {
+static void induceSA(const void *T, int *SA, int *C, int *B, int n, int k, int cs) {
 	int *b, i, j;
 	int c0, c1;
 
@@ -371,10 +352,7 @@ static void induceSA(
 	}
 }
 
-int computeSA(
-	const void *T, int *SA,
-	int fs, int n, int k, int cs
-) {
+int computeSA(const void *T, int *SA, int fs, int n, int k, int cs) {
 	int *C, *B, *D, *RA, *b;
 	int i, j, m, p, q, t, name, pidx = 0, newfs;
 	int c0, c1;
