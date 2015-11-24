@@ -14,34 +14,24 @@ package bzip2
 //
 // References:
 //	https://sites.google.com/site/yuta256/sais
+//	https://github.com/cscott/compressjs/blob/master/lib/BWT.js
 //	https://www.quora.com/How-can-I-optimize-burrows-wheeler-transform-and-inverse-transform-to-work-in-O-n-time-O-n-space
 //	https://ge-nong.googlecode.com/files/Two%20Efficient%20Algorithms%20for%20Linear%20Time%20Suffix%20Array%20Construction.pdf
 
-/*
-int computeSA(const void *T, int *SA, int fs, int n, int k, int cs);
-*/
-import "C"
-import "unsafe"
+import "github.com/dsnet/compress/bzip2/internal/sais"
 
 func encodeBWT(buf []byte) (ptr int) {
 	if len(buf) == 0 {
 		return -1
 	}
 
-	// TODO(dsnet): Port the SA-IS implementation to Go and avoid C.
 	// TODO(dsnet): Find a way to avoid the duplicate input string trick.
-
 	t := make([]byte, 2*len(buf))
-	sa := make([]C.int, 2*len(buf))
+	sa := make([]int, 2*len(buf))
 	copy(t, buf)
 	copy(t[len(buf):], buf)
 
-	ret := C.computeSA(
-		unsafe.Pointer(&t[0]), (*C.int)(unsafe.Pointer(&sa[0])),
-		0, C.int(2*len(buf)), 256, 1)
-	if ret != 0 {
-		panic("out of memory")
-	}
+	sais.ComputeSA(t, sa)
 
 	for i, j := 0, 0; i < 2*len(buf); i++ {
 		if idx := int(sa[i]); idx < len(buf) {
