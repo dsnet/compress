@@ -26,20 +26,21 @@ func encodeBWT(buf []byte) (ptr int) {
 	}
 
 	// TODO(dsnet): Find a way to avoid the duplicate input string trick.
-	t := make([]byte, 2*len(buf))
-	sa := make([]int, 2*len(buf))
-	copy(t, buf)
-	copy(t[len(buf):], buf)
+	n := len(buf)
+	t := append(buf, buf...)
+	sa := make([]int, 2*n)
+	buf2 := t[n:]
 
 	sais.ComputeSA(t, sa)
 
-	for i, j := 0, 0; i < 2*len(buf); i++ {
-		if idx := int(sa[i]); idx < len(buf) {
-			if idx == 0 {
+	var j int
+	for _, i := range sa {
+		if i < n {
+			if i == 0 {
 				ptr = j
-				idx = len(buf)
+				i = n
 			}
-			buf[j] = t[idx-1]
+			buf[j] = buf2[i-1]
 			j++
 		}
 	}
