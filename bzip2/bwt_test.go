@@ -9,7 +9,7 @@ import "io/ioutil"
 import "crypto/md5"
 import "testing"
 
-func TestBWT(t *testing.T) {
+func TestBurrowsWheelerTransform(t *testing.T) {
 	var loadFile = func(path string) string {
 		buf, err := ioutil.ReadFile(path)
 		if err != nil {
@@ -120,12 +120,13 @@ func TestBWT(t *testing.T) {
 		ptr:    262143,
 	}}
 
+	bwt := new(burrowsWheelerTransform)
 	for i, v := range vectors {
 		b := []byte(v.input)
-		p := encodeBWT(b)
+		p := bwt.Encode(b)
 		output := string(b)
 		chksum := fmt.Sprintf("%x", md5.Sum(b))
-		decodeBWT(b, p)
+		bwt.Decode(b, p)
 		input := string(b)
 
 		if input != v.input {
