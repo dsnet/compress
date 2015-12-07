@@ -47,3 +47,47 @@ func ReverseUint32(v uint32) (x uint32) {
 func ReverseUint32N(v uint32, n uint) (x uint32) {
 	return uint32(ReverseUint32(uint32(v << (32 - n))))
 }
+
+// MoveToFront is a data structure that allows for more efficient move-to-front
+// transformations. This specific implementation assumes that the alphabet is
+// densely packed within 0..255.
+type MoveToFront struct {
+	dict [256]uint8 // Mapping from indexes to values
+	tail int        // Number of tail bytes that are already ordered
+}
+
+func (m *MoveToFront) Encode(vals []uint8) {
+	copy(m.dict[:], IdentityLUT[:256-m.tail]) // Reset dict to be identity
+
+	var max int
+	for i, val := range vals {
+		var idx uint8 // Reverse lookup idx in dict
+		for di, dv := range m.dict {
+			if dv == val {
+				idx = uint8(di)
+				break
+			}
+		}
+		vals[i] = idx
+
+		max |= int(idx)
+		copy(m.dict[1:], m.dict[:idx])
+		m.dict[0] = val
+	}
+	m.tail = 256 - max - 1
+}
+
+func (m *MoveToFront) Decode(idxs []uint8) {
+	copy(m.dict[:], IdentityLUT[:256-m.tail]) // Reset dict to be identity
+
+	var max int
+	for i, idx := range idxs {
+		val := m.dict[idx] // Forward lookup val in dict
+		idxs[i] = val
+
+		max |= int(idx)
+		copy(m.dict[1:], m.dict[:idx])
+		m.dict[0] = val
+	}
+	m.tail = 256 - max - 1
+}
