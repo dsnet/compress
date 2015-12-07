@@ -4,7 +4,7 @@
 
 // +build cgo,!no_cgo_bz2
 
-package benchmark
+package bench
 
 /*
 #cgo LDFLAGS: -lbz2

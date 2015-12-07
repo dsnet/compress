@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE.md file.
 
-// Package benchmark compares the performance of various compression
-// implementations with respect to encode speed, decode speed, and ratio.
-package benchmark
+// Package bench compares the performance of various compression implementations
+// with respect to encode speed, decode speed, and ratio.
+package bench
 
 import "os"
 import "io"

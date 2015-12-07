@@ -4,7 +4,7 @@
 
 // +build cgo,!no_cgo_brotli
 
-package benchmark
+package bench
 
 import "io"
 import "gopkg.in/kothar/brotli-go.v0/enc"

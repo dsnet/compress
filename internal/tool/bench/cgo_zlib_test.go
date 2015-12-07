@@ -4,7 +4,7 @@
 
 // +build cgo,!no_cgo_zlib
 
-package benchmark
+package bench
 
 import "testing"
 

@@ -56,7 +56,7 @@ import "strings"
 import "io/ioutil"
 import "go/build"
 import "github.com/dsnet/golib/strconv"
-import "github.com/dsnet/compress/internal/benchmark"
+import "github.com/dsnet/compress/internal/tool/bench"
 
 // By default, the benchmark tool will look for test data in this "package".
 const testPkg = "github.com/dsnet/compress/testdata"
@@ -77,26 +77,26 @@ var encRefs = []string{"std", "cgo", "ds"}
 
 var (
 	fmtToEnum = map[string]int{
-		"fl":  benchmark.FormatFlate,
-		"bz2": benchmark.FormatBZ2,
-		"xz":  benchmark.FormatXZ,
-		"br":  benchmark.FormatBrotli,
+		"fl":  bench.FormatFlate,
+		"bz2": bench.FormatBZ2,
+		"xz":  bench.FormatXZ,
+		"br":  bench.FormatBrotli,
 	}
 	enumToFmt = map[int]string{
-		benchmark.FormatFlate:  "fl",
-		benchmark.FormatBZ2:    "bz2",
-		benchmark.FormatXZ:     "xz",
-		benchmark.FormatBrotli: "br",
+		bench.FormatFlate:  "fl",
+		bench.FormatBZ2:    "bz2",
+		bench.FormatXZ:     "xz",
+		bench.FormatBrotli: "br",
 	}
 	testToEnum = map[string]int{
-		"encRate": benchmark.TestEncodeRate,
-		"decRate": benchmark.TestDecodeRate,
-		"ratio":   benchmark.TestCompressRatio,
+		"encRate": bench.TestEncodeRate,
+		"decRate": bench.TestDecodeRate,
+		"ratio":   bench.TestCompressRatio,
 	}
 	enumToTest = map[int]string{
-		benchmark.TestEncodeRate:    "encRate",
-		benchmark.TestDecodeRate:    "decRate",
-		benchmark.TestCompressRatio: "ratio",
+		bench.TestEncodeRate:    "encRate",
+		bench.TestDecodeRate:    "decRate",
+		bench.TestCompressRatio: "ratio",
 	}
 )
 
@@ -130,12 +130,12 @@ func defaultFiles() string {
 
 func defaultCodecs() string {
 	m := make(map[string]bool)
-	for _, v := range benchmark.Encoders {
+	for _, v := range bench.Encoders {
 		for k := range v {
 			m[k] = true
 		}
 	}
-	for _, v := range benchmark.Decoders {
+	for _, v := range bench.Decoders {
 		for k := range v {
 			m[k] = true
 		}
@@ -155,10 +155,10 @@ func defaultCodecs() string {
 
 func defaultFormats() string {
 	m := make(map[int]bool)
-	for k := range benchmark.Encoders {
+	for k := range bench.Encoders {
 		m[k] = true
 	}
-	for k := range benchmark.Decoders {
+	for k := range bench.Decoders {
 		m[k] = true
 	}
 	var d []int
@@ -227,7 +227,7 @@ func main() {
 	}
 
 	ts := time.Now()
-	benchmark.Paths = paths
+	bench.Paths = paths
 	runBenchmarks(files, codecs, formats, tests, levels, sizes)
 	te := time.Now()
 	fmt.Printf("RUNTIME: %v\n", te.Sub(ts))
@@ -238,28 +238,28 @@ func runBenchmarks(files, codecs []string, formats, tests, levels, sizes []int) 
 		// Get lists of encoders and decoders that exist.
 		var encs, decs []string
 		for _, c := range codecs {
-			if _, ok := benchmark.Encoders[f][c]; ok {
+			if _, ok := bench.Encoders[f][c]; ok {
 				encs = append(encs, c)
 			}
 		}
 		for _, c := range codecs {
-			if _, ok := benchmark.Decoders[f][c]; ok {
+			if _, ok := bench.Decoders[f][c]; ok {
 				decs = append(decs, c)
 			}
 		}
 
 		for _, t := range tests {
-			var results [][]benchmark.Result
+			var results [][]bench.Result
 			var names, codecs []string
 			var title, suffix string
 
-			// Check that we can actually do this benchmark.
+			// Check that we can actually do this bench.
 			fmt.Printf("BENCHMARK: %s:%s\n", enumToFmt[f], enumToTest[t])
 			if len(encs) == 0 {
 				fmt.Println("\tSKIP: There are no encoders available.\n")
 				continue
 			}
-			if len(decs) == 0 && t == benchmark.TestDecodeRate {
+			if len(decs) == 0 && t == bench.TestDecodeRate {
 				fmt.Println("\tSKIP: There are no decoders available.\n")
 				continue
 			}
@@ -273,18 +273,18 @@ func runBenchmarks(files, codecs []string, formats, tests, levels, sizes []int) 
 				cnt++
 			}
 
-			// Perform the benchmark. This may take some time.
+			// Perform the bench. This may take some time.
 			switch t {
-			case benchmark.TestEncodeRate:
+			case bench.TestEncodeRate:
 				codecs, title, suffix = encs, "MB/s", ""
-				results, names = benchmark.BenchmarkEncoderSuite(f, encs, files, levels, sizes, tick)
-			case benchmark.TestDecodeRate:
+				results, names = bench.BenchmarkEncoderSuite(f, encs, files, levels, sizes, tick)
+			case bench.TestDecodeRate:
 				ref := getReferenceEncoder(f)
 				codecs, title, suffix = decs, "MB/s", ""
-				results, names = benchmark.BenchmarkDecoderSuite(f, decs, files, levels, sizes, ref, tick)
-			case benchmark.TestCompressRatio:
+				results, names = bench.BenchmarkDecoderSuite(f, decs, files, levels, sizes, ref, tick)
+			case bench.TestCompressRatio:
 				codecs, title, suffix = encs, "ratio", "x"
-				results, names = benchmark.BenchmarkRatioSuite(f, encs, files, levels, sizes, tick)
+				results, names = bench.BenchmarkRatioSuite(f, encs, files, levels, sizes, tick)
 			default:
 				panic("unknown test")
 			}
@@ -297,19 +297,19 @@ func runBenchmarks(files, codecs []string, formats, tests, levels, sizes []int) 
 	}
 }
 
-func getReferenceEncoder(f int) benchmark.Encoder {
+func getReferenceEncoder(f int) bench.Encoder {
 	for _, c := range encRefs {
-		if enc, ok := benchmark.Encoders[f][c]; ok {
+		if enc, ok := bench.Encoders[f][c]; ok {
 			return enc // Choose by priority
 		}
 	}
-	for _, enc := range benchmark.Encoders[f] {
+	for _, enc := range bench.Encoders[f] {
 		return enc // Choose any random encoder
 	}
 	return nil // There are no encoders
 }
 
-func printResults(results [][]benchmark.Result, names, codecs []string, title, suffix string) {
+func printResults(results [][]bench.Result, names, codecs []string, title, suffix string) {
 	// Allocate result table.
 	cells := make([][]string, 1+len(names))
 	for i := range cells {
