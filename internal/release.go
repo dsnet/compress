@@ -2,5 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE.md file.
 
-// Package compress is a collection of compression libraries.
-package compress
+// +build !debug,!gofuzz
+
+package internal
+
+const Debug = false
