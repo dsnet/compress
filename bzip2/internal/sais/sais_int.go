@@ -537,7 +537,6 @@ func computeSA_int(T []int, SA []int, fs, n, k int) {
 			}
 			sortLMS2_int(T, SA, C, B, D, n, k)
 			name = postProcLMS2_int(SA, n, m)
-
 		} else {
 			sortLMS1_int(T, SA, C, B, n, k)
 			name = postProcLMS1_int(T, SA, n, m)

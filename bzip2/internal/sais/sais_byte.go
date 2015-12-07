@@ -537,7 +537,6 @@ func computeSA_byte(T []byte, SA []int, fs, n, k int) {
 			}
 			sortLMS2_byte(T, SA, C, B, D, n, k)
 			name = postProcLMS2_byte(SA, n, m)
-
 		} else {
 			sortLMS1_byte(T, SA, C, B, n, k)
 			name = postProcLMS1_byte(T, SA, n, m)
