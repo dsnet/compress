@@ -4,10 +4,12 @@
 
 package bzip2
 
-import "io"
-import "bytes"
-import "strings"
-import "testing"
+import (
+	"bytes"
+	"io"
+	"strings"
+	"testing"
+)
 
 func TestRunLengthEncoder(t *testing.T) {
 	var vectors = []struct {

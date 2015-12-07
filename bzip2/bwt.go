@@ -4,7 +4,9 @@
 
 package bzip2
 
-import "github.com/dsnet/compress/bzip2/internal/sais"
+import (
+	"github.com/dsnet/compress/bzip2/internal/sais"
+)
 
 // The Burrows-Wheeler Transform implementation used here is based on the
 // Suffix Array by Induced Sorting (SA-IS) methodology by Nong, Zhang, and Chan.
@@ -76,10 +78,10 @@ func (bwt *burrowsWheelerTransform) Decode(buf []byte, ptr int) {
 
 	// Step 2: Compute the P permutation, where P[ptr] contains the index of the
 	// first byte and the index to the pointer to the index of the next byte.
-	p := make([]int, len(buf))
+	p := make([]uint32, len(buf))
 	for i := range buf {
 		b := buf[i]
-		p[c[b]] = i
+		p[c[b]] = uint32(i)
 		c[b]++
 	}
 

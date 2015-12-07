@@ -4,10 +4,12 @@
 
 package bzip2
 
-import "fmt"
-import "io/ioutil"
-import "crypto/md5"
-import "testing"
+import (
+	"crypto/md5"
+	"fmt"
+	"io/ioutil"
+	"testing"
+)
 
 func TestBurrowsWheelerTransform(t *testing.T) {
 	var loadFile = func(path string) string {

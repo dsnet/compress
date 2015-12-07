@@ -4,8 +4,10 @@
 
 package bzip2
 
-import "reflect"
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestMoveToFront(t *testing.T) {
 	var getDict = func(buf []byte) []uint8 {

@@ -5,10 +5,13 @@
 // Package bzip2 implements the BZip2 compressed data format.
 package bzip2
 
-import "runtime"
-import "hash/crc32"
-import "github.com/dsnet/compress/bzip2/internal"
-import "github.com/dsnet/golib/hashutil"
+import (
+	"hash/crc32"
+	"runtime"
+
+	"github.com/dsnet/compress/internal"
+	"github.com/dsnet/golib/hashutil"
+)
 
 // There does not exist a formal specification of the BZip2 format. As such,
 // much of this work is derived by either reverse engineering the original C
@@ -27,21 +30,19 @@ import "github.com/dsnet/golib/hashutil"
 //	https://code.google.com/p/jbzip2/
 
 const (
-	hdrMagic = "BZ"
+	hdrMagic = 0x425a         // Hex of "BZ"
 	blkMagic = 0x314159265359 // BCD of PI
 	endMagic = 0x177245385090 // BCD of sqrt(PI)
-
-	magicBits = 48
 )
 
 // Error is the wrapper type for errors specific to this library.
-type Error string
+type Error struct{ ErrorString string }
 
-func (e Error) Error() string { return "bzip2: " + string(e) }
+func (e Error) Error() string { return "bzip2: " + e.ErrorString }
 
 var (
-	ErrCorrupt    error = Error("stream is corrupted")
-	ErrDeprecated error = Error("deprecated stream format")
+	ErrCorrupt    error = Error{"stream is corrupted"}
+	ErrDeprecated error = Error{"deprecated stream format"}
 )
 
 func errRecover(err *error) {

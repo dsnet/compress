@@ -4,9 +4,11 @@
 
 package bzip2
 
-import "io"
+import (
+	"io"
+)
 
-type writer struct{}
+type writer struct {}
 
 func newWriter(w *io.Writer) *writer {
 	bw := new(writer)

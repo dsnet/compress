@@ -24,16 +24,16 @@ type moveToFront struct {
 // Init initializes the moveToFront codec. The dict must contain all of the
 // symbols in the alphabet used in future operations. A copy of the input dict
 // will be made so that it will not be mutated.
-func (m *moveToFront) Init(dict []uint8) {
-	if len(dict) > len(m.dictBuf) {
+func (mtf *moveToFront) Init(dict []uint8) {
+	if len(dict) > len(mtf.dictBuf) {
 		panic("alphabet too large")
 	}
-	copy(m.dictBuf[:], dict)
-	m.dictLen = len(dict)
+	copy(mtf.dictBuf[:], dict)
+	mtf.dictLen = len(dict)
 }
 
-func (m *moveToFront) Encode(vals []byte) (idxs []uint8, runs []uint32) {
-	dict := m.dictBuf[:m.dictLen]
+func (mtf *moveToFront) Encode(vals []byte) (idxs []uint8, runs []uint32) {
+	dict := mtf.dictBuf[:mtf.dictLen]
 
 	var lastCnt *uint32
 	for _, val := range vals {
@@ -64,8 +64,8 @@ func (m *moveToFront) Encode(vals []byte) (idxs []uint8, runs []uint32) {
 	return idxs, runs
 }
 
-func (m *moveToFront) Decode(idxs []uint8, runs []uint32) (vals []byte) {
-	dict := m.dictBuf[:m.dictLen]
+func (mtf *moveToFront) Decode(idxs []uint8, runs []uint32) (vals []byte) {
+	dict := mtf.dictBuf[:mtf.dictLen]
 
 	var i int
 	for _, idx := range idxs {

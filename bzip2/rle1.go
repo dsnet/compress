@@ -5,7 +5,7 @@
 package bzip2
 
 // rleDone is a special "error" to indicate that the RLE buffer is depleted.
-var rleDone error = Error("done with RLE stage")
+var rleDone error = Error{"done with RLE stage"}
 
 // runLengthEncoding implements the first RLE stage of bzip2. Every sequence
 // of 4..255 duplicated bytes is replaced by only the first 4 bytes, and a

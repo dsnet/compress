@@ -4,11 +4,13 @@
 
 package bzip2
 
-import "io"
+import (
+	"io"
+)
 
-type reader struct{}
+type reader struct {}
 
-func newRreader(r *io.Reader) *reader {
+func newReader(r *io.Reader) *reader {
 	br := new(reader)
 	br.Reset(r)
 	return br
