@@ -6,9 +6,15 @@ package bzip2
 
 import (
 	"io"
+
+	"github.com/dsnet/compress/internal/prefix"
 )
 
-type reader struct {}
+type reader struct {
+	codes2D [maxNumTrees][maxNumSyms]prefix.PrefixCode
+	codes1D [maxNumTrees]prefix.PrefixCodes
+	trees1D [maxNumTrees]prefix.Decoder
+}
 
 func newReader(r *io.Reader) *reader {
 	br := new(reader)

@@ -6,9 +6,15 @@ package bzip2
 
 import (
 	"io"
+
+	"github.com/dsnet/compress/internal/prefix"
 )
 
-type writer struct {}
+type writer struct {
+	codes2D [maxNumTrees][maxNumSyms]prefix.PrefixCode
+	codes1D [maxNumTrees]prefix.PrefixCodes
+	trees1D [maxNumTrees]prefix.Encoder
+}
 
 func newWriter(w *io.Writer) *writer {
 	bw := new(writer)
