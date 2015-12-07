@@ -18,11 +18,7 @@ import (
 
 	"github.com/dsnet/compress"
 	"github.com/dsnet/compress/internal"
-
-	"fmt"
 )
-
-var pl, pf = fmt.Println, fmt.Printf
 
 type rand struct {
 	cipher.Block
@@ -275,8 +271,15 @@ func TestReader(t *testing.T) {
 				t.Errorf("test %d, %s %s, bit padding mismatch: got %d, want 0", i, ne, nr, pads)
 			}
 			ofs, err := br.Flush()
-			_, _ = ofs, err
-
+			if br.numBits != 0 {
+				t.Errorf("test %d, %s, bit buffer not drained: got %d, want < 8", i, ne, br.numBits)
+			}
+			if ofs != int64(len(testVector)) {
+				t.Errorf("test %d, %s, offset mismatch: got %d, want %d", i, ne, ofs, len(testVector))
+			}
+			if err != nil {
+				t.Errorf("test %d, %s, unexpected flush error: got %v", i, ne, err)
+			}
 			i++
 		}
 	}
@@ -353,8 +356,8 @@ func TestWriter(t *testing.T) {
 		// Flush the Writer.
 		bw.WritePads(0)
 		ofs, err := bw.Flush()
-		if bw.numBits >= 8 {
-			t.Errorf("test %d, %s, bit buffer not drained: got %d, want < 8", i, ne, bw.numBits)
+		if bw.numBits != 0 {
+			t.Errorf("test %d, %s, bit buffer not drained: got %d, want 0", i, ne, bw.numBits)
 		}
 		if bw.cntBuf != 0 {
 			t.Errorf("test %d, %s, byte buffer not drained: got %d, want 0", i, ne, bw.cntBuf)
