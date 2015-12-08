@@ -18,3 +18,4 @@ Run the command:
 
 * [brotli](http://godoc.org/github.com/dsnet/compress/brotli): Package brotli implements the Brotli format, described in RFC XXXX.
 * [flate](http://godoc.org/github.com/dsnet/compress/flate): Package flate implements the DEFLATE format, described in RFC 1951.
+* [bzip2](http://godoc.org/github.com/dsnet/compress/bzip2): Package bzip2 implements the BZip2 compressed data format.
