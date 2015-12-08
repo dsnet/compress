@@ -10,13 +10,9 @@ import (
 	"github.com/dsnet/compress/internal/prefix"
 )
 
-type reader struct {
-	codes2D [maxNumTrees][maxNumSyms]prefix.PrefixCode
-	codes1D [maxNumTrees]prefix.PrefixCodes
-	trees1D [maxNumTrees]prefix.Decoder
-}
+type reader struct {}
 
-func newReader(r *io.Reader) *reader {
+func newReader(r io.Reader) *reader {
 	br := new(reader)
 	br.Reset(r)
 	return br
@@ -30,6 +26,6 @@ func (br *reader) Close(buf []byte) error {
 	return nil
 }
 
-func (br *reader) Reset(r *io.Reader) {
+func (br *reader) Reset(r io.Reader) {
 	return
 }
