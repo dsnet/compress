@@ -6,8 +6,6 @@ package bzip2
 
 import (
 	"io"
-
-	"github.com/dsnet/compress/internal/prefix"
 )
 
 type reader struct {}
