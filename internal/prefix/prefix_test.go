@@ -187,10 +187,10 @@ func TestReader(t *testing.T) {
 		loop:
 			for j := 0; ; j++ {
 				// Stop if we read enough bits.
-				offset := 8*br.offset - int64(br.numBits)
+				offset := 8*br.Offset - int64(br.numBits)
 				if br.bufRd != nil {
 					discardBits := br.discardBits + int(br.fedBits-br.numBits)
-					offset = 8*br.offset + int64(discardBits)
+					offset = 8*br.Offset + int64(discardBits)
 				}
 				if offset > 8*testSize {
 					break
@@ -303,7 +303,7 @@ func TestWriter(t *testing.T) {
 
 		r := newRand()
 	loop:
-		for j := 0; 8*bw.offset+int64(8*bw.cntBuf)+int64(bw.numBits) < 8*testSize; j++ {
+		for j := 0; 8*bw.Offset+int64(8*bw.cntBuf)+int64(bw.numBits) < 8*testSize; j++ {
 			switch j % 4 {
 			case 0:
 				// Test unaligned Write.
@@ -785,8 +785,8 @@ func TestPrefix(t *testing.T) {
 		}
 
 		// Verify some Writer statistics.
-		if wr.offset != int64(buf.Len()) {
-			t.Errorf("test %d, offset mismatch: got %d, want %d", i, wr.offset, buf.Len())
+		if wr.Offset != int64(buf.Len()) {
+			t.Errorf("test %d, offset mismatch: got %d, want %d", i, wr.Offset, buf.Len())
 		}
 		if wr.numBits != 0 {
 			t.Errorf("test %d, residual bits remaining: got %d, want 0", i, wr.numBits)
@@ -820,8 +820,8 @@ func TestPrefix(t *testing.T) {
 		if rd.numBits != 0 {
 			t.Errorf("test %d, residual bits remaining: got %d, want 0", i, rd.numBits)
 		}
-		if rd.offset != wr.offset {
-			t.Errorf("test %d, offset mismatch: got %d, want %d", i, rd.offset, wr.offset)
+		if rd.Offset != wr.Offset {
+			t.Errorf("test %d, offset mismatch: got %d, want %d", i, rd.Offset, wr.Offset)
 		}
 	}
 }
