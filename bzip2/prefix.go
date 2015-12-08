@@ -20,6 +20,22 @@ const (
 	numBlockSyms  = 50      // Number of bytes in a block
 )
 
+var (
+	encSel prefix.Encoder
+	decSel prefix.Decoder
+)
+
+func init() {
+	var selCodes [maxNumTrees + 1]prefix.PrefixCode
+	for i := range selCodes {
+		selCodes[i] = prefix.PrefixCode{Sym: uint32(i), Len: uint32(i + 1)}
+	}
+	selCodes[maxNumTrees] = prefix.PrefixCode{Sym: maxNumTrees, Len: maxNumTrees}
+	prefix.GeneratePrefixes(selCodes[:])
+	decSel.Init(selCodes[:])
+	encSel.Init(selCodes[:])
+}
+
 type prefixReader struct{ prefix.Reader }
 
 func (pr *prefixReader) Init(r io.Reader) {
@@ -76,23 +92,24 @@ func (pw *prefixWriter) WriteBitsBE64(v uint64, nb uint) {
 		return
 	}
 	v <<= (64 - nb)
-	v0, v1 := uint32(v>>32), uint32(v)
-	pw.WriteBits(uint(v1), nb-32)
+	v0 := internal.ReverseUint32(uint32(v >> 32))
+	v1 := internal.ReverseUint32(uint32(v))
 	pw.WriteBits(uint(v0), 32)
+	pw.WriteBits(uint(v1), nb-32)
 	return
 }
 
-func (pw *prefixWriter) WriterPrefixCodes(trees []prefix.PrefixCodes) {
+func (pw *prefixWriter) WritePrefixCodes(trees []prefix.PrefixCodes) {
 	for _, codes := range trees {
 		clen := int(codes[0].Len)
 		pw.WriteBitsBE64(uint64(clen), 5)
 		for _, c := range codes {
 			for int(c.Len) < clen {
-				pw.WriteBits(1, 2) // 10
+				pw.WriteBits(3, 2) // 11
 				clen--
 			}
 			for int(c.Len) > clen {
-				pw.WriteBits(3, 2) // 11
+				pw.WriteBits(1, 2) // 10
 				clen++
 			}
 			pw.WriteBits(0, 1)
