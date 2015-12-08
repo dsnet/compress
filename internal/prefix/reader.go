@@ -23,12 +23,13 @@ import (
 // compress.ByteReader or compress.BufferedReader, then it will be internally
 // wrapped with a bufio.Reader.
 type Reader struct {
+	Offset int64 // Number of bytes read from the underlying io.Reader
+
 	rd        io.Reader
 	byteRd    compress.ByteReader
 	bufRd     compress.BufferedReader
 	bufBits   uint64 // Buffer to hold some bits
 	numBits   uint   // Number of valid bits in bufBits
-	offset    int64  // Number of bytes read from the underlying io.Reader
 	bigEndian bool   // Are bits read in big-endian order?
 
 	// These fields are only used if rd is a compress.BufferedReader.
@@ -91,7 +92,7 @@ func (pr *Reader) Read(buf []byte) (cnt int, err error) {
 		return 0, err
 	}
 	cnt, err = pr.rd.Read(buf)
-	pr.offset += int64(cnt)
+	pr.Offset += int64(cnt)
 	return cnt, err
 }
 
@@ -176,7 +177,7 @@ func (pr *Reader) ReadSymbol(pd *Decoder) uint {
 // the read offset.
 func (pr *Reader) Flush() (int64, error) {
 	if pr.bufRd == nil {
-		return pr.offset, nil
+		return pr.Offset, nil
 	}
 
 	// Update the number of total bits to discard.
@@ -188,11 +189,11 @@ func (pr *Reader) Flush() (int64, error) {
 	nd := (pr.discardBits + 7) / 8 // Round up to nearest byte
 	nd, err = pr.bufRd.Discard(nd)
 	pr.discardBits -= nd * 8 // -7..0
-	pr.offset += int64(nd)
+	pr.Offset += int64(nd)
 
 	// These are invalid after Discard.
 	pr.bufPeek = nil
-	return pr.offset, err
+	return pr.Offset, err
 }
 
 // pullBits ensures that at least nb bits exist in the bit buffer.
@@ -258,7 +259,7 @@ func (pr *Reader) pullBits(nb uint) error {
 			}
 			pr.bufBits |= uint64(c) << pr.numBits
 			pr.numBits += 8
-			pr.offset++
+			pr.Offset++
 		}
 	}
 	return nil
