@@ -57,12 +57,8 @@ func TestCRC(t *testing.T) {
 		for _, j := range splits {
 			str1, str2 := []byte(v.str[:j]), []byte(v.str[j:])
 			crc1 := updateCRC(0, str1)
-			crc2 := updateCRC(0, str2)
 			if crc := updateCRC(crc1, str2); crc != v.crc {
 				t.Errorf("test %d, updateCRC(crc1, str2): got 0x%08x, want 0x%08x", i, crc, v.crc)
-			}
-			if crc := combineCRC(crc1, crc2, int64(len(str2))); crc != v.crc {
-				t.Errorf("test %d, combineCRC(crc1, crc2, len(str2)): got 0x%08x, want 0x%08x", i, crc, v.crc)
 			}
 		}
 	}

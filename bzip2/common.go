@@ -10,7 +10,6 @@ import (
 	"runtime"
 
 	"github.com/dsnet/compress/internal"
-	"github.com/dsnet/golib/hashutil"
 )
 
 // There does not exist a formal specification of the BZip2 format. As such,
@@ -30,9 +29,17 @@ import (
 //	https://code.google.com/p/jbzip2/
 
 const (
+	BestSpeed          = 1
+	BestCompression    = 9
+	DefaultCompression = -1
+)
+
+const (
 	hdrMagic = 0x425a         // Hex of "BZ"
 	blkMagic = 0x314159265359 // BCD of PI
 	endMagic = 0x177245385090 // BCD of sqrt(PI)
+
+	blockSize = 100000
 )
 
 // Error is the wrapper type for errors specific to this library.
@@ -43,6 +50,8 @@ func (e Error) Error() string { return "bzip2: " + e.ErrorString }
 var (
 	ErrCorrupt    error = Error{"stream is corrupted"}
 	ErrDeprecated error = Error{"deprecated stream format"}
+	ErrClosed     error = Error{"stream is closed"}
+	errInvalid    error = Error{"stream is invalid"}
 )
 
 func errRecover(err *error) {
@@ -73,13 +82,5 @@ func updateCRC(crc uint32, buf []byte) uint32 {
 		}
 		crc = crc32.Update(crc, crc32.IEEETable, arr[:cnt])
 	}
-	return internal.ReverseUint32(crc)
-}
-
-// combineCRC combines two CRC-32 checksums together.
-func combineCRC(crc1, crc2 uint32, len2 int64) uint32 {
-	crc1 = internal.ReverseUint32(crc1)
-	crc2 = internal.ReverseUint32(crc2)
-	crc := hashutil.CombineCRC32(crc32.IEEE, crc1, crc2, len2)
 	return internal.ReverseUint32(crc)
 }
