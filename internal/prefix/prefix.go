@@ -41,36 +41,6 @@ func (c prefixCodesByCount) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 func (pc PrefixCodes) SortBySymbol() { sort.Sort(prefixCodesBySymbol(pc)) }
 func (pc PrefixCodes) SortByCount()  { sort.Stable(prefixCodesByCount(pc)) }
 
-// Expand expands a dense array into a sparse array such that:
-//	sparse[sym].Sym == sym
-//
-// The input, dense, must be sorted in ascending order by symbol.
-// The output, sparse, must be large enough to index any symbol in dense.
-// In order for this to be reversible, sparse must be zeroed out already.
-// It is safe for dense and sparse to be the same slice, if dense is sorted.
-func (sparse PrefixCodes) Expand(dense PrefixCodes) {
-	for i := len(dense) - 1; i >= 0; i-- {
-		c := dense[i]
-		sparse[c.Sym] = c
-	}
-}
-
-// Compact compacts a sparse array into a dense array such that:
-//	dense[:numSyms] == [c for c in sparse if (c.Len > 0 or c.Cnt > 0)]
-//
-// The input, sparse, must have Len > 0 or Cnt > 0 for any symbol present.
-// The output, dense, must be large enough to contain all unique symbols.
-// It is safe for sparse and dense to be the same slice.
-func (dense PrefixCodes) Compact(sparse PrefixCodes) {
-	var i int
-	for _, c := range sparse {
-		if c.Len > 0 || c.Cnt > 0 {
-			dense[i] = c
-			i++
-		}
-	}
-}
-
 // Length computes the total bit-length using the Len and Cnt fields.
 func (pc PrefixCodes) Length() (nb uint) {
 	for _, c := range pc {

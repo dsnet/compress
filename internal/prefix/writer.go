@@ -13,10 +13,11 @@ import (
 // Writer implements a prefix encoder. For performance reasons, Writer will not
 // write bytes immediately to the underlying stream.
 type Writer struct {
+	Offset int64 // Number of bytes written to the underlying io.Writer
+
 	wr        io.Writer
 	bufBits   uint64 // Buffer to hold some bits
 	numBits   uint   // Number of valid bits in bufBits
-	offset    int64  // Number of bytes written to the underlying io.Writer
 	bigEndian bool   // Are bits written in big-endian order?
 
 	buf    [512]byte
@@ -51,7 +52,7 @@ func (pw *Writer) Write(buf []byte) (cnt int, err error) {
 		}
 	}
 	cnt, err = pw.wr.Write(buf)
-	pw.offset += int64(cnt)
+	pw.Offset += int64(cnt)
 	return cnt, err
 }
 
@@ -117,15 +118,15 @@ func (pw *Writer) WriteSymbol(sym uint, pe *Encoder) {
 // After this call, the bit Writer is will only withhold 7 bits at most.
 func (pw *Writer) Flush() (int64, error) {
 	if pw.numBits < 8 && pw.cntBuf == 0 {
-		return pw.offset, nil
+		return pw.Offset, nil
 	}
 	if _, err := pw.pushBits(); err != nil {
-		return pw.offset, err
+		return pw.Offset, err
 	}
 	cnt, err := pw.wr.Write(pw.buf[:pw.cntBuf])
 	pw.cntBuf -= cnt
-	pw.offset += int64(cnt)
-	return pw.offset, err
+	pw.Offset += int64(cnt)
+	return pw.Offset, err
 }
 
 // pushBits pushes as many bytes as possible from the bit buffer to the byte
@@ -134,7 +135,7 @@ func (pw *Writer) pushBits() (uint, error) {
 	if pw.cntBuf >= len(pw.buf)-8 {
 		cnt, err := pw.wr.Write(pw.buf[:pw.cntBuf])
 		pw.cntBuf -= cnt
-		pw.offset += int64(cnt)
+		pw.Offset += int64(cnt)
 		if err != nil {
 			return 0, err
 		}
