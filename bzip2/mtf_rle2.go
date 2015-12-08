@@ -5,37 +5,48 @@
 package bzip2
 
 // moveToFront implements both the MTF and RLE stages of bzip2 at the same time.
-// Any runs of zeros in the encoded output will be replaced by a single zero,
-// and a count will be added to the runs slice.
+// Any runs of zeros in the encoded output will be replaced by a sequence of
+// RUNA and RUNB symbols are encode the length of the run.
 //
-// For example, if the normal MTF output was:
-//	idxs: []uint8{0, 0, 1, 6, 3, 0, 0, 0, 2, 1, 0, 4}
+// The RLE encoding used can actually be encoded to and decoded from using
+// normal two's complement arithmetic. The methodology for doing so is below.
 //
-// Then the actual output will be:
-//	idxs: []uint8{0, 1, 6, 3, 0, 2, 1, 0, 4}
-//	runs: []uint32{2, 3, 1}
+// Assuming the following:
+//	num: The value being encoded by RLE encoding.
+//	run: A sequence of RUNA and RUNB symbols represented as a binary integer,
+//	where RUNA is the 0 bit, RUNB is the 1 bit, and least-significant RUN
+//	symbols are at the least-significant bit positions.
+//	cnt: The number of RUNA and RUNB symbols.
+//
+// Then the RLE encoding used by bzip2 has this mathematical property:
+//	num+1 == (1<<cnt) | run
 type moveToFront struct {
 	dictBuf [256]uint8
 	dictLen int
 
-	// TODO(dsnet): Reduce memory allocations by caching slices.
+	vals    []byte
+	syms    []uint16
+	blkSize int
 }
 
-// Init initializes the moveToFront codec. The dict must contain all of the
-// symbols in the alphabet used in future operations. A copy of the input dict
-// will be made so that it will not be mutated.
-func (mtf *moveToFront) Init(dict []uint8) {
+func (mtf *moveToFront) Init(dict []uint8, blkSize int) {
 	if len(dict) > len(mtf.dictBuf) {
 		panic("alphabet too large")
 	}
 	copy(mtf.dictBuf[:], dict)
 	mtf.dictLen = len(dict)
+	mtf.blkSize = blkSize
 }
 
-func (mtf *moveToFront) Encode(vals []byte) (idxs []uint8, runs []uint32) {
+func (mtf *moveToFront) Encode(vals []byte) (syms []uint16) {
 	dict := mtf.dictBuf[:mtf.dictLen]
+	syms = mtf.syms[:0]
 
-	var lastCnt *uint32
+	if len(vals) > mtf.blkSize {
+		panic(errInvalid)
+	}
+
+	var lastNum uint32
 	for _, val := range vals {
 		// Normal move-to-front transform.
 		var idx uint8 // Reverse lookup idx in dict
@@ -50,85 +61,69 @@ func (mtf *moveToFront) Encode(vals []byte) (idxs []uint8, runs []uint32) {
 
 		// Run-length encoding augmentation.
 		if idx == 0 {
-			if lastCnt == nil {
-				idxs = append(idxs, 0)
-				runs = append(runs, 0)
-				lastCnt = &runs[len(runs)-1]
+			lastNum++
+			continue
+		}
+		if lastNum > 0 {
+			for rc := lastNum + 1; rc != 1; rc >>= 1 {
+				syms = append(syms, uint16(rc&1))
 			}
-			(*lastCnt)++
-		} else {
-			idxs = append(idxs, idx)
-			lastCnt = nil
+			lastNum = 0
+		}
+		syms = append(syms, uint16(idx)+1)
+	}
+	if lastNum > 0 {
+		for rc := lastNum + 1; rc != 1; rc >>= 1 {
+			syms = append(syms, uint16(rc&1))
 		}
 	}
-	return idxs, runs
+	mtf.syms = syms
+	return syms
 }
 
-func (mtf *moveToFront) Decode(idxs []uint8, runs []uint32) (vals []byte) {
+func (mtf *moveToFront) Decode(syms []uint16) (vals []byte) {
 	dict := mtf.dictBuf[:mtf.dictLen]
+	vals = mtf.vals[:0]
 
-	var i int
-	for _, idx := range idxs {
+	var lastCnt uint
+	var lastRun uint32
+	for _, sym := range syms {
+		// Run-length encoding augmentation.
+		if sym < 2 {
+			lastRun |= uint32(sym) << lastCnt
+			lastCnt++
+			continue
+		}
+		if lastCnt > 0 {
+			cnt := int((1<<lastCnt)|lastRun) - 1
+			if len(vals)+cnt > mtf.blkSize || lastCnt > 24 {
+				panic(ErrCorrupt)
+			}
+			for i := cnt; i > 0; i-- {
+				vals = append(vals, dict[0])
+			}
+			lastCnt, lastRun = 0, 0
+		}
+
 		// Normal move-to-front transform.
-		val := dict[idx] // Forward lookup val in dict
-		copy(dict[1:], dict[:idx])
+		val := dict[sym-1] // Forward lookup val in dict
+		copy(dict[1:], dict[:sym-1])
 		dict[0] = val
 
-		// Run-length encoding augmentation.
-		if idx == 0 {
-			rep := int(runs[i])
-			i++
-			for j := 0; j < rep; j++ {
-				vals = append(vals, val)
-			}
-		} else {
-			vals = append(vals, val)
+		if len(vals) >= mtf.blkSize {
+			panic(ErrCorrupt)
+		}
+		vals = append(vals, val)
+	}
+	if lastCnt > 0 {
+		cnt := int((1<<lastCnt)|lastRun) - 1
+		if len(vals)+cnt > mtf.blkSize || lastCnt > 24 {
+			panic(ErrCorrupt)
+		}
+		for i := cnt; i > 0; i-- {
+			vals = append(vals, dict[0])
 		}
 	}
+	mtf.vals = vals
 	return vals
-}
-
-// For the RLE encoding that is applied after MTF, a bijective base-2 numeration
-// is used. This is a variable length code, so the length of the input effects
-// the value of the output.
-//
-// To save space, the RLE encoding is stored in a single uint32, where the lower
-// 5-bits are used for the bit-length, the upper 27-bits are for the RLE code
-// itself. RUNA is represented by a 0; RUNB is represented by a 1. The bits
-// are packed in LE order; that is, the least significant bit is in the LSB
-// position of the integer. This encoding has a maximum size of ~256MiB.
-type runCode uint32
-
-func (v runCode) Encode() (x uint32) {
-	var n int
-	if v > 0 {
-		for rep := v - 1; ; rep = (rep - 2) / 2 {
-			if x >>= 1; rep&1 > 0 {
-				x |= 0x80000000
-			}
-			n++
-			if rep < 2 {
-				break
-			}
-		}
-		if n > 27 {
-			return ^uint32(0) // Invalid value to cause problems later
-		}
-	}
-	return (x >> uint(27-n)) | uint32(n)
-}
-
-func (v runCode) Decode() (x uint32) {
-	repPwr := uint32(1)
-	n := int(v & 0x1f)
-	v >>= 5
-	for i := 0; i < n; i++ {
-		x += repPwr << (v & 1)
-		repPwr <<= 1
-		v >>= 1
-	}
-	if n > 27 {
-		return ^uint32(0) // Invalid value to cause problems later
-	}
-	return x
 }
