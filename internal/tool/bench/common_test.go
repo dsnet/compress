@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE.md file.
 
-package benchmark
+package bench
 
 import "io"
 import "bytes"
@@ -26,7 +26,7 @@ func testRoundTrip(t *testing.T, enc Encoder, dec Decoder) {
 	}
 
 	for i, v := range vectors {
-		input, err := LoadFile("../../testdata/"+v.file, v.size)
+		input, err := LoadFile("../../../testdata/"+v.file, v.size)
 		if err != nil {
 			t.Errorf("test %d, %s: unexpected error: %v", i, v.name, err)
 			continue

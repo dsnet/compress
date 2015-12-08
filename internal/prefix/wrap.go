@@ -4,37 +4,32 @@
 
 package prefix
 
-import "os"
-import "io"
-import "io/ioutil"
-import "bytes"
-import "strings"
-import "github.com/dsnet/compress"
+import (
+	"bytes"
+	"io"
+	"io/ioutil"
+	"os"
+	"strings"
+)
 
 // For some of the common Readers, we wrap and extend them to satisfy the
 // compress.BufferedReader interface to improve performance.
 
 type buffer struct {
-	bytes.Buffer
+	*bytes.Buffer
 }
 
 type bytesReader struct {
-	bytes.Reader
+	*bytes.Reader
 	limRd   io.LimitedReader
 	scratch [512]byte
 }
 
 type stringReader struct {
-	strings.Reader
+	*strings.Reader
 	limRd   io.LimitedReader
 	scratch [512]byte
 }
-
-var (
-	_ compress.BufferedReader = (*buffer)(nil)
-	_ compress.BufferedReader = (*bytesReader)(nil)
-	_ compress.BufferedReader = (*stringReader)(nil)
-)
 
 func (r *buffer) Buffered() int {
 	return r.Len()

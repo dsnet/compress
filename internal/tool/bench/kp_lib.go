@@ -2,17 +2,15 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE.md file.
 
-// +build !no_std_lib
+// +build !no_kp_lib
 
-package benchmark
+package bench
 
 import "io"
-import "io/ioutil"
-import "compress/flate"
-import "compress/bzip2"
+import "github.com/klauspost/compress/flate"
 
 func init() {
-	RegisterEncoder(FormatFlate, "std",
+	RegisterEncoder(FormatFlate, "kp",
 		func(w io.Writer, lvl int) io.WriteCloser {
 			zw, err := flate.NewWriter(w, lvl)
 			if err != nil {
@@ -20,12 +18,8 @@ func init() {
 			}
 			return zw
 		})
-	RegisterDecoder(FormatFlate, "std",
+	RegisterDecoder(FormatFlate, "kp",
 		func(r io.Reader) io.ReadCloser {
 			return flate.NewReader(r)
-		})
-	RegisterDecoder(FormatBZ2, "std",
-		func(r io.Reader) io.ReadCloser {
-			return ioutil.NopCloser(bzip2.NewReader(r))
 		})
 }

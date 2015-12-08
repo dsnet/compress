@@ -4,7 +4,7 @@
 
 // +build cgo,!no_cgo_brotli
 
-package benchmark
+package bench
 
 import "testing"
 
