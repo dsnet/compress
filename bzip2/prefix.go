@@ -53,11 +53,11 @@ func (pr *prefixReader) ReadBitsBE64(nb uint) uint64 {
 	return v >> (64 - nb)
 }
 
-func (pr *prefixReader) ReadPrefixCodes(trees []prefix.PrefixCodes) {
-	for i, codes := range trees {
+func (pr *prefixReader) ReadPrefixCodes(codes []prefix.PrefixCodes, trees []prefix.Decoder) {
+	for i, pc := range codes {
 		clen := int(pr.ReadBitsBE64(5))
 		sum := 1 << maxPrefixBits
-		for sym := 0; sym < len(codes); sym++ {
+		for sym := 0; sym < len(pc); sym++ {
 			for {
 				if clen < 1 || clen > maxPrefixBits {
 					panic(ErrCorrupt)
@@ -67,15 +67,21 @@ func (pr *prefixReader) ReadPrefixCodes(trees []prefix.PrefixCodes) {
 				}
 				clen -= int(pr.ReadBits(1)*2) - 1 // +1 or -1
 			}
-			codes[sym] = prefix.PrefixCode{Sym: uint32(sym), Len: uint32(clen)}
+			pc[sym] = prefix.PrefixCode{Sym: uint32(sym), Len: uint32(clen)}
 			sum -= (1 << maxPrefixBits) >> uint(clen)
 		}
 
 		if sum == 0 {
-			prefix.GeneratePrefixes(codes) // Fast path, but only handles complete trees
+			// Fast path, but only handles complete trees.
+			if err := prefix.GeneratePrefixes(pc); err != nil {
+				panic(err)
+			}
 		} else {
-			trees[i] = handleDegenerateCodes(codes) // Slow path, but handles anything
+			// Slow path, but handles anything.
+			pc = handleDegenerateCodes(pc)
+			codes[i] = pc
 		}
+		trees[i].Init(pc)
 	}
 }
 
@@ -99,11 +105,16 @@ func (pw *prefixWriter) WriteBitsBE64(v uint64, nb uint) {
 	return
 }
 
-func (pw *prefixWriter) WritePrefixCodes(trees []prefix.PrefixCodes) {
-	for _, codes := range trees {
-		clen := int(codes[0].Len)
+func (pw *prefixWriter) WritePrefixCodes(codes []prefix.PrefixCodes, trees []prefix.Encoder) {
+	for i, pc := range codes {
+		if err := prefix.GeneratePrefixes(pc); err != nil {
+			panic(err)
+		}
+		trees[i].Init(pc)
+
+		clen := int(pc[0].Len)
 		pw.WriteBitsBE64(uint64(clen), 5)
-		for _, c := range codes {
+		for _, c := range pc {
 			for int(c.Len) < clen {
 				pw.WriteBits(3, 2) // 11
 				clen--

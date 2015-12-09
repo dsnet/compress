@@ -17,10 +17,10 @@ type Writer struct {
 
 	wr     prefixWriter
 	err    error
-	level  int
-	wrHdr  bool
-	blkCRC uint32
-	endCRC uint32
+	level  int    // The current compression level
+	wrHdr  bool   // Have we written the stream header?
+	blkCRC uint32 // CRC-32 IEEE of each block
+	endCRC uint32 // Checksum of all blocks using bzip2's custom method
 
 	rle runLengthEncoding
 	bwt burrowsWheelerTransform
@@ -30,7 +30,10 @@ type Writer struct {
 }
 
 func NewWriter(w io.Writer) *Writer {
-	zw, _ := NewWriterLevel(w, DefaultCompression)
+	zw, err := NewWriterLevel(w, DefaultCompression)
+	if err != nil {
+		panic(err) // Should never happen; here for sanity
+	}
 	return zw
 }
 
@@ -47,25 +50,39 @@ func NewWriterLevel(w io.Writer, lvl int) (*Writer, error) {
 	return zw, nil
 }
 
+func (zw *Writer) Reset(w io.Writer) {
+	*zw = Writer{
+		wr:    zw.wr,
+		level: zw.level,
+		rle:   zw.rle,
+		bwt:   zw.bwt,
+		mtf:   zw.mtf,
+		buf:   zw.buf,
+	}
+	zw.wr.Init(w)
+	zw.buf = make([]byte, zw.level*blockSize)
+	zw.rle.Init(zw.buf)
+	return
+}
+
 func (zw *Writer) Write(buf []byte) (int, error) {
 	if zw.err != nil {
 		return 0, zw.err
 	}
 
 	cnt := len(buf)
-	for len(buf) > 0 {
-		wrCnt, err := zw.rle.Write(buf)
+	for {
+		wrCnt, _ := zw.rle.Write(buf)
 		zw.blkCRC = updateCRC(zw.blkCRC, buf[:wrCnt])
 		buf = buf[wrCnt:]
-		if err != rleDone {
-			continue
+		if len(buf) == 0 {
+			zw.InputOffset += int64(cnt)
+			return cnt, nil
 		}
 		if zw.err = zw.flush(); zw.err != nil {
 			return 0, zw.err
 		}
 	}
-	zw.InputOffset += int64(cnt)
-	return cnt, nil
 }
 
 func (zw *Writer) flush() error {
@@ -83,9 +100,16 @@ func (zw *Writer) flush() error {
 			zw.wr.WriteBitsBE64(uint64('0'+zw.level), 8)
 			zw.wrHdr = true
 		}
-		zw.compressBlock(vals)
+		zw.encodeBlock(vals)
 	}()
-	if zw.OutputOffset, zw.err = zw.wr.Flush(); zw.err != nil {
+	var err error
+	if zw.OutputOffset, err = zw.wr.Flush(); err != nil {
+		zw.err = err
+	}
+	if zw.err != nil {
+		if zw.err == internal.ErrInvalid {
+			zw.err = errInvalid
+		}
 		return zw.err
 	}
 	zw.endCRC = (zw.endCRC<<1 | zw.endCRC>>31) ^ zw.blkCRC
@@ -112,7 +136,14 @@ func (zw *Writer) Close() error {
 		zw.wr.WriteBitsBE64(uint64(zw.endCRC), 32)
 		zw.wr.WritePads(0)
 	}()
-	if zw.OutputOffset, zw.err = zw.wr.Flush(); zw.err != nil {
+	var err error
+	if zw.OutputOffset, err = zw.wr.Flush(); err != nil {
+		zw.err = err
+	}
+	if zw.err != nil {
+		if zw.err == internal.ErrInvalid {
+			zw.err = errInvalid
+		}
 		return zw.err
 	}
 
@@ -123,27 +154,7 @@ func (zw *Writer) Close() error {
 	return zw.err
 }
 
-func (zw *Writer) Reset(w io.Writer) {
-	*zw = Writer{
-		wr:    zw.wr,
-		level: zw.level,
-		rle:   zw.rle,
-		bwt:   zw.bwt,
-		mtf:   zw.mtf,
-		buf:   zw.buf,
-	}
-	zw.wr.Init(w)
-	blkSize := zw.level * blockSize
-	if cap(zw.buf) >= blkSize {
-		zw.buf = zw.buf[:blkSize]
-	} else {
-		zw.buf = make([]byte, blkSize)
-	}
-	zw.rle.Init(zw.buf)
-	return
-}
-
-func (zw *Writer) compressBlock(buf []byte) {
+func (zw *Writer) encodeBlock(buf []byte) {
 	zw.wr.WriteBitsBE64(blkMagic, 48)
 	zw.wr.WriteBitsBE64(uint64(zw.blkCRC), 32)
 	zw.wr.WriteBitsBE64(0, 1)
@@ -159,20 +170,20 @@ func (zw *Writer) compressBlock(buf []byte) {
 	}
 
 	var dictArr [256]uint8
-	var symMaps [16]uint16
-	var symMap uint16
+	var bmapLo [16]uint16
 	dict := dictArr[:0]
+	bmapHi := uint16(0)
 	for i, b := range dictMap {
 		if b {
 			c := uint8(i)
 			dict = append(dict, c)
-			symMap |= 1 << (c >> 4)
-			symMaps[c>>4] |= 1 << (c & 0xf)
+			bmapHi |= 1 << (c >> 4)
+			bmapLo[c>>4] |= 1 << (c & 0xf)
 		}
 	}
 
-	zw.wr.WriteBits(uint(symMap), 16)
-	for _, m := range symMaps {
+	zw.wr.WriteBits(uint(bmapHi), 16)
+	for _, m := range bmapLo {
 		if m > 0 {
 			zw.wr.WriteBits(uint(m), 16)
 		}
@@ -186,7 +197,10 @@ func (zw *Writer) compressBlock(buf []byte) {
 }
 
 func (zw *Writer) encodePrefix(syms []uint16, numSyms int) {
-	numSyms += 2                           // Remove 0 symbol, add RUNA, RUNB, and EOF symbols
+	numSyms += 2 // Remove 0 symbol, add RUNA, RUNB, and EOF symbols
+	if numSyms < 3 {
+		panic(errInvalid) // Not possible to encode EOF marker
+	}
 	syms = append(syms, uint16(numSyms-1)) // EOF marker
 
 	// Compute number of prefix trees needed.
@@ -240,10 +254,6 @@ func (zw *Writer) encodePrefix(syms []uint16, numSyms int) {
 			panic(err)
 		}
 		pc.SortBySymbol()
-		if err := prefix.GeneratePrefixes(pc); err != nil {
-			panic(err)
-		}
-		trees1D[i].Init(pc)
 	}
 
 	// Write out information about the trees and tree selectors.
@@ -256,7 +266,7 @@ func (zw *Writer) encodePrefix(syms []uint16, numSyms int) {
 	for _, sym := range treeSelsMTF {
 		zw.wr.WriteSymbol(uint(sym), &encSel)
 	}
-	zw.wr.WritePrefixCodes(codes1D[:numTrees])
+	zw.wr.WritePrefixCodes(codes1D[:numTrees], trees1D[:numTrees])
 
 	// Write out prefix encoded symbols of compressed data.
 	var tree *prefix.Encoder
