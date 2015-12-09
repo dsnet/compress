@@ -6,8 +6,11 @@
 
 package bench
 
-import "io"
-import "github.com/klauspost/compress/flate"
+import (
+	"io"
+
+	"github.com/klauspost/compress/flate"
+)
 
 func init() {
 	RegisterEncoder(FormatFlate, "kp",

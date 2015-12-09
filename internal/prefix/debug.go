@@ -8,26 +8,35 @@ package prefix
 
 import (
 	"fmt"
+	"math"
 	"strings"
 )
 
-func lenBase2(n interface{}) int { return len(fmt.Sprintf("%b", n)) }
-func padBase2(v, n interface{}, m int) string {
-	var s string
-	if fmt.Sprint(n) != "0" {
-		s = fmt.Sprintf(fmt.Sprintf("%%0%db", n), v)
+func max(a, b int) int {
+	if a > b {
+		return a
 	}
+	return b
+}
+
+func lenBase2(n uint) int {
+	return int(math.Ceil(math.Log2(float64(n + 1))))
+}
+func padBase2(v, n uint, m int) string {
+	s := fmt.Sprintf("%b", 1<<n|v)[1:]
 	if pad := m - len(s); pad > 0 {
-		s = strings.Repeat(" ", pad) + s
+		return strings.Repeat(" ", pad) + s
 	}
 	return s
 }
 
-func lenBase10(n int) int { return len(fmt.Sprintf("%d", n)) }
-func padBase10(n interface{}, m int) string {
+func lenBase10(n int) int {
+	return int(math.Ceil(math.Log10(float64(n + 1))))
+}
+func padBase10(n, m int) string {
 	s := fmt.Sprintf("%d", n)
 	if pad := m - len(s); pad > 0 {
-		s = strings.Repeat(" ", pad) + s
+		return strings.Repeat(" ", pad) + s
 	}
 	return s
 }
@@ -35,28 +44,21 @@ func padBase10(n interface{}, m int) string {
 func (rc RangeCodes) String() string {
 	var maxLen, maxBase int
 	for _, c := range rc {
-		if maxLen < int(c.Len) {
-			maxLen = int(c.Len)
-		}
-		if maxBase < int(c.Base) {
-			maxBase = int(c.Base)
-		}
+		maxLen = max(maxLen, int(c.Len))
+		maxBase = max(maxBase, int(c.Base))
 	}
-	maxSymStr := lenBase10(len(rc) - 1)
-	maxLenStr := lenBase10(maxLen)
-	maxBaseStr := lenBase10(maxBase)
 
 	var ss []string
 	ss = append(ss, "{")
 	for i, c := range rc {
-		base := fmt.Sprintf(fmt.Sprintf("%%%dd", maxBaseStr), c.Base)
+		base := padBase10(int(c.Base), lenBase10(maxBase))
 		if c.Len > 0 {
 			base += fmt.Sprintf("-%d", c.End()-1)
 		}
-		ss = append(ss, fmt.Sprintf(
-			fmt.Sprintf("\t%%%dd:  {bits: %%%dd, base: %%s},",
-				maxSymStr, maxLenStr),
-			i, c.Len, base,
+		ss = append(ss, fmt.Sprintf("\t%s:  {len: %s, range: %s},",
+			padBase10(int(i), lenBase10(len(rc)-1)),
+			padBase10(int(c.Len), lenBase10(maxLen)),
+			base,
 		))
 	}
 	ss = append(ss, "}")
@@ -66,18 +68,10 @@ func (rc RangeCodes) String() string {
 func (pc PrefixCodes) String() string {
 	var maxSym, maxLen, maxCnt int
 	for _, c := range pc {
-		if maxSym < int(c.Sym) {
-			maxSym = int(c.Sym)
-		}
-		if maxLen < int(c.Len) {
-			maxLen = int(c.Len)
-		}
-		if maxCnt < int(c.Cnt) {
-			maxCnt = int(c.Cnt)
-		}
+		maxSym = max(maxSym, int(c.Sym))
+		maxLen = max(maxLen, int(c.Len))
+		maxCnt = max(maxCnt, int(c.Cnt))
 	}
-	maxSymStr := lenBase10(maxSym)
-	maxCntStr := lenBase10(maxCnt)
 
 	var ss []string
 	ss = append(ss, "{")
@@ -86,13 +80,13 @@ func (pc PrefixCodes) String() string {
 		if maxCnt > 0 {
 			cnt := int(32*float32(c.Cnt)/float32(maxCnt) + 0.5)
 			cntStr = fmt.Sprintf("%s |%s",
-				padBase10(c.Cnt, maxCntStr),
+				padBase10(int(c.Cnt), lenBase10(maxCnt)),
 				strings.Repeat("#", cnt),
 			)
 		}
 		ss = append(ss, fmt.Sprintf("\t%s:  %s,  %s",
-			padBase10(c.Sym, maxSymStr),
-			padBase2(c.Val, c.Len, maxLen),
+			padBase10(int(c.Sym), lenBase10(maxSym)),
+			padBase2(uint(c.Val), uint(c.Len), maxLen),
 			cntStr,
 		))
 	}
@@ -106,36 +100,36 @@ func (pd Decoder) String() string {
 	if len(pd.chunks) > 0 {
 		ss = append(ss, "\tchunks: {")
 		for i, c := range pd.chunks {
-			l := "sym"
+			label := "sym"
 			if uint(c&countMask) > uint(pd.chunkBits) {
-				l = "idx"
+				label = "idx"
 			}
 			ss = append(ss, fmt.Sprintf("\t\t%s:  {%s: %s, len: %s}",
-				padBase2(i, pd.chunkBits, int(pd.chunkBits)),
-				l, padBase10(c>>countBits, 3),
-				padBase10(c&countMask, 2),
+				padBase2(uint(i), uint(pd.chunkBits), int(pd.chunkBits)),
+				label, padBase10(int(c>>countBits), 3),
+				padBase10(int(c&countMask), 2),
 			))
 		}
 		ss = append(ss, "\t},")
 
 		for j, links := range pd.links {
 			ss = append(ss, fmt.Sprintf("\tlinks[%d]: {", j))
-			linkBits := lenBase2(pd.linkMask)
+			linkBits := lenBase2(uint(pd.linkMask))
 			for i, c := range links {
 				ss = append(ss, fmt.Sprintf("\t\t%s:  {sym: %s, len: %s},",
-					padBase2(i, linkBits, int(linkBits)),
-					padBase10(c>>countBits, 3),
-					padBase10(c&countMask, 2),
+					padBase2(uint(i), uint(linkBits), int(linkBits)),
+					padBase10(int(c>>countBits), 3),
+					padBase10(int(c&countMask), 2),
 				))
 			}
 			ss = append(ss, "\t},")
 		}
 	}
 	ss = append(ss, fmt.Sprintf("\tchunkMask: %b,", pd.chunkMask))
-	ss = append(ss, fmt.Sprintf("\tlinkMask: %b,", pd.linkMask))
+	ss = append(ss, fmt.Sprintf("\tlinkMask:  %b,", pd.linkMask))
 	ss = append(ss, fmt.Sprintf("\tchunkBits: %d,", pd.chunkBits))
-	ss = append(ss, fmt.Sprintf("\tminBits: %d,", pd.minBits))
-	ss = append(ss, fmt.Sprintf("\tnumSyms: %d,", pd.numSyms))
+	ss = append(ss, fmt.Sprintf("\tminBits:   %d,", pd.minBits))
+	ss = append(ss, fmt.Sprintf("\tnumSyms:   %d,", pd.numSyms))
 	ss = append(ss, "}")
 	return strings.Join(ss, "\n")
 }
@@ -143,9 +137,7 @@ func (pd Decoder) String() string {
 func (pe Encoder) String() string {
 	var maxLen int
 	for _, c := range pe.chunks {
-		if maxLen < int(c&countMask) {
-			maxLen = int(c & countMask)
-		}
+		maxLen = max(maxLen, int(c&countMask))
 	}
 
 	var ss []string
@@ -155,13 +147,13 @@ func (pe Encoder) String() string {
 		for i, c := range pe.chunks {
 			ss = append(ss, fmt.Sprintf("\t\t%s:  %s,",
 				padBase10(i, 3),
-				padBase2(c>>countBits, c&countMask, maxLen),
+				padBase2(uint(c>>countBits), uint(c&countMask), maxLen),
 			))
 		}
 		ss = append(ss, "\t},")
 	}
 	ss = append(ss, fmt.Sprintf("\tchunkMask: %b,", pe.chunkMask))
-	ss = append(ss, fmt.Sprintf("\tnumSyms: %d,", pe.numSyms))
+	ss = append(ss, fmt.Sprintf("\tnumSyms:   %d,", pe.numSyms))
 	ss = append(ss, "}")
 	return strings.Join(ss, "\n")
 }

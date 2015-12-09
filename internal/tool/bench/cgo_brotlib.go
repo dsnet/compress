@@ -6,9 +6,12 @@
 
 package bench
 
-import "io"
-import "gopkg.in/kothar/brotli-go.v0/enc"
-import "gopkg.in/kothar/brotli-go.v0/dec"
+import (
+	"io"
+
+	"gopkg.in/kothar/brotli-go.v0/dec"
+	"gopkg.in/kothar/brotli-go.v0/enc"
+)
 
 func init() {
 	RegisterEncoder(FormatBrotli, "cgo",

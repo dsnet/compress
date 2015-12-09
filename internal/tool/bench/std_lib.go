@@ -6,10 +6,13 @@
 
 package bench
 
-import "io"
-import "io/ioutil"
-import "compress/flate"
-import "compress/bzip2"
+import (
+	"io"
+	"io/ioutil"
+
+	"compress/bzip2"
+	"compress/flate"
+)
 
 func init() {
 	RegisterEncoder(FormatFlate, "std",
