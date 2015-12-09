@@ -7,9 +7,6 @@ package prefix
 import (
 	"bufio"
 	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
-	"encoding/hex"
 	"io"
 	"math"
 	"sort"
@@ -18,75 +15,13 @@ import (
 
 	"github.com/dsnet/compress"
 	"github.com/dsnet/compress/internal"
+	"github.com/dsnet/compress/internal/testutil"
 )
-
-type rand struct {
-	cipher.Block
-	blk [aes.BlockSize]byte
-}
-
-func newRand() *rand {
-	r, _ := aes.NewCipher(make([]byte, aes.BlockSize))
-	return &rand{Block: r}
-}
-
-func (r *rand) Int() (x int) {
-	r.Encrypt(r.blk[:], r.blk[:])
-	x |= int(r.blk[0]) << 0
-	x |= int(r.blk[1]) << 8
-	x |= int(r.blk[2]) << 16
-	x |= int(r.blk[3]) << 24
-	x |= int(r.blk[4]) << 32
-	x |= int(r.blk[5]) << 40
-	x |= int(r.blk[6]) << 48
-	x |= int(r.blk[7]&0x3f) << 56
-	return x
-}
-
-func (r *rand) Intn(n int) int {
-	return r.Int() % n
-}
-
-func (r *rand) Bytes(n int) []byte {
-	b := make([]byte, n)
-	bb := b
-	for len(bb) > 0 {
-		r.Encrypt(r.blk[:], r.blk[:])
-		cnt := copy(bb, r.blk[:])
-		bb = bb[cnt:]
-	}
-	return b
-}
-
-func (r *rand) Perm(n int) []int {
-	m := make([]int, n)
-	for i := 0; i < n; i++ {
-		j := r.Intn(i + 1)
-		m[i] = m[j]
-		m[j] = i
-	}
-	return m
-}
-
-func hexDecode(s string) []byte {
-	b, err := hex.DecodeString(s)
-	if err != nil {
-		panic(err)
-	}
-	return b
-}
-
-func reverseBytes(b []byte) []byte {
-	for i, c := range b {
-		b[i] = internal.ReverseLUT[c]
-	}
-	return b
-}
 
 const testSize = 1000
 
 var (
-	testVector = hexDecode("" +
+	testVector = testutil.MustDecodeHex("" +
 		"f795bd4a52e2ffae29ddff1335428e2b267fb5ff9e6339fdebbfa9c4aa3aff1e" +
 		"d5af474b5212fc9b81eaff6e1cfc0bea797b45cc128eabe9ff6ecbb2fe25076a" +
 		"b6e0950b2bb3d6d35dff9ec1744f3e7ff816d299c3141190bafe4cb1ff1e2fdc" +
@@ -175,7 +110,9 @@ func TestReader(t *testing.T) {
 			buf := make([]byte, len(testVector))
 			copy(buf, testVector)
 			if endian {
-				buf = reverseBytes(buf)
+				for i, c := range buf {
+					buf[i] = internal.ReverseLUT[c]
+				}
 			}
 			rd := newReader(buf)
 			br.Init(rd, endian)
@@ -183,7 +120,7 @@ func TestReader(t *testing.T) {
 			var pd Decoder
 			pd.Init(testCodes)
 
-			r := newRand()
+			r := testutil.NewRand(0)
 		loop:
 			for j := 0; ; j++ {
 				// Stop if we read enough bits.
@@ -218,7 +155,9 @@ func TestReader(t *testing.T) {
 					}
 					want := r.Bytes(r.Intn(16))
 					if endian {
-						want = reverseBytes(want)
+						for i, c := range want {
+							want[i] = internal.ReverseLUT[c]
+						}
 					}
 					got := make([]byte, len(want))
 					cnt, err := io.ReadFull(&br, got)
@@ -301,7 +240,7 @@ func TestWriter(t *testing.T) {
 		var re RangeEncoder
 		re.Init(testRanges)
 
-		r := newRand()
+		r := testutil.NewRand(0)
 	loop:
 		for j := 0; 8*bw.Offset+int64(8*bw.cntBuf)+int64(bw.numBits) < 8*testSize; j++ {
 			switch j % 4 {
@@ -322,7 +261,9 @@ func TestWriter(t *testing.T) {
 				bw.WritePads(0)
 				b := r.Bytes(r.Intn(16))
 				if endian {
-					b = reverseBytes(b)
+					for i, c := range b {
+						b[i] = internal.ReverseLUT[c]
+					}
 				}
 				cnt, err := bw.Write(b)
 				if cnt != len(b) {
@@ -372,7 +313,9 @@ func TestWriter(t *testing.T) {
 		// Check that output matches expected.
 		buf := wr.Bytes()
 		if endian {
-			buf = reverseBytes(buf)
+			for i, c := range buf {
+				buf[i] = internal.ReverseLUT[c]
+			}
 		}
 		if bytes.Compare(buf, testVector) != 0 {
 			t.Errorf("test %d, %s, output string mismatch:\ngot  %x\nwant %x", i, ne, buf, testVector)
@@ -382,7 +325,7 @@ func TestWriter(t *testing.T) {
 }
 
 func TestGenerate(t *testing.T) {
-	r := newRand()
+	r := testutil.NewRand(0)
 	var makeCodes = func(freqs []uint) PrefixCodes {
 		codes := make(PrefixCodes, len(freqs))
 		for i, j := range r.Perm(len(freqs)) {
@@ -754,7 +697,7 @@ func TestPrefix(t *testing.T) {
 		}
 
 		// Create an arbitrary list of symbols to encode.
-		r := newRand()
+		r := testutil.NewRand(0)
 		syms := make([]uint, 1000)
 		for i := range syms {
 			syms[i] = uint(v.codes[r.Intn(len(v.codes))].Sym)
@@ -880,7 +823,7 @@ func TestRange(t *testing.T) {
 		valid: true,
 	}}
 
-	r := newRand()
+	r := testutil.NewRand(0)
 	for i, v := range vectors {
 		if valid := v.input.checkValid(); valid != v.valid {
 			t.Errorf("test %d, validity mismatch: got %v, want %v", i, valid, v.valid)

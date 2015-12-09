@@ -6,7 +6,9 @@
 
 package bench
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestCGoRoundTripBrotli(t *testing.T) {
 	testRoundTrip(t, Encoders[FormatBrotli]["cgo"], Decoders[FormatBrotli]["cgo"])

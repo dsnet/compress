@@ -5,32 +5,13 @@
 package bzip2
 
 import (
-	"crypto/md5"
-	"fmt"
-	"io/ioutil"
 	"testing"
 )
 
 func TestBurrowsWheelerTransform(t *testing.T) {
-	var loadFile = func(path string) string {
-		buf, err := ioutil.ReadFile(path)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		return string(buf)
-	}
-	var ss = func(s string) string {
-		const limit = 256
-		if len(s) > limit {
-			return fmt.Sprintf("%q...", s[:limit])
-		}
-		return fmt.Sprintf("%q", s)
-	}
-
 	var vectors = []struct {
 		input  string // The input test string
 		output string // Expected output string after BWT (skip if empty)
-		chksum string // Expected output MD5 checksum (skip if empty)
 		ptr    int    // The BWT origin pointer
 	}{{
 		input:  "",
@@ -92,34 +73,6 @@ func TestBurrowsWheelerTransform(t *testing.T) {
 			"ACTGAGGGACGGATCGATATAGATGCTATCGGTGGGTGGTTTTATAATAAATAAGATATTGGTC" +
 			"TTTCACTCCCCTGCAATCAGGCCGGCAGCGAATAAAAGACTTTGCATAGAGCTTTTACTGTTTC",
 		ptr: 99,
-	}, {
-		input:  loadFile("testdata/binary.bin"),
-		chksum: "bfd78db025b6842fc5261657123409c2",
-		ptr:    123410,
-	}, {
-		input:  loadFile("testdata/digits.txt"),
-		chksum: "9919ff629799fffb771805dbb41164e5",
-		ptr:    20151,
-	}, {
-		input:  loadFile("testdata/huffman.txt"),
-		chksum: "956c008d3e3485103031b1ce92f58094",
-		ptr:    79034,
-	}, {
-		input:  loadFile("testdata/random.bin"),
-		chksum: "93bfbaa5017b861da2d405815a8036bb",
-		ptr:    1782,
-	}, {
-		input:  loadFile("testdata/repeats.bin"),
-		chksum: "96b0d6d4df9dfe869b5b8fdbe70a6e7f",
-		ptr:    131563,
-	}, {
-		input:  loadFile("testdata/twain.txt"),
-		chksum: "123105351d920f489cc9941dd48a8c4e",
-		ptr:    47,
-	}, {
-		input:  loadFile("testdata/zeros.bin"),
-		chksum: "ec87a838931d4d5d2e94a04644788a55",
-		ptr:    262143,
 	}}
 
 	bwt := new(burrowsWheelerTransform)
@@ -127,18 +80,15 @@ func TestBurrowsWheelerTransform(t *testing.T) {
 		b := []byte(v.input)
 		p := bwt.Encode(b)
 		output := string(b)
-		chksum := fmt.Sprintf("%x", md5.Sum(b))
+		b = []byte(v.output)
 		bwt.Decode(b, p)
 		input := string(b)
 
 		if input != v.input {
-			t.Errorf("test %d, input mismatch:\ngot  %v\nwant %v", i, ss(input), ss(v.input))
+			t.Errorf("test %d, input mismatch:\ngot  %q\nwant %q", i, input, v.input)
 		}
-		if output != v.output && v.output != "" {
-			t.Errorf("test %d, output mismatch:\ngot  %v\nwant %v", i, ss(output), ss(v.output))
-		}
-		if chksum != v.chksum && v.chksum != "" {
-			t.Errorf("test %d, checksum mismatch:\ngot  %s\nwant %s", i, chksum, v.chksum)
+		if output != v.output {
+			t.Errorf("test %d, output mismatch:\ngot  %q\nwant %q", i, output, v.output)
 		}
 		if p != v.ptr {
 			t.Errorf("test %d, pointer mismatch: got %d, want %d", i, p, v.ptr)

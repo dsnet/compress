@@ -6,7 +6,9 @@
 
 package bench
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestCGoRoundTripZlib(t *testing.T) {
 	testRoundTrip(t, Encoders[FormatFlate]["cgo"], Decoders[FormatFlate]["cgo"])

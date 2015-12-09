@@ -4,10 +4,14 @@
 
 package bench
 
-import "io"
-import "bytes"
-import "hash/crc32"
-import "testing"
+import (
+	"bytes"
+	"hash/crc32"
+	"io"
+	"testing"
+
+	"github.com/dsnet/compress/internal/testutil"
+)
 
 func testRoundTrip(t *testing.T, enc Encoder, dec Decoder) {
 	type entry struct {
@@ -18,41 +22,35 @@ func testRoundTrip(t *testing.T, enc Encoder, dec Decoder) {
 	}
 	var vectors []entry
 	for _, f := range []string{
-		"zeros.bin", "random.bin", "binary.bin", "repeats.bin",
-		"huffman.txt", "digits.txt", "twain.txt",
+		"binary.bin", "digits.txt", "huffman.txt", "random.bin", "repeats.bin", "twain.txt", "zeros.bin",
 	} {
 		var l, s int = 6, 1e6
 		vectors = append(vectors, entry{getName(f, l, s), f, l, s})
 	}
 
 	for i, v := range vectors {
-		input, err := LoadFile("../../../testdata/"+v.file, v.size)
-		if err != nil {
-			t.Errorf("test %d, %s: unexpected error: %v", i, v.name, err)
-			continue
-		}
-
+		input := testutil.MustLoadFile("../../../testdata/"+v.file, v.size)
 		buf := new(bytes.Buffer)
 		wr := enc(buf, v.level)
-		_, err = io.Copy(wr, bytes.NewReader(input))
+		_, cpErr := io.Copy(wr, bytes.NewReader(input))
 		if err := wr.Close(); err != nil {
 			t.Errorf("test %d, %s: unexpected error: %v", i, v.name, err)
 			continue
 		}
-		if err != nil {
-			t.Errorf("test %d, %s: unexpected error: %v", i, v.name, err)
+		if cpErr != nil {
+			t.Errorf("test %d, %s: unexpected error: %v", i, v.name, cpErr)
 			continue
 		}
 
 		hash := crc32.NewIEEE()
 		rd := dec(buf)
-		cnt, err := io.Copy(hash, rd)
+		cnt, cpErr := io.Copy(hash, rd)
 		if err := rd.Close(); err != nil {
 			t.Errorf("test %d, %s: unexpected error: %v", i, v.name, err)
 			continue
 		}
-		if err != nil {
-			t.Errorf("test %d, %s: unexpected error: %v", i, v.name, err)
+		if cpErr != nil {
+			t.Errorf("test %d, %s: unexpected error: %v", i, v.name, cpErr)
 			continue
 		}
 
