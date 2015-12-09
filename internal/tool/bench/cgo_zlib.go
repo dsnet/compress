@@ -49,9 +49,11 @@ int zAvailOutput(void* zs) { return ((z_streamp)zs)->avail_out; }
 */
 import "C"
 
-import "io"
-import "fmt"
-import "unsafe"
+import (
+	"fmt"
+	"io"
+	"unsafe"
+)
 
 type zErr struct{ code int }
 

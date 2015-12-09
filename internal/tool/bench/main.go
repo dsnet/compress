@@ -46,17 +46,20 @@
 //	RUNTIME: 2m42.434570856s
 package main
 
-import "fmt"
-import "flag"
-import "sort"
-import "math"
-import "time"
-import "regexp"
-import "strings"
-import "io/ioutil"
-import "go/build"
-import "github.com/dsnet/golib/strconv"
-import "github.com/dsnet/compress/internal/tool/bench"
+import (
+	"flag"
+	"fmt"
+	"go/build"
+	"io/ioutil"
+	"math"
+	"regexp"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/dsnet/compress/internal/tool/bench"
+	"github.com/dsnet/golib/strconv"
+)
 
 // By default, the benchmark tool will look for test data in this "package".
 const testPkg = "github.com/dsnet/compress/testdata"

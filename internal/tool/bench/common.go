@@ -6,18 +6,22 @@
 // with respect to encode speed, decode speed, and ratio.
 package bench
 
-import "os"
-import "io"
-import "io/ioutil"
-import "bufio"
-import "fmt"
-import "path"
-import "regexp"
-import "bytes"
-import "strings"
-import "runtime"
-import "testing"
-import "github.com/dsnet/golib/strconv"
+import (
+	"bufio"
+	"bytes"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"os"
+	"path"
+	"regexp"
+	"runtime"
+	"strings"
+	"testing"
+
+	"github.com/dsnet/compress/internal/testutil"
+	"github.com/dsnet/golib/strconv"
+)
 
 const (
 	FormatFlate = iota
@@ -61,51 +65,6 @@ func RegisterDecoder(format int, name string, dec Decoder) {
 		Decoders[format] = make(map[string]Decoder)
 	}
 	Decoders[format][name] = dec
-}
-
-// LoadFile loads the first n bytes of the input file. If n is less than zero,
-// then it will return the input file as is. If the file is smaller than n,
-// then it will replicate the input until it matches n. Each copy will be XORed
-// by some mask to avoid favoring algorithms with large LZ77 windows.
-func LoadFile(file string, n int) ([]byte, error) {
-	input, err := ioutil.ReadFile(getPath(file))
-	switch {
-	case err != nil:
-		return nil, err
-	case n < 0:
-		return input, nil
-	case len(input) >= n:
-		return input[:n], nil
-	case len(input) == 0:
-		return nil, io.ErrNoProgress // Can't replicate an empty string
-	}
-
-	var rb byte // Chunk mask
-	output := make([]byte, n)
-	buf := output
-	for {
-		for _, c := range input {
-			if len(buf) == 0 {
-				return output, nil
-			}
-			buf[0] = c ^ rb
-			buf = buf[1:]
-		}
-		rb++
-	}
-}
-
-func getPath(file string) string {
-	if path.IsAbs(file) {
-		return file
-	}
-	for _, p := range Paths {
-		p = path.Join(p, file)
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return file
 }
 
 // BenchmarkEncoder benchmarks a single encoder on the given input data using
@@ -249,7 +208,7 @@ func benchmarkSuite(codecs, files []string, levels, sizes []int, tick func(), ru
 	for _, f := range files {
 		for _, l := range levels {
 			for _, n := range sizes {
-				b, err := LoadFile(f, n)
+				b, err := testutil.LoadFile(getPath(f), n)
 				name := getName(f, l, len(b))
 				for j, c := range codecs {
 					if tick != nil {
@@ -266,6 +225,19 @@ func benchmarkSuite(codecs, files []string, levels, sizes []int, tick func(), ru
 		}
 	}
 	return results, names
+}
+
+func getPath(file string) string {
+	if path.IsAbs(file) {
+		return file
+	}
+	for _, p := range Paths {
+		p = path.Join(p, file)
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return file
 }
 
 func getName(f string, l, n int) string {

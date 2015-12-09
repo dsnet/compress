@@ -48,9 +48,11 @@ int bzAvailOutput(void* zs) { return ((bz_stream*)zs)->avail_out; }
 */
 import "C"
 
-import "io"
-import "fmt"
-import "unsafe"
+import (
+	"fmt"
+	"io"
+	"unsafe"
+)
 
 type bz2Err struct{ code int }
 
