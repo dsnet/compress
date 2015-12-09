@@ -12,8 +12,8 @@ import (
 )
 
 type Reader struct {
-	InputOffset  int64 // Total number of bytes issued to Write
-	OutputOffset int64 // Total number of bytes written to underlying io.Writer
+	InputOffset  int64 // Total number of bytes read from underlying io.Reader
+	OutputOffset int64 // Total number of bytes emitted from Read
 
 	rd     prefixReader
 	err    error
