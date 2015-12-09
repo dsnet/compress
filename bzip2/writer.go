@@ -233,12 +233,12 @@ func (zw *Writer) encodePrefix(syms []uint16, numSyms int) {
 
 	// First cut at assigning prefix trees to each group.
 	var codes prefix.PrefixCodes
-	var blkLen, treeIdx int
+	var blkLen, selIdx int
 	for _, sym := range syms {
 		if blkLen == 0 {
 			blkLen = numBlockSyms
-			codes = codes2D[treeSels[treeIdx]][:numSyms]
-			treeIdx++
+			codes = codes2D[treeSels[selIdx]][:numSyms]
+			selIdx++
 		}
 		blkLen--
 		codes[sym].Cnt++
@@ -270,12 +270,12 @@ func (zw *Writer) encodePrefix(syms []uint16, numSyms int) {
 
 	// Write out prefix encoded symbols of compressed data.
 	var tree *prefix.Encoder
-	blkLen, treeIdx = 0, 0
+	blkLen, selIdx = 0, 0
 	for _, sym := range syms {
 		if blkLen == 0 {
 			blkLen = numBlockSyms
-			tree = &trees1D[treeSels[treeIdx]]
-			treeIdx++
+			tree = &trees1D[treeSels[selIdx]]
+			selIdx++
 		}
 		blkLen--
 		ok := zw.wr.TryWriteSymbol(uint(sym), tree)

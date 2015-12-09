@@ -140,6 +140,9 @@ func (zr *Reader) decodeBlock() []byte {
 	buf := zr.mtf.Decode(syms)
 
 	// Step 3: Burrows-Wheeler transformation.
+	if ptr >= len(buf) {
+		panic(ErrCorrupt)
+	}
 	zr.bwt.Decode(buf, ptr)
 
 	return buf
@@ -158,9 +161,6 @@ func (zr *Reader) decodePrefix(numSyms int) (syms []uint16) {
 		panic(ErrCorrupt)
 	}
 	numSels := int(zr.rd.ReadBitsBE64(15))
-	if numSels > 9019090321 {
-		panic(ErrCorrupt)
-	}
 	treeSels := make([]uint8, numSels)
 	for i := range treeSels {
 		sym := zr.rd.ReadSymbol(&decSel)
@@ -186,20 +186,27 @@ func (zr *Reader) decodePrefix(numSyms int) (syms []uint16) {
 
 	// Read prefix encoded symbols of compressed data.
 	var tree *prefix.Decoder
-	var blkLen, treeIdx int
+	var blkLen, selIdx int
 	for {
 		if blkLen == 0 {
 			blkLen = numBlockSyms
-			tree = &trees1D[treeSels[treeIdx]]
-			treeIdx++
+			if selIdx >= len(treeSels) {
+				panic(ErrCorrupt)
+			}
+			tree = &trees1D[treeSels[selIdx]]
+			selIdx++
 		}
 		blkLen--
 		sym, ok := zr.rd.TryReadSymbol(tree)
 		if !ok {
 			sym = zr.rd.ReadSymbol(tree)
 		}
+
 		if int(sym) == numSyms-1 {
 			break // EOF marker
+		}
+		if int(sym) >= numSyms {
+			panic(ErrCorrupt) // Invalid symbol used
 		}
 		if len(syms) >= zr.level*blockSize {
 			panic(ErrCorrupt) // Block is too large
