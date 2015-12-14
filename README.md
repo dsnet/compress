@@ -2,9 +2,14 @@
 
 ## Introduction ##
 
-This repository stores a collection of compression related libraries.
-
 **NOTE: This package is in active development. As such, there are no guarantees about the stability of the API. The author reserves the right to arbitrarily break the API for any reason.** 
+
+This repository hosts a collection of compression related libraries. The goal of this project is to provide pure Go implementations for popular compression algorithms beyond what the Go standard library provides. The goals for these packages are as follows:
+* Maintainable: That the code remains well documented, well tested, readable, easy to maintain, and easy to verify that it conforms to the specification for the format being implemented.
+* Performant: To be able to compress and decompress with at least 80% of the rates that the C implementations are able to achieve.
+* Flexible: That the code provides low-level and fine granularity control over the compression streams similar to what the C APIs would provide.
+
+Of these three, the first objective is often at odds with the other two objectives and provides interesting challenges. Higher performance can often be achieved by muddling abstraction layers or using non-intuitive low-level primitives. Also, more features and functionality, while useful in some situations, often complicates the API. Thus, this package will attempt to satisfy all the goals, but will defer to favoring maintainability when the performance or flexibility benefits are not significant enough.
 
 
 ## Installation ##
@@ -12,6 +17,8 @@ This repository stores a collection of compression related libraries.
 Run the command:
 
 ```go get github.com/dsnet/compress```
+
+This library requires ```Go1.5``` or higher in order to build.
 
 
 ## Packages ##
