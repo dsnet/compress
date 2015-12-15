@@ -31,7 +31,7 @@ func main() {
 	var r = rand.New(rand.NewSource(0))
 
 	for len(b) < size {
-		n := 16 + r.Int()%64 // Length of substring
+		n := 16 + r.Intn(64) // Length of substring
 		p := r.Float32()
 		switch {
 		case p <= 0.75:
@@ -41,13 +41,13 @@ func main() {
 				switch {
 				case p <= 0.1:
 					// Write any lowercase letter.
-					b = append(b, alpha1[r.Int()%len(alpha1)])
+					b = append(b, alpha1[r.Intn(len(alpha1))])
 				case p <= 0.7:
 					// Write any lowercase or uppercase letter.
-					b = append(b, alpha2[r.Int()%len(alpha2)])
+					b = append(b, alpha2[r.Intn(len(alpha2))])
 				case p <= 1.0:
 					// Write any character from the base64 alphabet.
-					b = append(b, alpha3[r.Int()%len(alpha3)])
+					b = append(b, alpha3[r.Intn(len(alpha3))])
 				}
 			}
 		case p <= 1.00:
@@ -58,12 +58,12 @@ func main() {
 				case p <= 0.65:
 					// Write a 2-byte long utf8 code point.
 					var buf [4]byte
-					cnt := utf8.EncodeRune(buf[:], rune(0x80+r.Int()%0x780))
+					cnt := utf8.EncodeRune(buf[:], rune(0x80+r.Intn(0x780)))
 					b = append(b, buf[:cnt]...)
 				case p <= 1.00:
 					// Write a 3-byte long utf8 code point.
 					var buf [4]byte
-					cnt := utf8.EncodeRune(buf[:], rune(0x800+r.Int()%0xF800))
+					cnt := utf8.EncodeRune(buf[:], rune(0x800+r.Intn(0xF800)))
 					b = append(b, buf[:cnt]...)
 				}
 			}
