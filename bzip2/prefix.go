@@ -62,10 +62,20 @@ func (pr *prefixReader) ReadPrefixCodes(codes []prefix.PrefixCodes, trees []pref
 				if clen < 1 || clen > maxPrefixBits {
 					panic(ErrCorrupt)
 				}
-				if pr.ReadBits(1) == 0 {
+
+				b, ok := pr.TryReadBits(1)
+				if !ok {
+					b = pr.ReadBits(1)
+				}
+				if b == 0 {
 					break
 				}
-				clen -= int(pr.ReadBits(1)*2) - 1 // +1 or -1
+
+				b, ok = pr.TryReadBits(1)
+				if !ok {
+					b = pr.ReadBits(1)
+				}
+				clen -= int(b*2) - 1 // +1 or -1
 			}
 			pc[sym] = prefix.PrefixCode{Sym: uint32(sym), Len: uint32(clen)}
 			sum -= (1 << maxPrefixBits) >> uint(clen)

@@ -163,7 +163,10 @@ func (zr *Reader) decodePrefix(numSyms int) (syms []uint16) {
 	numSels := int(zr.rd.ReadBitsBE64(15))
 	treeSels := make([]uint8, numSels)
 	for i := range treeSels {
-		sym := zr.rd.ReadSymbol(&decSel)
+		sym, ok := zr.rd.TryReadSymbol(&decSel)
+		if !ok {
+			sym = zr.rd.ReadSymbol(&decSel)
+		}
 		if int(sym) >= numTrees {
 			panic(ErrCorrupt)
 		}
