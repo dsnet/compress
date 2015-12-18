@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE.md file.
 
+// Package prefix implements bit readers and writers that use prefix encoding.
 package prefix
 
 import (
