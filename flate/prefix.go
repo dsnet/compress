@@ -4,33 +4,31 @@
 
 package flate
 
-const maxPrefixBits = 15
+import (
+	"io"
+
+	"github.com/dsnet/compress/internal/prefix"
+)
 
 const (
+	maxPrefixBits = 15
+
 	maxNumCLenSyms = 19
 	maxNumLitSyms  = 286
 	maxNumDistSyms = 30
 )
 
 var (
-	lenLUT   [maxNumLitSyms - 257]rangeCode // RFC section 3.2.5
-	distLUT  [maxNumDistSyms]rangeCode      // RFC section 3.2.5
-	litTree  prefixDecoder                  // RFC section 3.2.6
-	distTree prefixDecoder                  // RFC section 3.2.6
-)
+	// RFC section 3.2.5
+	lenRanges  prefix.RangeCodes
+	distRanges prefix.RangeCodes
 
-type rangeCode struct {
-	base uint32 // Starting base offset of the range
-	bits uint32 // Bit-width of a subsequent integer to add to base offset
-}
+	// RFC section 3.2.6
+	decLit  prefix.Decoder
+	encLit  prefix.Encoder
+	decDist prefix.Decoder
+	encDist prefix.Encoder
 
-type prefixCode struct {
-	sym uint32 // The symbol being mapped
-	val uint32 // Value of the prefix code (must be in [0..1<<len])
-	len uint32 // Bit length of the prefix code
-}
-
-var (
 	// RFC section 3.2.7.
 	// Prefix code lengths for code lengths alphabet.
 	clenLens = [maxNumCLenSyms]uint{
@@ -38,48 +36,178 @@ var (
 	}
 )
 
-func initPrefixLUTs() {
+func init() {
 	// These come from the RFC section 3.2.5.
-	for i, base := 0, 3; i < len(lenLUT)-1; i++ {
-		nb := uint(i/4 - 1)
-		if i < 4 {
-			nb = 0
-		}
-		lenLUT[i] = rangeCode{base: uint32(base), bits: uint32(nb)}
-		base += 1 << nb
-	}
-	lenLUT[len(lenLUT)-1] = rangeCode{base: 258, bits: 0}
-
-	// These come from the RFC section 3.2.5.
-	for i, base := 0, 1; i < len(distLUT); i++ {
-		nb := uint(i/2 - 1)
-		if i < 2 {
-			nb = 0
-		}
-		distLUT[i] = rangeCode{base: uint32(base), bits: uint32(nb)}
-		base += 1 << nb
-	}
+	lenRanges = append(prefix.MakeRangeCodes(3, []uint{
+		0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,
+	}), prefix.RangeCode{Base: 258, Len: 0})
+	distRanges = prefix.MakeRangeCodes(1, []uint{
+		0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13,
+	})
 
 	// These come from the RFC section 3.2.6.
-	var litCodes [288]prefixCode
+	var litCodes [288]prefix.PrefixCode
 	for i := 0; i < 144; i++ {
-		litCodes[i] = prefixCode{sym: uint32(i), len: 8}
+		litCodes[i] = prefix.PrefixCode{Sym: uint32(i), Len: 8}
 	}
 	for i := 144; i < 256; i++ {
-		litCodes[i] = prefixCode{sym: uint32(i), len: 9}
+		litCodes[i] = prefix.PrefixCode{Sym: uint32(i), Len: 9}
 	}
 	for i := 256; i < 280; i++ {
-		litCodes[i] = prefixCode{sym: uint32(i), len: 7}
+		litCodes[i] = prefix.PrefixCode{Sym: uint32(i), Len: 7}
 	}
 	for i := 280; i < 288; i++ {
-		litCodes[i] = prefixCode{sym: uint32(i), len: 8}
+		litCodes[i] = prefix.PrefixCode{Sym: uint32(i), Len: 8}
 	}
-	litTree.Init(litCodes[:], true)
+	prefix.GeneratePrefixes(litCodes[:])
+	decLit.Init(litCodes[:])
+	encLit.Init(litCodes[:])
 
 	// These come from the RFC section 3.2.6.
-	var distCodes [32]prefixCode
+	var distCodes [32]prefix.PrefixCode
 	for i := 0; i < 32; i++ {
-		distCodes[i] = prefixCode{sym: uint32(i), len: 5}
+		distCodes[i] = prefix.PrefixCode{Sym: uint32(i), Len: 5}
 	}
-	distTree.Init(distCodes[:], true)
+	prefix.GeneratePrefixes(distCodes[:])
+	decDist.Init(distCodes[:])
+	encDist.Init(distCodes[:])
+}
+
+type prefixReader struct {
+	prefix.Reader
+
+	clenTree prefix.Decoder
+}
+
+func (pr *prefixReader) Init(r io.Reader) {
+	pr.Reader.Init(r, false)
+}
+
+// ReadPrefixCodes reads the literal and distance prefix codes according to
+// RFC section 3.2.7.
+func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
+	numLitSyms := pr.ReadBits(5) + 257
+	numDistSyms := pr.ReadBits(5) + 1
+	numCLenSyms := pr.ReadBits(4) + 4
+	if numLitSyms > maxNumLitSyms || numDistSyms > maxNumDistSyms {
+		panic(ErrCorrupt)
+	}
+
+	// Read the code-lengths prefix table.
+	var codeCLensArr [maxNumCLenSyms]prefix.PrefixCode // Sorted, but may have holes
+	for _, sym := range clenLens[:numCLenSyms] {
+		clen := pr.ReadBits(3)
+		if clen > 0 {
+			codeCLensArr[sym] = prefix.PrefixCode{Sym: uint32(sym), Len: uint32(clen)}
+		}
+	}
+	codeCLens := codeCLensArr[:0] // Compact the array to have no holes
+	for _, c := range codeCLensArr {
+		if c.Len > 0 {
+			codeCLens = append(codeCLens, c)
+		}
+	}
+	codeCLens = handleDegenerateCodes(codeCLens, maxNumCLenSyms)
+	if err := prefix.GeneratePrefixes(codeCLens); err != nil {
+		panic(err)
+	}
+	pr.clenTree.Init(codeCLens)
+
+	// Use code-lengths table to decode HLIT and HDIST prefix tables.
+	var codesArr [maxNumLitSyms + maxNumDistSyms]prefix.PrefixCode
+	var clenLast uint
+	codeLits := codesArr[:0]
+	codeDists := codesArr[maxNumLitSyms:maxNumLitSyms]
+	appendCode := func(sym, clen uint) {
+		if sym < numLitSyms {
+			pc := prefix.PrefixCode{Sym: uint32(sym), Len: uint32(clen)}
+			codeLits = append(codeLits, pc)
+		} else {
+			pc := prefix.PrefixCode{Sym: uint32(sym - numLitSyms), Len: uint32(clen)}
+			codeDists = append(codeDists, pc)
+		}
+	}
+	for sym, maxSyms := uint(0), numLitSyms+numDistSyms; sym < maxSyms; {
+		clen := pr.ReadSymbol(&pr.clenTree)
+		if clen < 16 {
+			// Literal bit-length symbol used.
+			if clen > 0 {
+				appendCode(sym, clen)
+			}
+			clenLast = clen
+			sym++
+		} else {
+			// Repeater symbol used.
+			var repCnt uint
+			switch repSym := clen; repSym {
+			case 16:
+				if sym == 0 {
+					panic(ErrCorrupt)
+				}
+				clen = clenLast
+				repCnt = 3 + pr.ReadBits(2)
+			case 17:
+				clen = 0
+				repCnt = 3 + pr.ReadBits(3)
+			case 18:
+				clen = 0
+				repCnt = 11 + pr.ReadBits(7)
+			default:
+				panic(ErrCorrupt)
+			}
+
+			if clen > 0 {
+				for symEnd := sym + repCnt; sym < symEnd; sym++ {
+					appendCode(sym, clen)
+				}
+			} else {
+				sym += repCnt
+			}
+			if sym > maxSyms {
+				panic(ErrCorrupt)
+			}
+		}
+	}
+
+	codeLits = handleDegenerateCodes(codeLits, maxNumLitSyms)
+	if err := prefix.GeneratePrefixes(codeLits); err != nil {
+		panic(err)
+	}
+	hl.Init(codeLits)
+
+	codeDists = handleDegenerateCodes(codeDists, maxNumDistSyms)
+	if err := prefix.GeneratePrefixes(codeDists); err != nil {
+		panic(err)
+	}
+	hd.Init(codeDists)
+
+	// As an optimization, we can initialize minBits to read at a time for the
+	// HLIT tree to the length of the EOB marker since we know that every block
+	// must terminate with one. This preserves the property that we never read
+	// any extra bytes after the end of the DEFLATE stream.
+	//
+	// This optimization is not helpful if the underlying reader is bufio.Reader
+	// since FeedBits always attempts to fill the bit buffer.
+	if !pr.IsBufferedReader() {
+		for i := len(codeLits) - 1; i >= 0; i-- {
+			if codeLits[i].Sym == 256 && codeLits[i].Len > 0 {
+				hl.MinBits = codeLits[i].Len
+				break
+			}
+		}
+	}
+}
+
+// RFC section 3.2.7 allows degenerate prefix trees with only node, but requires
+// a single bit for that node. This causes an unbalanced tree where the "1" code
+// is unused. The canonical prefix code generation algorithm breaks with this.
+//
+// To handle this case, we artificially insert another node for the "1" code
+// that uses a symbol larger than the alphabet to force an error later if
+// the code ends up getting used.
+func handleDegenerateCodes(codes prefix.PrefixCodes, maxSyms uint) prefix.PrefixCodes {
+	if len(codes) != 1 {
+		return codes
+	}
+	return append(codes, prefix.PrefixCode{Sym: uint32(maxSyms), Len: 1})
 }

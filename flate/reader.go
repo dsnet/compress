@@ -4,114 +4,127 @@
 
 package flate
 
-import "io"
+import (
+	"io"
+
+	"github.com/dsnet/compress/internal"
+	"github.com/dsnet/compress/internal/prefix"
+)
 
 type Reader struct {
 	InputOffset  int64 // Total number of bytes read from underlying io.Reader
 	OutputOffset int64 // Total number of bytes emitted from Read
 
-	rd     bitReader // Input source
-	toRead []byte    // Uncompressed data ready to be emitted from Read
-	dist   int       // The current distance
-	blkLen int       // Uncompressed bytes left to read in meta-block
-	cpyLen int       // Bytes left to backward dictionary copy
-	last   bool      // Last block bit detected
-	err    error     // Persistent error
+	rd     prefixReader // Input source
+	toRead []byte       // Uncompressed data ready to be emitted from Read
+	dist   int          // The current distance
+	blkLen int          // Uncompressed bytes left to read in meta-block
+	cpyLen int          // Bytes left to backward dictionary copy
+	last   bool         // Last block bit detected
+	err    error        // Persistent error
 
 	step      func(*Reader) // Single step of decompression work (can panic)
 	stepState int           // The sub-step state for certain steps
 
-	dict     dictDecoder   // Dynamic sliding dictionary
-	litTree  prefixDecoder // Literal and length symbol prefix decoder
-	distTree prefixDecoder // Backward distance symbol prefix decoder
+	dict     dictDecoder    // Dynamic sliding dictionary
+	litTree  prefix.Decoder // Literal and length symbol prefix decoder
+	distTree prefix.Decoder // Backward distance symbol prefix decoder
 }
 
 func NewReader(r io.Reader) *Reader {
-	fr := new(Reader)
-	fr.Reset(r)
-	return fr
+	zr := new(Reader)
+	zr.Reset(r)
+	return zr
 }
 
-func (fr *Reader) Read(buf []byte) (int, error) {
+func (zr *Reader) Read(buf []byte) (int, error) {
 	for {
-		if len(fr.toRead) > 0 {
-			cnt := copy(buf, fr.toRead)
-			fr.toRead = fr.toRead[cnt:]
-			fr.OutputOffset += int64(cnt)
+		if len(zr.toRead) > 0 {
+			cnt := copy(buf, zr.toRead)
+			zr.toRead = zr.toRead[cnt:]
+			zr.OutputOffset += int64(cnt)
 			return cnt, nil
 		}
-		if fr.err != nil {
-			return 0, fr.err
+		if zr.err != nil {
+			return 0, zr.err
 		}
 
 		// Perform next step in decompression process.
-		fr.rd.offset = fr.InputOffset
+		zr.rd.Offset = zr.InputOffset
 		func() {
-			defer errRecover(&fr.err)
-			fr.step(fr)
+			defer errRecover(&zr.err)
+			zr.step(zr)
 		}()
-		fr.InputOffset = fr.rd.FlushOffset()
-		if fr.err != nil {
-			fr.toRead = fr.dict.ReadFlush() // Flush what's left in case of error
+		var err error
+		if zr.InputOffset, err = zr.rd.Flush(); err != nil {
+			zr.err = err
+		}
+		if zr.err != nil {
+			if zr.err == internal.ErrInvalid {
+				zr.err = ErrCorrupt
+			}
+		}
+		if zr.err != nil {
+			zr.toRead = zr.dict.ReadFlush() // Flush what's left in case of error
 		}
 	}
 }
 
-func (fr *Reader) Close() error {
-	if fr.err == io.EOF || fr.err == io.ErrClosedPipe {
-		fr.toRead = nil // Make sure future reads fail
-		fr.err = io.ErrClosedPipe
+func (zr *Reader) Close() error {
+	if zr.err == io.EOF || zr.err == ErrClosed {
+		zr.toRead = nil // Make sure future reads fail
+		zr.err = ErrClosed
 		return nil
 	}
-	return fr.err // Return the persistent error
+	return zr.err // Return the persistent error
 }
 
-func (fr *Reader) Reset(r io.Reader) error {
-	*fr = Reader{
-		rd:   fr.rd,
+func (zr *Reader) Reset(r io.Reader) error {
+	*zr = Reader{
+		rd:   zr.rd,
 		step: (*Reader).readBlockHeader,
-		dict: fr.dict,
+		dict: zr.dict,
 	}
-	fr.rd.Init(r)
-	fr.dict.Init(maxHistSize)
+	zr.rd.Init(r)
+	zr.dict.Init(maxHistSize)
 	return nil
 }
 
 // readBlockHeader reads the block header according to RFC section 3.2.3.
-func (fr *Reader) readBlockHeader() {
-	if fr.last {
-		fr.rd.ReadPads()
+func (zr *Reader) readBlockHeader() {
+	if zr.last {
+		zr.rd.ReadPads()
 		panic(io.EOF)
 	}
 
-	fr.last = fr.rd.ReadBits(1) == 1
-	switch fr.rd.ReadBits(2) {
+	zr.last = zr.rd.ReadBits(1) == 1
+	switch zr.rd.ReadBits(2) {
 	case 0:
 		// Raw block (RFC section 3.2.4).
-		fr.rd.ReadPads()
+		zr.rd.ReadPads()
 
-		n := uint16(fr.rd.ReadBits(16))
-		nn := uint16(fr.rd.ReadBits(16))
+		n := uint16(zr.rd.ReadBits(16))
+		nn := uint16(zr.rd.ReadBits(16))
 		if n^nn != 0xffff {
 			panic(ErrCorrupt)
 		}
-		fr.blkLen = int(n)
+		zr.blkLen = int(n)
 
 		// By convention, an empty block flushes the read buffer.
-		if fr.blkLen == 0 {
-			fr.toRead = fr.dict.ReadFlush()
-			fr.step = (*Reader).readBlockHeader
+		if zr.blkLen == 0 {
+			zr.toRead = zr.dict.ReadFlush()
+			zr.step = (*Reader).readBlockHeader
 			return
 		}
-		fr.step = (*Reader).readRawData
+		zr.step = (*Reader).readRawData
 	case 1:
 		// Fixed prefix block (RFC section 3.2.6).
-		fr.litTree, fr.distTree = litTree, distTree
-		fr.step = (*Reader).readBlock
+		zr.litTree, zr.distTree = decLit, decDist
+		zr.step = (*Reader).readBlock
 	case 2:
 		// Dynamic prefix block (RFC section 3.2.7).
-		fr.rd.ReadPrefixCodes(&fr.litTree, &fr.distTree)
-		fr.step = (*Reader).readBlock
+		zr.rd.ReadPrefixCodes(&zr.litTree, &zr.distTree)
+		zr.step = (*Reader).readBlock
 	default:
 		// Reserved block (RFC section 3.2.3).
 		panic(ErrCorrupt)
@@ -119,15 +132,15 @@ func (fr *Reader) readBlockHeader() {
 }
 
 // readRawData reads raw data according to RFC section 3.2.4.
-func (fr *Reader) readRawData() {
-	buf := fr.dict.WriteSlice()
-	if len(buf) > fr.blkLen {
-		buf = buf[:fr.blkLen]
+func (zr *Reader) readRawData() {
+	buf := zr.dict.WriteSlice()
+	if len(buf) > zr.blkLen {
+		buf = buf[:zr.blkLen]
 	}
 
-	cnt, err := fr.rd.Read(buf)
-	fr.blkLen -= cnt
-	fr.dict.WriteMark(cnt)
+	cnt, err := zr.rd.Read(buf)
+	zr.blkLen -= cnt
+	zr.dict.WriteMark(cnt)
 	if err != nil {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
@@ -135,22 +148,22 @@ func (fr *Reader) readRawData() {
 		panic(err)
 	}
 
-	if fr.blkLen > 0 {
-		fr.toRead = fr.dict.ReadFlush()
-		fr.step = (*Reader).readRawData // We need to continue this work
+	if zr.blkLen > 0 {
+		zr.toRead = zr.dict.ReadFlush()
+		zr.step = (*Reader).readRawData // We need to continue this work
 		return
 	}
-	fr.step = (*Reader).readBlockHeader
+	zr.step = (*Reader).readBlockHeader
 }
 
 // readCommands reads block commands according to RFC section 3.2.3.
-func (fr *Reader) readBlock() {
+func (zr *Reader) readBlock() {
 	const (
 		stateInit = iota // Zero value must be stateInit
 		stateDict
 	)
 
-	switch fr.stepState {
+	switch zr.stepState {
 	case stateInit:
 		goto readLiteral
 	case stateDict:
@@ -160,51 +173,51 @@ func (fr *Reader) readBlock() {
 readLiteral:
 	// Read literal and/or (length, distance) according to RFC section 3.2.3.
 	{
-		if fr.dict.AvailSize() == 0 {
-			fr.toRead = fr.dict.ReadFlush()
-			fr.step = (*Reader).readBlock
-			fr.stepState = stateInit // Need to continue work here
+		if zr.dict.AvailSize() == 0 {
+			zr.toRead = zr.dict.ReadFlush()
+			zr.step = (*Reader).readBlock
+			zr.stepState = stateInit // Need to continue work here
 			return
 		}
 
 		// Read the literal symbol.
-		litSym, ok := fr.rd.TryReadSymbol(&fr.litTree)
+		litSym, ok := zr.rd.TryReadSymbol(&zr.litTree)
 		if !ok {
-			litSym = fr.rd.ReadSymbol(&fr.litTree)
+			litSym = zr.rd.ReadSymbol(&zr.litTree)
 		}
 		switch {
 		case litSym < endBlockSym:
-			fr.dict.WriteByte(byte(litSym))
+			zr.dict.WriteByte(byte(litSym))
 			goto readLiteral
 		case litSym == endBlockSym:
-			fr.step = (*Reader).readBlockHeader
-			fr.stepState = stateInit // Next call to readBlock must start here
+			zr.step = (*Reader).readBlockHeader
+			zr.stepState = stateInit // Next call to readBlock must start here
 			return
 		case litSym < maxNumLitSyms:
 			// Decode the copy length.
-			rec := lenLUT[litSym-257]
-			extra, ok := fr.rd.TryReadBits(uint(rec.bits))
+			rec := lenRanges[litSym-257]
+			extra, ok := zr.rd.TryReadBits(uint(rec.Len))
 			if !ok {
-				extra = fr.rd.ReadBits(uint(rec.bits))
+				extra = zr.rd.ReadBits(uint(rec.Len))
 			}
-			fr.cpyLen = int(rec.base) + int(extra)
+			zr.cpyLen = int(rec.Base) + int(extra)
 
 			// Read the distance symbol.
-			distSym, ok := fr.rd.TryReadSymbol(&fr.distTree)
+			distSym, ok := zr.rd.TryReadSymbol(&zr.distTree)
 			if !ok {
-				distSym = fr.rd.ReadSymbol(&fr.distTree)
+				distSym = zr.rd.ReadSymbol(&zr.distTree)
 			}
 			if distSym >= maxNumDistSyms {
 				panic(ErrCorrupt)
 			}
 
 			// Decode the copy distance.
-			rec = distLUT[distSym]
-			extra, ok = fr.rd.TryReadBits(uint(rec.bits))
+			rec = distRanges[distSym]
+			extra, ok = zr.rd.TryReadBits(uint(rec.Len))
 			if !ok {
-				extra = fr.rd.ReadBits(uint(rec.bits))
+				extra = zr.rd.ReadBits(uint(rec.Len))
 			}
-			fr.dist = int(rec.base) + int(extra)
+			zr.dist = int(rec.Base) + int(extra)
 
 			goto copyDistance
 		default:
@@ -215,16 +228,16 @@ readLiteral:
 copyDistance:
 	// Perform a backwards copy according to RFC section 3.2.3.
 	{
-		cnt := fr.dict.TryWriteCopy(fr.dist, fr.cpyLen)
+		cnt := zr.dict.TryWriteCopy(zr.dist, zr.cpyLen)
 		if cnt == 0 {
-			cnt = fr.dict.WriteCopy(fr.dist, fr.cpyLen)
+			cnt = zr.dict.WriteCopy(zr.dist, zr.cpyLen)
 		}
-		fr.cpyLen -= cnt
+		zr.cpyLen -= cnt
 
-		if fr.cpyLen > 0 {
-			fr.toRead = fr.dict.ReadFlush()
-			fr.step = (*Reader).readBlock
-			fr.stepState = stateDict // Need to continue work here
+		if zr.cpyLen > 0 {
+			zr.toRead = zr.dict.ReadFlush()
+			zr.step = (*Reader).readBlock
+			zr.stepState = stateDict // Need to continue work here
 			return
 		} else {
 			goto readLiteral
