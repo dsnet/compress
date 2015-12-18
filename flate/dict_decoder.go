@@ -77,6 +77,31 @@ func (dd *dictDecoder) WriteByte(c byte) {
 	dd.wrPos++
 }
 
+// TryWriteCopy tries to copy a string at a given (distance, length) to the
+// output. This specialized version is optimized for short distances.
+//
+// This method is designed to be inlined for performance reasons.
+//
+// This invariant must be kept: 0 < dist <= HistSize()
+func (dd *dictDecoder) TryWriteCopy(dist, length int) int {
+	wrPos := dd.wrPos
+	wrEnd := wrPos + length
+	if wrPos < dist || wrEnd > len(dd.hist) {
+		return 0
+	}
+
+	// Copy overlapping section before destination.
+	wrBase := wrPos
+	rdPos := wrPos - dist
+loop:
+	wrPos += copy(dd.hist[wrPos:wrEnd], dd.hist[rdPos:wrPos])
+	if wrPos < wrEnd {
+		goto loop // Avoid for-loop so that this function can be inlined
+	}
+	dd.wrPos = wrPos
+	return wrPos - wrBase
+}
+
 // WriteCopy copies a string at a given (distance, length) to the output.
 // This returns the number of bytes copied and may be less than the requested
 // length if the available space in the output buffer is too small.
@@ -84,24 +109,26 @@ func (dd *dictDecoder) WriteByte(c byte) {
 // This invariant must be kept: 0 < dist <= HistSize()
 func (dd *dictDecoder) WriteCopy(dist, length int) int {
 	wrBase := dd.wrPos
-	wrEnd := dd.wrPos + length
+	wrPos := wrBase
+	rdPos := wrPos - dist
+	wrEnd := wrPos + length
 	if wrEnd > len(dd.hist) {
 		wrEnd = len(dd.hist)
 	}
 
 	// Copy non-overlapping section after destination.
-	rdPos := dd.wrPos - dist
 	if rdPos < 0 {
 		rdPos += len(dd.hist)
-		dd.wrPos += copy(dd.hist[dd.wrPos:wrEnd], dd.hist[rdPos:])
+		wrPos += copy(dd.hist[wrPos:wrEnd], dd.hist[rdPos:])
 		rdPos = 0
 	}
 
 	// Copy overlapping section before destination.
-	for dd.wrPos < wrEnd {
-		dd.wrPos += copy(dd.hist[dd.wrPos:wrEnd], dd.hist[rdPos:dd.wrPos])
+	for wrPos < wrEnd {
+		wrPos += copy(dd.hist[wrPos:wrEnd], dd.hist[rdPos:wrPos])
 	}
-	return dd.wrPos - wrBase
+	dd.wrPos = wrPos
+	return wrPos - wrBase
 }
 
 // ReadFlush returns a slice of the historical buffer that is ready to be

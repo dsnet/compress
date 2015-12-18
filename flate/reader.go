@@ -215,7 +215,10 @@ readLiteral:
 copyDistance:
 	// Perform a backwards copy according to RFC section 3.2.3.
 	{
-		cnt := fr.dict.WriteCopy(fr.dist, fr.cpyLen)
+		cnt := fr.dict.TryWriteCopy(fr.dist, fr.cpyLen)
+		if cnt == 0 {
+			cnt = fr.dict.WriteCopy(fr.dist, fr.cpyLen)
+		}
 		fr.cpyLen -= cnt
 
 		if fr.cpyLen > 0 {
