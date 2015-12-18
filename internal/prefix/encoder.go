@@ -13,7 +13,8 @@ import (
 type Encoder struct {
 	chunks    []uint32 // First-level lookup map
 	chunkMask uint32   // Mask the length of the chunks table
-	numSyms   uint32   // Number of symbols
+
+	NumSyms uint32 // Number of symbols
 }
 
 // Init initializes Encoder according to the codes provided.
@@ -22,10 +23,10 @@ func (pe *Encoder) Init(codes PrefixCodes) {
 	if len(codes) <= 1 {
 		switch {
 		case len(codes) == 0: // Empty tree (should error if used later)
-			*pe = Encoder{chunks: pe.chunks[:0], numSyms: 0}
+			*pe = Encoder{chunks: pe.chunks[:0], NumSyms: 0}
 		case len(codes) == 1 && codes[0].Len == 0: // Single code tree (bit-length of zero)
 			pe.chunks = append(pe.chunks[:0], codes[0].Val<<countBits|0)
-			*pe = Encoder{chunks: pe.chunks[:1], numSyms: 1}
+			*pe = Encoder{chunks: pe.chunks[:1], NumSyms: 1}
 		default:
 			panic("invalid codes")
 		}
@@ -43,7 +44,7 @@ func (pe *Encoder) Init(codes PrefixCodes) {
 	for n := len(codes) - 1; n > 0; n >>= 1 {
 		numChunks <<= 1
 	}
-	pe.numSyms = uint32(len(codes))
+	pe.NumSyms = uint32(len(codes))
 
 retry:
 	// Allocate and reset chunks.
