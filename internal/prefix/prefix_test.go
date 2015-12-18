@@ -226,7 +226,6 @@ func TestReader(t *testing.T) {
 
 func TestWriter(t *testing.T) {
 	var endians = map[string]bool{"littleEndian": false, "bigEndian": true}
-	endians = map[string]bool{"littleEndian": false}
 
 	var i int
 	for ne, endian := range endians {
