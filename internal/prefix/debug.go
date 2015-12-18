@@ -128,8 +128,8 @@ func (pd Decoder) String() string {
 	ss = append(ss, fmt.Sprintf("\tchunkMask: %b,", pd.chunkMask))
 	ss = append(ss, fmt.Sprintf("\tlinkMask:  %b,", pd.linkMask))
 	ss = append(ss, fmt.Sprintf("\tchunkBits: %d,", pd.chunkBits))
-	ss = append(ss, fmt.Sprintf("\tminBits:   %d,", pd.minBits))
-	ss = append(ss, fmt.Sprintf("\tnumSyms:   %d,", pd.numSyms))
+	ss = append(ss, fmt.Sprintf("\tMinBits:   %d,", pd.MinBits))
+	ss = append(ss, fmt.Sprintf("\tNumSyms:   %d,", pd.NumSyms))
 	ss = append(ss, "}")
 	return strings.Join(ss, "\n")
 }
@@ -153,7 +153,7 @@ func (pe Encoder) String() string {
 		ss = append(ss, "\t},")
 	}
 	ss = append(ss, fmt.Sprintf("\tchunkMask: %b,", pe.chunkMask))
-	ss = append(ss, fmt.Sprintf("\tnumSyms:   %d,", pe.numSyms))
+	ss = append(ss, fmt.Sprintf("\tNumSyms:   %d,", pe.NumSyms))
 	ss = append(ss, "}")
 	return strings.Join(ss, "\n")
 }

@@ -25,12 +25,13 @@ import (
 type Reader struct {
 	Offset int64 // Number of bytes read from the underlying io.Reader
 
-	rd        io.Reader
-	byteRd    compress.ByteReader
-	bufRd     compress.BufferedReader
-	bufBits   uint64 // Buffer to hold some bits
-	numBits   uint   // Number of valid bits in bufBits
-	bigEndian bool   // Are bits read in big-endian order?
+	rd     io.Reader
+	byteRd compress.ByteReader
+	bufRd  compress.BufferedReader
+
+	bufBits   uint64    // Buffer to hold some bits
+	numBits   uint      // Number of valid bits in bufBits
+	transform [256]byte // LUT to transform bit-ordering
 
 	// These fields are only used if rd is a compress.BufferedReader.
 	bufPeek     []byte // Buffer for the Peek data
@@ -43,7 +44,7 @@ type Reader struct {
 // (as done in bzip2), otherwise it will read starting from the
 // least-significant bits of a byte (such as for deflate and brotli).
 func (pr *Reader) Init(r io.Reader, bigEndian bool) {
-	*pr = Reader{rd: r, bigEndian: bigEndian}
+	*pr = Reader{rd: r}
 	switch rr := r.(type) {
 	case *bytes.Buffer:
 		pr.bufRd = &buffer{Buffer: rr}
@@ -59,6 +60,18 @@ func (pr *Reader) Init(r io.Reader, bigEndian bool) {
 		br := bufio.NewReader(r)
 		pr.rd, pr.bufRd = br, br
 	}
+
+	if bigEndian {
+		copy(pr.transform[:], internal.ReverseLUT[:])
+	} else {
+		copy(pr.transform[:], internal.IdentityLUT[:])
+	}
+}
+
+// IsBufferedReader reports whether the underlying io.Reader is also a
+// compress.BufferedReader.
+func (pr *Reader) IsBufferedReader() bool {
+	return pr.bufRd != nil
 }
 
 // ReadPads reads 0-7 bits from the bit buffer to achieve byte-alignment.
@@ -78,11 +91,7 @@ func (pr *Reader) Read(buf []byte) (cnt int, err error) {
 			return 0, internal.Error{"non-aligned bit buffer"}
 		}
 		for cnt = 0; len(buf) > cnt && pr.numBits > 0; cnt++ {
-			c := byte(pr.bufBits)
-			if pr.bigEndian {
-				c = internal.ReverseLUT[c]
-			}
-			buf[cnt] = c
+			buf[cnt] = pr.transform[byte(pr.bufBits)]
 			pr.bufBits >>= 8
 			pr.numBits -= 8
 		}
@@ -133,7 +142,7 @@ func (pr *Reader) ReadBits(nb uint) uint {
 //
 // This method is designed to be inlined for performance reasons.
 func (pr *Reader) TryReadSymbol(pd *Decoder) (uint, bool) {
-	if pr.numBits < uint(pd.minBits) || len(pd.chunks) == 0 {
+	if pr.numBits < uint(pd.MinBits) || len(pd.chunks) == 0 {
 		return 0, false
 	}
 	chunk := pd.chunks[uint32(pr.bufBits)&pd.chunkMask]
@@ -152,7 +161,7 @@ func (pr *Reader) ReadSymbol(pd *Decoder) uint {
 		panic(internal.ErrInvalid) // Decode with empty tree
 	}
 
-	nb := uint(pd.minBits)
+	nb := uint(pd.MinBits)
 	for {
 		if err := pr.pullBits(nb); err != nil {
 			panic(err)
@@ -233,10 +242,7 @@ func (pr *Reader) pullBits(nb uint) error {
 				cnt = len(pr.bufPeek)
 			}
 			for _, c := range pr.bufPeek[:cnt] {
-				if pr.bigEndian {
-					c = internal.ReverseLUT[c]
-				}
-				pr.bufBits |= uint64(c) << pr.numBits
+				pr.bufBits |= uint64(pr.transform[c]) << pr.numBits
 				pr.numBits += 8
 			}
 			pr.bufPeek = pr.bufPeek[cnt:]
@@ -254,10 +260,7 @@ func (pr *Reader) pullBits(nb uint) error {
 				}
 				return err
 			}
-			if pr.bigEndian {
-				c = internal.ReverseLUT[c]
-			}
-			pr.bufBits |= uint64(c) << pr.numBits
+			pr.bufBits |= uint64(pr.transform[c]) << pr.numBits
 			pr.numBits += 8
 			pr.Offset++
 		}

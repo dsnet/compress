@@ -42,8 +42,9 @@ type Decoder struct {
 	chunkMask uint32     // Mask the length of the chunks table
 	linkMask  uint32     // Mask the length of the link table
 	chunkBits uint32     // Bit-length of the chunks table
-	minBits   uint32     // The minimum number of bits to safely make progress
-	numSyms   uint32     // Number of symbols
+
+	MinBits uint32 // The minimum number of bits to safely make progress
+	NumSyms uint32 // Number of symbols
 }
 
 // Init initializes Decoder according to the codes provided.
@@ -52,10 +53,10 @@ func (pd *Decoder) Init(codes PrefixCodes) {
 	if len(codes) <= 1 {
 		switch {
 		case len(codes) == 0: // Empty tree (should error if used later)
-			*pd = Decoder{chunks: pd.chunks[:0], links: pd.links[:0], numSyms: 0}
+			*pd = Decoder{chunks: pd.chunks[:0], links: pd.links[:0], NumSyms: 0}
 		case len(codes) == 1 && codes[0].Len == 0: // Single code tree (bit-length of zero)
 			pd.chunks = append(pd.chunks[:0], codes[0].Sym<<countBits|0)
-			*pd = Decoder{chunks: pd.chunks[:1], links: pd.links[:0], numSyms: 1}
+			*pd = Decoder{chunks: pd.chunks[:1], links: pd.links[:0], NumSyms: 1}
 		default:
 			panic("invalid codes")
 		}
@@ -80,8 +81,8 @@ func (pd *Decoder) Init(codes PrefixCodes) {
 
 	// Allocate chunks table as needed.
 	const maxChunkBits = 9 // This can be tuned for better performance
-	pd.numSyms = uint32(len(codes))
-	pd.minBits = minBits
+	pd.NumSyms = uint32(len(codes))
+	pd.MinBits = minBits
 	pd.chunkBits = maxBits
 	if pd.chunkBits > maxChunkBits {
 		pd.chunkBits = maxChunkBits
