@@ -79,7 +79,7 @@ func (zr *Reader) Close() error {
 	return zr.err // Return the persistent error
 }
 
-func (zr *Reader) Reset(r io.Reader) error {
+func (zr *Reader) Reset(r io.Reader) {
 	*zr = Reader{
 		rd:   zr.rd,
 		step: (*Reader).readBlockHeader,
@@ -87,7 +87,6 @@ func (zr *Reader) Reset(r io.Reader) error {
 	}
 	zr.rd.Init(r)
 	zr.dict.Init(maxHistSize)
-	return nil
 }
 
 // readBlockHeader reads the block header according to RFC section 3.2.3.
