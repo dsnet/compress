@@ -19,11 +19,11 @@ package sais
 //	https://ge-nong.googlecode.com/files/Linear%20Time%20Suffix%20Array%20Construction%20Using%20D-Critical%20Substrings.pdf
 //	https://ge-nong.googlecode.com/files/Two%20Efficient%20Algorithms%20for%20Linear%20Time%20Suffix%20Array%20Construction.pdf
 
-// ComputeSA computes the suffix array of T and places the result in SA.
-// Both T and SA must be the same length.
-func ComputeSA(T []byte, SA []int) {
-	if len(SA) != len(T) {
+// ComputeSA computes the suffix array of t and places the result in sa.
+// Both t and sa must be the same length.
+func ComputeSA(t []byte, sa []int) {
+	if len(sa) != len(t) {
 		panic("mismatching sizes")
 	}
-	computeSA_byte(T, SA, 0, len(T), 256)
+	computeSA_byte(t, sa, 0, len(t), 256)
 }
