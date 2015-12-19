@@ -80,7 +80,7 @@ func (pw *Writer) TryWriteBits(v, nb uint) bool {
 
 // WriteBits writes nb bits of v to the underlying writer.
 func (pw *Writer) WriteBits(v, nb uint) {
-	if _, err := pw.pushBits(); err != nil {
+	if _, err := pw.PushBits(); err != nil {
 		panic(err)
 	}
 	pw.bufBits |= uint64(v) << pw.numBits
@@ -104,7 +104,7 @@ func (pw *Writer) TryWriteSymbol(sym uint, pe *Encoder) bool {
 
 // WriteSymbol writes the symbol using the provided prefix Encoder.
 func (pw *Writer) WriteSymbol(sym uint, pe *Encoder) {
-	if _, err := pw.pushBits(); err != nil {
+	if _, err := pw.PushBits(); err != nil {
 		panic(err)
 	}
 	chunk := pe.chunks[uint32(sym)&pe.chunkMask]
@@ -120,7 +120,7 @@ func (pw *Writer) Flush() (int64, error) {
 	if pw.numBits < 8 && pw.cntBuf == 0 {
 		return pw.Offset, nil
 	}
-	if _, err := pw.pushBits(); err != nil {
+	if _, err := pw.PushBits(); err != nil {
 		return pw.Offset, err
 	}
 	cnt, err := pw.wr.Write(pw.buf[:pw.cntBuf])
@@ -129,9 +129,9 @@ func (pw *Writer) Flush() (int64, error) {
 	return pw.Offset, err
 }
 
-// pushBits pushes as many bytes as possible from the bit buffer to the byte
+// PushBits pushes as many bytes as possible from the bit buffer to the byte
 // buffer, reporting the number of bits pushed.
-func (pw *Writer) pushBits() (uint, error) {
+func (pw *Writer) PushBits() (uint, error) {
 	if pw.cntBuf >= len(pw.buf)-8 {
 		cnt, err := pw.wr.Write(pw.buf[:pw.cntBuf])
 		pw.cntBuf -= cnt

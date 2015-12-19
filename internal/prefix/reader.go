@@ -36,7 +36,7 @@ type Reader struct {
 	// These fields are only used if rd is a compress.BufferedReader.
 	bufPeek     []byte // Buffer for the Peek data
 	discardBits int    // Number of bits to discard from reader
-	fedBits     uint   // Number of bits fed in last call to pullBits
+	fedBits     uint   // Number of bits fed in last call to PullBits
 }
 
 // Init initializes the bit Reader to read from r. If bigEndian is true, then
@@ -128,7 +128,7 @@ func (pr *Reader) TryReadBits(nb uint) (uint, bool) {
 
 // ReadBits reads nb bits in from the underlying reader.
 func (pr *Reader) ReadBits(nb uint) uint {
-	if err := pr.pullBits(nb); err != nil {
+	if err := pr.PullBits(nb); err != nil {
 		panic(err)
 	}
 	val := uint(pr.bufBits & uint64(1<<nb-1))
@@ -163,7 +163,7 @@ func (pr *Reader) ReadSymbol(pd *Decoder) uint {
 
 	nb := uint(pd.MinBits)
 	for {
-		if err := pr.pullBits(nb); err != nil {
+		if err := pr.PullBits(nb); err != nil {
 			panic(err)
 		}
 		chunk := pd.chunks[uint32(pr.bufBits)&pd.chunkMask]
@@ -205,12 +205,12 @@ func (pr *Reader) Flush() (int64, error) {
 	return pr.Offset, err
 }
 
-// pullBits ensures that at least nb bits exist in the bit buffer.
+// PullBits ensures that at least nb bits exist in the bit buffer.
 // If the underlying reader is a compress.BufferedReader, then this will fill
 // the bit buffer with as many bits as possible, relying on Peek and Discard to
 // properly advance the read offset. Otherwise, it will use ReadByte to fill the
 // buffer with just the right number of bits.
-func (pr *Reader) pullBits(nb uint) error {
+func (pr *Reader) PullBits(nb uint) error {
 	if pr.bufRd != nil {
 		pr.discardBits += int(pr.fedBits - pr.numBits)
 		for {
