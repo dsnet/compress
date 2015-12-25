@@ -132,6 +132,13 @@ func (zw *Writer) Close() error {
 	zw.wr.Offset = zw.OutputOffset
 	func() {
 		defer errRecover(&zw.err)
+		if !zw.wrHdr {
+			// Write stream header.
+			zw.wr.WriteBitsBE64(hdrMagic, 16)
+			zw.wr.WriteBitsBE64('h', 8)
+			zw.wr.WriteBitsBE64(uint64('0'+zw.level), 8)
+			zw.wrHdr = true
+		}
 		zw.wr.WriteBitsBE64(endMagic, 48)
 		zw.wr.WriteBitsBE64(uint64(zw.endCRC), 32)
 		zw.wr.WritePads(0)

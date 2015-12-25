@@ -27,6 +27,7 @@ func TestRoundTrip(t *testing.T) {
 	var vectors = []struct {
 		input []byte
 	}{
+		{input: nil},
 		{input: testutil.MustLoadFile(binary, -1)},
 		{input: testutil.MustLoadFile(digits, -1)},
 		{input: testutil.MustLoadFile(huffman, -1)},
