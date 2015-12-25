@@ -55,7 +55,6 @@ func TestRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Errorf("test %d, read error: got %v", i, err)
 		}
-		t.Log(len(output), len(v.input))
 
 		if !bytes.Equal(output, v.input) {
 			t.Errorf("test %d, output data mismatch", i)
