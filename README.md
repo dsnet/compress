@@ -12,17 +12,33 @@ This repository hosts a collection of compression related libraries. The goal of
 Of these three, the first objective is often at odds with the other two objectives and provides interesting challenges. Higher performance can often be achieved by muddling abstraction layers or using non-intuitive low-level primitives. Also, more features and functionality, while useful in some situations, often complicates the API. Thus, this package will attempt to satisfy all the goals, but will defer to favoring maintainability when the performance or flexibility benefits are not significant enough.
 
 
+## Library Status ##
+
+See [Task List](https://github.com/dsnet/compress/wiki/Task-List).
+
+
+## Performance  ##
+
+See [Performance Metrics](https://github.com/dsnet/compress/wiki/Performance-Metrics).
+
+
+## Frequently Asked Questions ##
+
+See [Frequently Asked Questions](https://github.com/dsnet/compress/wiki/Frequently-Asked-Questions).
+
 ## Installation ##
 
 Run the command:
 
-```go get github.com/dsnet/compress```
+```go get -u github.com/dsnet/compress```
 
-This library requires ```Go1.5``` or higher in order to build.
+This library requires ```go1.5``` or higher in order to build.
 
 
 ## Packages ##
 
-* [brotli](http://godoc.org/github.com/dsnet/compress/brotli): Package brotli implements the Brotli format, described in RFC XXXX.
-* [flate](http://godoc.org/github.com/dsnet/compress/flate): Package flate implements the DEFLATE format, described in RFC 1951.
-* [bzip2](http://godoc.org/github.com/dsnet/compress/bzip2): Package bzip2 implements the BZip2 compressed data format.
+| Package | Description |
+| :------ | :---------- |
+| [brotli](http://godoc.org/github.com/dsnet/compress/brotli) | Package brotli implements the Brotli format, described in RFC XXXX. |
+| [flate](http://godoc.org/github.com/dsnet/compress/flate) | Package flate implements the DEFLATE format, described in RFC 1951. |
+| [bzip2](http://godoc.org/github.com/dsnet/compress/bzip2) | Package bzip2 implements the BZip2 compressed data format. |
