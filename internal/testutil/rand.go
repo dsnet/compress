@@ -25,17 +25,9 @@ func NewRand(seed int) *Rand {
 	return &Rand{Block: r}
 }
 
-func (r *Rand) Int() (x int) {
+func (r *Rand) Int() int {
 	r.Encrypt(r.blk[:], r.blk[:])
-	x |= int(r.blk[0]) << 0
-	x |= int(r.blk[1]) << 8
-	x |= int(r.blk[2]) << 16
-	x |= int(r.blk[3]) << 24
-	x |= int(r.blk[4]) << 32
-	x |= int(r.blk[5]) << 40
-	x |= int(r.blk[6]) << 48
-	x |= int(r.blk[7]&0x3f) << 56
-	return x
+	return int(binary.BigEndian.Uint32(r.blk[:]) >> 1)
 }
 
 func (r *Rand) Intn(n int) int {

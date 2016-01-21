@@ -22,14 +22,14 @@ void bzStreamInit(void* zs) {
 
 int bzCompressInit(void* zs, int lvl) {
 	bzStreamInit(zs);
-	BZ2_bzCompressInit((bz_stream*)zs, lvl, 0, 0);
+	return BZ2_bzCompressInit((bz_stream*)zs, lvl, 0, 0);
 }
 int bzCompress(void* zs, int mode) { return BZ2_bzCompress((bz_stream*)zs, mode); }
 int bzCompressEnd(void* zs)        { return BZ2_bzCompressEnd((bz_stream*)zs); }
 
 int bzDecompressInit(void* zs) {
 	bzStreamInit(zs);
-	BZ2_bzDecompressInit((bz_stream*)zs, 0, 0);
+	return BZ2_bzDecompressInit((bz_stream*)zs, 0, 0);
 }
 int bzDecompress(void* zs)    { return BZ2_bzDecompress((bz_stream*)zs); }
 int bzDecompressEnd(void* zs) { return BZ2_bzDecompressEnd((bz_stream*)zs); }

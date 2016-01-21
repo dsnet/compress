@@ -8,6 +8,12 @@ package compress
 import "io"
 import "bufio"
 
+// The Error interface identifies all compression related errors.
+type Error interface {
+	error
+	CompressError()
+}
+
 // ByteReader is a common interface accepted by all compression Readers.
 // It guarantees that the decompressor never reads more data than is necessary
 // from the underlying io.Reader.

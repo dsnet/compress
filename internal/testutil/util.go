@@ -57,3 +57,12 @@ func MustDecodeHex(s string) []byte {
 	}
 	return b
 }
+
+// MustDecodeBitGen must decode a BitGen formatted string or else panics.
+func MustDecodeBitGen(s string) []byte {
+	b, err := DecodeBitGen(s)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
