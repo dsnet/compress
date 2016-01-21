@@ -52,6 +52,24 @@ func ReverseUint32N(v uint32, n uint) (x uint32) {
 	return uint32(ReverseUint32(uint32(v << (32 - n))))
 }
 
+// ReverseUint64 reverses all bits of v.
+func ReverseUint64(v uint64) (x uint64) {
+	x |= uint64(ReverseLUT[byte(v>>0)]) << 56
+	x |= uint64(ReverseLUT[byte(v>>8)]) << 48
+	x |= uint64(ReverseLUT[byte(v>>16)]) << 40
+	x |= uint64(ReverseLUT[byte(v>>24)]) << 32
+	x |= uint64(ReverseLUT[byte(v>>32)]) << 24
+	x |= uint64(ReverseLUT[byte(v>>40)]) << 16
+	x |= uint64(ReverseLUT[byte(v>>48)]) << 8
+	x |= uint64(ReverseLUT[byte(v>>56)]) << 0
+	return x
+}
+
+// ReverseUint64N reverses the lower n bits of v.
+func ReverseUint64N(v uint64, n uint) (x uint64) {
+	return uint64(ReverseUint64(uint64(v << (64 - n))))
+}
+
 // MoveToFront is a data structure that allows for more efficient move-to-front
 // transformations. This specific implementation assumes that the alphabet is
 // densely packed within 0..255.
