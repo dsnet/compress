@@ -56,6 +56,21 @@ func TestDecodeBitGen(t *testing.T) {
 		output: []byte{0x0f, 0x1b},
 		valid:  true,
 	}, {
+		input:  `<<< < H16:0f1b`,
+		output: []byte{0x1b, 0x0f},
+		valid:  true,
+	}, {
+		input:  `<<< < H12:0f1b`,
+		output: []byte{0x1b, 0x0f},
+		valid:  true,
+	}, {
+		input:  `<<< < H12:0f1b H12:0f1b`,
+		output: []byte{0x1b, 0xbf, 0xf1},
+		valid:  true,
+	}, {
+		input: `<<< < H12:0f1b H11:0f1b`,
+		valid: false,
+	}, {
 		input: `>>>
 			< 110 D64:18364758544493064720 # Comment
 			> 110 D64:18364758544493064720 # Comment
