@@ -49,7 +49,7 @@ func MustLoadFile(file string, n int) []byte {
 	return b
 }
 
-// MustDecodeHex must decode a hex-string or else panics.
+// MustDecodeHex must decode a hexadecimal string or else panics.
 func MustDecodeHex(s string) []byte {
 	b, err := hex.DecodeString(s)
 	if err != nil {
