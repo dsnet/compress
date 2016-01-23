@@ -19,11 +19,11 @@ const (
 )
 
 var (
-	// RFC section 3.2.5
+	// RFC section 3.2.5.
 	lenRanges  prefix.RangeCodes
 	distRanges prefix.RangeCodes
 
-	// RFC section 3.2.6
+	// RFC section 3.2.6.
 	decLit  prefix.Decoder
 	encLit  prefix.Encoder
 	decDist prefix.Decoder
