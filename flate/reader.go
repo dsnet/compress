@@ -81,8 +81,8 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 }
 
 func (zr *Reader) Close() error {
+	zr.toRead = nil // Make sure future reads fail
 	if zr.err == io.EOF || zr.err == ErrClosed {
-		zr.toRead = nil // Make sure future reads fail
 		zr.err = ErrClosed
 		return nil
 	}
