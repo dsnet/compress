@@ -34,7 +34,7 @@ func TestReader(t *testing.T) {
 		outIdx int64  // Expected output offset after reading
 		err    error  // Expected error
 	}{{
-		desc: "empty string (truncated)",
+		desc: "empty string",
 		err:  io.ErrUnexpectedEOF,
 	}, {
 		desc: "raw block, truncated after block header",
@@ -44,7 +44,7 @@ func TestReader(t *testing.T) {
 		inIdx: 1,
 		err:   io.ErrUnexpectedEOF,
 	}, {
-		desc: "raw block, truncated in size field",
+		desc: "raw block, truncated inside size field",
 		input: db(`<<<
 			< 0 00 0*5 # Non-last, raw block, padding
 			< H8:0c    # RawSize: 12
@@ -68,7 +68,7 @@ func TestReader(t *testing.T) {
 		inIdx: 5,
 		err:   io.ErrUnexpectedEOF,
 	}, {
-		desc: "raw block, truncated before raw data",
+		desc: "raw block, truncated inside raw data",
 		input: db(`<<<
 			< 0 00 0*5          # Non-last, raw block, padding
 			< H16:000c H16:fff3 # RawSize: 12
@@ -79,7 +79,7 @@ func TestReader(t *testing.T) {
 		outIdx: 5,
 		err:    io.ErrUnexpectedEOF,
 	}, {
-		desc: "raw block, truncated before raw data",
+		desc: "raw block, truncated before next block",
 		input: db(`<<<
 			< 0 00 0*5                 # Non-last, raw block, padding
 			< H16:000c H16:fff3        # RawSize: 12
@@ -104,6 +104,57 @@ func TestReader(t *testing.T) {
 		outIdx: 12,
 		err:    io.ErrUnexpectedEOF,
 	}, {
+		desc: "raw block with non-zero padding",
+		input: db(`<<<
+			< 1 00 10101        # Last, raw block, padding
+			< H16:0001 H16:fffe # RawSize: 1
+			X:11                # Raw data
+		`),
+		output: dh("11"),
+		inIdx:  6,
+		outIdx: 1,
+	}, {
+		desc: "shortest raw block",
+		input: db(`<<<
+			< 1 00 0*5          # Last, raw block, padding
+			< H16:0000 H16:ffff # RawSize: 0
+		`),
+		inIdx: 5,
+	}, {
+		desc: "longest raw block",
+		input: db(`<<<
+			< 1 00 0*5          # Last, raw block, padding
+			< H16:ffff H16:0000 # RawSize: 65535
+			X:7a*65535
+		`),
+		output: db("<<< X:7a*65535"),
+		inIdx:  65540,
+		outIdx: 65535,
+	}, {
+		desc: "raw block with bad size",
+		input: db(`<<<
+			< 1 00 0*5          # Last, raw block, padding
+			< H16:0001 H16:fffd # RawSize: 1
+			X:11                # Raw data
+		`),
+		inIdx: 5,
+		err:   ErrCorrupt,
+	}, {
+		desc: "shortest fixed block",
+		input: db(`<<<
+			< 1 01    # Last, fixed block
+			> 0000000 # EOB marker
+		`),
+		inIdx: 2,
+	}, {
+		desc: "reserved block",
+		input: db(`<<<
+			< 1 11 0*5 # Last, reserved block, padding
+			X:deadcafe # ???
+		`),
+		inIdx: 1,
+		err:   ErrCorrupt,
+	}, {
 		desc: "degenerate HCLenTree",
 		input: db(`<<<
 			< 1 10            # Last, dynamic block
@@ -114,7 +165,7 @@ func TestReader(t *testing.T) {
 		inIdx: 42,
 		err:   ErrCorrupt,
 	}, {
-		desc: "complete HCLenTree, empty HLitTree, empty HDistTree",
+		desc: "degenerate HCLenTree, empty HLitTree, empty HDistTree",
 		input: db(`<<<
 			< 1 10             # Last, dynamic block
 			< D5:0 D5:0 D4:15  # HLit: 257, HDist: 1, HCLen: 19
@@ -202,13 +253,13 @@ func TestReader(t *testing.T) {
 		input: db(`<<<
 			< 1 10                           # Last, dynamic block
 			< D5:29 D5:29 D4:15              # HLit: 286, HDist: 30, HCLen: 19
-			< 011 000 011 001 000*13 010 000 # HCLens: {0:0,1:2,16:3,18:3}
+			< 011 000 011 001 000*13 010 000 # HCLens: {0:0, 1:2, 16:3, 18:3}
 			> 10 0*255 10 111 <D7:49 1       # Excessive repeater symbol
 		`),
 		inIdx: 43,
 		err:   ErrCorrupt,
 	}, {
-		desc: "complete HCLenTree, complete HLitTree, empty HDistTree of normal length 30",
+		desc: "complete HCLenTree, complete HLitTree, empty HDistTree of length 30",
 		input: db(`<<<
 			< 1 10               # Last, dynamic block
 			< D5:0 D5:29 D4:15   # HLit: 257, HDist: 30, HCLen: 19
@@ -218,7 +269,7 @@ func TestReader(t *testing.T) {
 		`),
 		inIdx: 47,
 	}, {
-		desc: "complete HCLenTree, complete HLitTree, bad HDistTree",
+		desc: "complete HCLenTree, complete HLitTree, under-subscribed HDistTree",
 		input: db(`<<<
 			< 1 10               # Last, dynamic block
 			< D5:0 D5:29 D4:15   # HLit: 257, HDist: 30, HCLen: 19
@@ -228,7 +279,7 @@ func TestReader(t *testing.T) {
 		inIdx: 46,
 		err:   ErrCorrupt,
 	}, {
-		desc: "complete HCLenTree, complete HLitTree, empty HDistTree of excessive length 31",
+		desc: "HDistTree of excessive length 31",
 		input: db(`<<<
 			< 1 10             # Last, dynamic block
 			< D5:0 D5:30 D4:15 # HLit: 257, HDist: 31, HCLen: 19
@@ -237,7 +288,7 @@ func TestReader(t *testing.T) {
 		inIdx: 3,
 		err:   ErrCorrupt,
 	}, {
-		desc: "complete HCLenTree, over-subscribed HLitTree, empty HDistTree",
+		desc: "complete HCLenTree, over-subscribed HLitTree",
 		input: db(`<<<
 			< 1 10               # Last, dynamic block
 			< D5:0 D5:0 D4:15    # HLit: 257, HDist: 1, HCLen: 19
@@ -248,7 +299,7 @@ func TestReader(t *testing.T) {
 		inIdx: 42,
 		err:   ErrCorrupt,
 	}, {
-		desc: "complete HCLenTree, under-subscribed HLitTree, empty HDistTree",
+		desc: "complete HCLenTree, under-subscribed HLitTree",
 		input: db(`<<<
 			< 1 10               # Last, dynamic block
 			< D5:0 D5:0 D4:15    # HLit: 257, HDist: 1, HCLen: 19
@@ -272,7 +323,7 @@ func TestReader(t *testing.T) {
 		outIdx: 2,
 		err:    io.ErrUnexpectedEOF,
 	}, {
-		desc: "complete HCLenTree, complete HLitTree with multiple codes, empty HDistTree",
+		desc: "complete HCLenTree, complete HLitTree, empty HDistTree",
 		input: db(`<<<
 			< 1 10               # Last, dynamic block
 			< D5:0 D5:3 D4:15    # HLit: 257, HDist: 4, HCLen: 19
@@ -455,6 +506,7 @@ func TestReader(t *testing.T) {
 		outIdx: 1,
 		err:    ErrCorrupt,
 	}, {
+		desc: "longest distance match",
 		input: db(`<<<
 			< 0 00 0*5                              # Non-last, raw block, padding
 			< H16:8000 H16:7fff                     # RawSize: 32768
@@ -473,56 +525,42 @@ func TestReader(t *testing.T) {
 		inIdx:  32781,
 		outIdx: 33029,
 	}, {
-		desc: "shortest fixed block",
+		desc: "invalid long distance match with data",
 		input: db(`<<<
-			< 1 01    # Last, fixed block
-			> 0000000 # EOB marker
+			< 0 00 0*5                              # Non-last, raw block, padding
+			< H16:7fff H16:8000                     # RawSize: 32767
+			X:0f1e2d3c4b5a69788796a5b4c3d2e1f0*2047 # Raw data
+			X:0f1e2d3c4b5a69788796a5b4c3d2e1
+
+			< 1 01                     # Last, fixed block
+			> 0000001 D5:29 <H13:1fff  # Length: 3, Distance: 32768
+			> 0000000                  # EOB marker
 		`),
-		inIdx: 2,
+		output: db(`<<<
+			X:0f1e2d3c4b5a69788796a5b4c3d2e1f0*2047
+			X:0f1e2d3c4b5a69788796a5b4c3d2e1
+		`),
+		inIdx:  32776,
+		outIdx: 32767,
+		err: ErrCorrupt,
 	}, {
-		desc: "reserved block",
+		desc: "invalid short distance match with no data",
 		input: db(`<<<
-			< 1 11 0*5 # Last, reserved block, padding
-			X:deadcafe # ???
+			< 1 01         # Last, fixed block
+			> 0000001 D5:0 # Length: 3, Distance: 1
+			> 0000000      # EOB marker
 		`),
-		inIdx: 1,
-		err:   ErrCorrupt,
+		inIdx:  2,
+		err: ErrCorrupt,
 	}, {
-		desc: "raw block with non-zero padding",
+		desc: "invalid long distance match with no data",
 		input: db(`<<<
-			< 1 00 10101        # Last, raw block, padding
-			< H16:0001 H16:fffe # RawSize: 1
-			X:11                # Raw data
+			< 1 01                    # Last, fixed block
+			> 0000001 D5:29 <H13:1fff # Length: 3, Distance: 32768
+			> 0000000                 # EOB marker
 		`),
-		output: dh("11"),
-		inIdx:  6,
-		outIdx: 1,
-	}, {
-		desc: "shortest raw block",
-		input: db(`<<<
-			< 1 00 0*5          # Last, raw block, padding
-			< H16:0000 H16:ffff # RawSize: 0
-		`),
-		inIdx: 5,
-	}, {
-		desc: "longest raw block",
-		input: db(`<<<
-			< 1 00 0*5          # Last, raw block, padding
-			< H16:ffff H16:0000 # RawSize: 65535
-			X:7a*65535
-		`),
-		output: db("<<< X:7a*65535"),
-		inIdx:  65540,
-		outIdx: 65535,
-	}, {
-		desc: "raw block with bad size",
-		input: db(`<<<
-			< 1 00 0*5          # Last, raw block, padding
-			< H16:0001 H16:fffd # RawSize: 1
-			X:11                # Raw data
-		`),
-		inIdx: 5,
-		err:   ErrCorrupt,
+		inIdx:  4,
+		err: ErrCorrupt,
 	}, {
 		desc: "issue 3816 - large HLitTree caused a panic",
 		input: db(`<<<

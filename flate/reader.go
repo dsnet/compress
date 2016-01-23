@@ -217,6 +217,9 @@ readLiteral:
 				extra = zr.rd.ReadBits(uint(rec.Len))
 			}
 			zr.dist = int(rec.Base) + int(extra)
+			if zr.dist > zr.dict.HistSize() {
+				panic(ErrCorrupt)
+			}
 
 			goto copyDistance
 		default:
