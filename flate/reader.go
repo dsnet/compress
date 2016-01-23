@@ -37,6 +37,16 @@ func NewReader(r io.Reader) *Reader {
 	return zr
 }
 
+func (zr *Reader) Reset(r io.Reader) {
+	*zr = Reader{
+		rd:   zr.rd,
+		step: (*Reader).readBlockHeader,
+		dict: zr.dict,
+	}
+	zr.rd.Init(r)
+	zr.dict.Init(maxHistSize)
+}
+
 func (zr *Reader) Read(buf []byte) (int, error) {
 	for {
 		if len(zr.toRead) > 0 {
@@ -71,23 +81,12 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 }
 
 func (zr *Reader) Close() error {
+	zr.toRead = nil // Make sure future reads fail
 	if zr.err == io.EOF || zr.err == ErrClosed {
-		zr.toRead = nil // Make sure future reads fail
 		zr.err = ErrClosed
 		return nil
 	}
 	return zr.err // Return the persistent error
-}
-
-func (zr *Reader) Reset(r io.Reader) error {
-	*zr = Reader{
-		rd:   zr.rd,
-		step: (*Reader).readBlockHeader,
-		dict: zr.dict,
-	}
-	zr.rd.Init(r)
-	zr.dict.Init(maxHistSize)
-	return nil
 }
 
 // readBlockHeader reads the block header according to RFC section 3.2.3.

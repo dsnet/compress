@@ -19,11 +19,11 @@ const (
 )
 
 var (
-	// RFC section 3.2.5
+	// RFC section 3.2.5.
 	lenRanges  prefix.RangeCodes
 	distRanges prefix.RangeCodes
 
-	// RFC section 3.2.6
+	// RFC section 3.2.6.
 	decLit  prefix.Decoder
 	encLit  prefix.Encoder
 	decDist prefix.Decoder
@@ -186,8 +186,8 @@ func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
 	// must terminate with one. This preserves the property that we never read
 	// any extra bytes after the end of the DEFLATE stream.
 	//
-	// This optimization is not helpful if the underlying reader is bufio.Reader
-	// since FeedBits always attempts to fill the bit buffer.
+	// This optimization is not helpful if the underlying reader is a
+	// compress.BufferedReader since PullBits always fill the entire bit buffer.
 	if !pr.IsBufferedReader() {
 		for i := len(codeLits) - 1; i >= 0; i-- {
 			if codeLits[i].Sym == 256 && codeLits[i].Len > 0 {

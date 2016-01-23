@@ -8,6 +8,8 @@ package flate
 
 import (
 	"runtime"
+
+	"github.com/dsnet/compress"
 )
 
 const (
@@ -18,7 +20,11 @@ const (
 // Error is the wrapper type for errors specific to this library.
 type Error struct{ ErrorString string }
 
-func (e Error) Error() string { return "flate: " + e.ErrorString }
+func (e Error) Error() string  { return "flate: " + e.ErrorString }
+func (e Error) CompressError() {}
+
+// Error must also satisfy compress.Error interface.
+var _ compress.Error = (*Error)(nil)
 
 var (
 	ErrCorrupt error = Error{"stream is corrupted"}
