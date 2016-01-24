@@ -4,8 +4,10 @@
 
 package brotli
 
-import "io"
-import "bufio"
+import (
+	"bufio"
+	"io"
+)
 
 // The bitReader preserves the property that it will never read more bytes than
 // is necessary. However, this feature dramatically hurts performance because

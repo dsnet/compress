@@ -4,14 +4,16 @@
 
 package brotli
 
-import "io"
-import "io/ioutil"
-import "bufio"
-import "bytes"
-import "strings"
-import "encoding/hex"
-import "runtime"
-import "testing"
+import (
+	"bufio"
+	"bytes"
+	"encoding/hex"
+	"io"
+	"io/ioutil"
+	"runtime"
+	"strings"
+	"testing"
+)
 
 func TestReader(t *testing.T) {
 	var vectors = []struct {

@@ -4,10 +4,12 @@
 
 package brotli
 
-import "hash/crc32"
-import "bytes"
-import "encoding/hex"
-import "testing"
+import (
+	"bytes"
+	"encoding/hex"
+	"hash/crc32"
+	"testing"
+)
 
 func TestTableCRC(t *testing.T) {
 	// Convert transformLUT to byte array according to Appendix B of the RFC.

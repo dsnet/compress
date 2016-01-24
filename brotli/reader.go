@@ -4,10 +4,12 @@
 
 package brotli
 
-import "io"
-import "io/ioutil"
+import (
+	"io"
+	"io/ioutil"
 
-import "github.com/dsnet/compress/internal"
+	"github.com/dsnet/compress/internal"
+)
 
 type Reader struct {
 	InputOffset  int64 // Total number of bytes read from underlying io.Reader

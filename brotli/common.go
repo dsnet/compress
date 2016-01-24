@@ -5,7 +5,9 @@
 // Package brotli implements the Brotli compressed data format.
 package brotli
 
-import "runtime"
+import (
+	"runtime"
+)
 
 // Error is the wrapper type for errors specific to this library.
 type Error string

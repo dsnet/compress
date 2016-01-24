@@ -4,9 +4,11 @@
 
 package brotli
 
-import "bytes"
-import "strings"
-import "testing"
+import (
+	"bytes"
+	"strings"
+	"testing"
+)
 
 func TestDictDecoder(t *testing.T) {
 	const abc = "ABC\n"
