@@ -36,7 +36,6 @@ var (
 
 func init() {
 	initLUTs()
-	printLUTs() // Only occurs in debug mode
 }
 
 func initLUTs() {
