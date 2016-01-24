@@ -7,6 +7,8 @@ package brotli
 import "io"
 import "io/ioutil"
 
+import "github.com/dsnet/compress/internal"
+
 type Reader struct {
 	InputOffset  int64 // Total number of bytes read from underlying io.Reader
 	OutputOffset int64 // Total number of bytes emitted from Read
@@ -22,11 +24,11 @@ type Reader struct {
 	step      func(*Reader) // Single step of decompression work (can panic)
 	stepState int           // The sub-step state for certain steps
 
-	mtf     moveToFront  // Local move-to-front decoder
-	dict    dictDecoder  // Dynamic sliding dictionary
-	iacBlk  blockDecoder // Insert-and-copy block decoder
-	litBlk  blockDecoder // Literal block decoder
-	distBlk blockDecoder // Distance block decoder
+	mtf     internal.MoveToFront // Local move-to-front decoder
+	dict    dictDecoder          // Dynamic sliding dictionary
+	iacBlk  blockDecoder         // Insert-and-copy block decoder
+	litBlk  blockDecoder         // Literal block decoder
+	distBlk blockDecoder         // Distance block decoder
 
 	// Literal decoding state fields.
 	litMapType []uint8 // The current literal context map for the current block type
