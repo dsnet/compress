@@ -29,20 +29,21 @@ const (
 )
 
 func TestRoundTrip(t *testing.T) {
-	var vectors = []struct {
-		input []byte
-	}{
-		{input: testutil.MustLoadFile(binary, -1)},
-		{input: testutil.MustLoadFile(digits, -1)},
-		{input: testutil.MustLoadFile(huffman, -1)},
-		{input: testutil.MustLoadFile(random, -1)},
-		{input: testutil.MustLoadFile(repeats, -1)},
-		{input: testutil.MustLoadFile(twain, -1)},
-		{input: testutil.MustLoadFile(zeros, -1)},
+	var vectors = []struct{ input []byte }{
+		{nil},
+		{testutil.MustLoadFile(binary, -1)},
+		{testutil.MustLoadFile(digits, -1)},
+		{testutil.MustLoadFile(huffman, -1)},
+		{testutil.MustLoadFile(random, -1)},
+		{testutil.MustLoadFile(repeats, -1)},
+		{testutil.MustLoadFile(twain, -1)},
+		{testutil.MustLoadFile(zeros, -1)},
 	}
 
 	for i, v := range vectors {
 		var buf bytes.Buffer
+
+		// Compress the input.
 		wr, _ := flate.NewWriter(&buf, flate.DefaultCompression)
 		cnt, err := io.Copy(wr, bytes.NewReader(v.input))
 		if err != nil {
@@ -58,6 +59,7 @@ func TestRoundTrip(t *testing.T) {
 		// Write a canary byte to ensure this does not get read.
 		buf.WriteByte(0x7a)
 
+		// Decompress the output.
 		rd := NewReader(&struct{ compress.ByteReader }{&buf})
 		output, err := ioutil.ReadAll(rd)
 		if err != nil {

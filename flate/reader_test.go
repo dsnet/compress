@@ -542,7 +542,7 @@ func TestReader(t *testing.T) {
 		`),
 		inIdx:  32776,
 		outIdx: 32767,
-		err: ErrCorrupt,
+		err:    ErrCorrupt,
 	}, {
 		desc: "invalid short distance match with no data",
 		input: db(`<<<
@@ -550,8 +550,8 @@ func TestReader(t *testing.T) {
 			> 0000001 D5:0 # Length: 3, Distance: 1
 			> 0000000      # EOB marker
 		`),
-		inIdx:  2,
-		err: ErrCorrupt,
+		inIdx: 2,
+		err:   ErrCorrupt,
 	}, {
 		desc: "invalid long distance match with no data",
 		input: db(`<<<
@@ -559,8 +559,8 @@ func TestReader(t *testing.T) {
 			> 0000001 D5:29 <H13:1fff # Length: 3, Distance: 32768
 			> 0000000                 # EOB marker
 		`),
-		inIdx:  4,
-		err: ErrCorrupt,
+		inIdx: 4,
+		err:   ErrCorrupt,
 	}, {
 		desc: "issue 3816 - large HLitTree caused a panic",
 		input: db(`<<<
