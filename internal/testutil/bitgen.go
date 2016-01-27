@@ -196,7 +196,7 @@ func DecodeBitGen(str string) ([]byte, error) {
 				bw.WriteBits64(v, uint(n))
 			}
 		case reRaw.MatchString(t):
-			// Handle hexadecimal tokens.
+			// Handle raw bytes tokens.
 			tx := t[2:]
 			b, err := hex.DecodeString(tx)
 			if err != nil {
