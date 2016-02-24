@@ -4,175 +4,280 @@
 
 package meta
 
-import "runtime"
-import "encoding/hex"
-import "github.com/dsnet/golib/bits"
-import "github.com/stretchr/testify/assert"
-import "testing"
+import (
+	"bytes"
+	"io"
+	"math/rand"
+	"testing"
+)
 
 // TestWriter tests that the encoded output matches the expected output exactly.
 // A failure here does not necessarily mean that the encoder is wrong since
 // there are many possible representations. Before changing the test vectors to
 // make a test pass, one must verify the new output is correct.
 func TestWriter(t *testing.T) {
+	var dh = mustDecodeHex
+
 	var vectors = []struct {
 		desc   string   // Description of the text
-		input  string   // Test input string in hex
-		output string   // Expected output string in hex
+		input  []byte   // Test input string
+		output []byte   // Expected output string
 		last   LastMode // Input last mode
 		err    error    // Expected error
 	}{{
-		"empty meta block",
-		"", "1c408705000000d2ff1fb7e1",
-		LastMeta, nil,
+		desc:   "empty meta block (LastNil)",
+		input:  dh(""),
+		output: dh("1c408705000000f2ffc7ede0"),
+		last:   LastNil,
 	}, {
-		"the input string 'a'",
-		"61", "1400870500004882a0febfb4bdf0",
-		LastMeta, nil,
+		desc:   "empty meta block (LastMeta)",
+		input:  dh(""),
+		output: dh("1c408705000000d2ff1fb7e1"),
+		last:   LastMeta,
 	}, {
-		"the input string 'ab'",
-		"6162", "1400870500004884a008f5ff9bedf0",
-		LastMeta, nil,
+		desc:   "input string 'a'",
+		input:  dh("61"),
+		output: dh("340087050000483232eaff4bdb0bf0"),
+		last:   LastMeta,
 	}, {
-		"the input string 'abc'",
-		"616263", "14c0860500202904452885faffbaf6def8",
-		LastMeta, nil,
+		desc:   "input string 'ab'",
+		input:  dh("6162"),
+		output: dh("04008705000048848c22d4ff6fb6f3"),
+		last:   LastMeta,
 	}, {
-		"the input string 'Hello, world!' with LastNil",
-		"48656c6c6f2c20776f726c6421", "1c80860580908248a2500aa534144a76542a0d455428852841e7b727fc",
-		LastNil, nil,
+		desc:   "input string 'abc'",
+		input:  dh("616263"),
+		output: dh("04c086050020296414a114eaffebda7bfb"),
+		last:   LastMeta,
 	}, {
-		"the input string 'Hello, world!' with LastMeta",
-		"48656c6c6f2c20776f726c6421", "148086058024059144a1144a692894eca8541a8aa8500a5182de6f2ffc",
-		LastMeta, nil,
+		desc:   "input string 'Hello, world!' with LastNil",
+		input:  dh("48656c6c6f2c20776f726c6421"),
+		output: dh("3c8086058090322289422994d25028d951a9341451a114a264747e7b02fc"),
+		last:   LastNil,
 	}, {
-		"the input string 'Hello, world!' with LastStream",
-		"48656c6c6f2c20776f726c6421", "158086058024059144a1144a692894eca8541a8aa8500a5182de6f2ffc",
-		LastStream, nil,
+		desc:   "input string 'Hello, world!' with LastMeta",
+		input:  dh("48656c6c6f2c20776f726c6421"),
+		output: dh("348086058024654412855228a5a150b2a3526928a2422944c9e8fdf602fc"),
+		last:   LastMeta,
 	}, {
-		"the input hex-string '00'*4",
-		"00000000", "3440870500000012faffe026e0",
-		LastMeta, nil,
+		desc:   "input string 'Hello, world!' with LastStream",
+		input:  dh("48656c6c6f2c20776f726c6421"),
+		output: dh("358086058024654412855228a5a150b2a3526928a2422944c9e8fdf602fc"),
+		last:   LastStream,
 	}, {
-		"the input hex-string '00'*8",
-		"0000000000000000", "2c40870500000012f4ffbf4de0",
-		LastMeta, nil,
+		desc:   "input hex-string '00'*4",
+		input:  dh("00000000"),
+		output: dh("3440870500000012faffe026e0"),
+		last:   LastMeta,
 	}, {
-		"the input hex-string '00'*16",
-		"00000000000000000000000000000000", "2440870500000012e8ff7b9be0",
-		LastMeta, nil,
+		desc:   "input hex-string '00'*8",
+		input:  dh("0000000000000000"),
+		output: dh("1c40870500000092d1ffff36e1"),
+		last:   LastMeta,
 	}, {
-		"the input hex-string 'ff'*4",
-		"ffffffff", "2c40870500000052f4ffc32de0",
-		LastMeta, nil,
+		desc:   "input hex-string '00'*16",
+		input:  dh("00000000000000000000000000000000"),
+		output: dh("1c40870500000092d5fff736e1"),
+		last:   LastMeta,
 	}, {
-		"the input hex-string 'ff'*8",
-		"ffffffffffffffff", "2440870500000052e8ff835be0",
-		LastMeta, nil,
+		desc:   "input hex-string 'ff'*4",
+		input:  dh("ffffffff"),
+		output: dh("2c40870500000052f4ffc32de0"),
+		last:   LastMeta,
 	}, {
-		"the input hex-string 'ff'*16",
-		"ffffffffffffffffffffffffffffffff", "1c40870500000052d0ffffb6e0",
-		LastMeta, nil,
+		desc:   "input hex-string 'ff'*8",
+		input:  dh("ffffffffffffffff"),
+		output: dh("2440870500000052e8ff835be0"),
+		last:   LastMeta,
 	}, {
-		"the random hex-string '911fe47084a4668b'",
-		"911fe47084a4668b", "1c808605800409d1045141852022294a09fd7f417befbd07fc",
-		LastMeta, nil,
+		desc:   "input hex-string 'ff'*16",
+		input:  dh("ffffffffffffffffffffffffffffffff"),
+		output: dh("0c4087050000005246ffffdbe2"),
+		last:   LastMeta,
 	}, {
-		"the random hex-string 'de9fa94cb16f40fc'",
-		"de9fa94cb16f40fc", "24808605801412641725294a2a02d156fdff447befbd0bfc",
-		LastMeta, nil,
+		desc:   "the random hex-string '911fe47084a4668b'",
+		input:  dh("911fe47084a4668b"),
+		output: dh("2480860580642444d38acaa890119114a584febfa0bdf7de03fc"),
+		last:   LastMeta,
 	}, {
-		"the input hex-string '55'*22",
-		"55555555555555555555555555555555555555555555", "0540860512a52449922449922449922449922449922449922449922449922449922449922449d237edbdf79efe",
-		LastStream, nil,
+		desc:   "the random hex-string 'de9fa94cb16f40fc'",
+		input:  dh("de9fa94cb16f40fc"),
+		output: dh("0c808605801492915d94a428a9c88ab6eaff27da7bef5dfc"),
+		last:   LastMeta,
 	}, {
-		"the input hex-string '55'*23",
-		"5555555555555555555555555555555555555555555555", "04408605924a499224499224499224499224499224499224499224499224499224499224499224493aa6bdf7defe",
-		LastMeta, nil,
+		desc:   "input hex-string '55'*22",
+		input:  dh("55555555555555555555555555555555555555555555"),
+		output: dh("0540860512a52449922449922449922449922449922449922449922449922449922449922449d237edbdf79efe"),
+		last:   LastStream,
 	}, {
-		"the input hex-string '55'*24",
-		"555555555555555555555555555555555555555555555555", "3c408605322b4992244992244992244992244992244992244992244992244992244992244992244992f4487bef3d01fe",
-		LastNil, nil,
+		desc:   "input hex-string '55'*23",
+		input:  dh("5555555555555555555555555555555555555555555555"),
+		output: dh("04408605924a499224499224499224499224499224499224499224499224499224499224499224493aa6bdf7defe"),
+		last:   LastMeta,
 	}, {
-		"the input hex-string '55'*25",
-		"55555555555555555555555555555555555555555555555555", "3540860592a824499224499224499224499224499224499224499224499224499224499224499224499224fdd1de7b02fe",
-		LastStream, nil,
+		desc:   "input hex-string '55'*24",
+		input:  dh("555555555555555555555555555555555555555555555555"),
+		output: dh("3c408605322b4992244992244992244992244992244992244992244992244992244992244992244992f4487bef3d01fe"),
+		last:   LastNil,
 	}, {
-		"the input hex-string '55'*26",
-		"5555555555555555555555555555555555555555555555555555", "2c40860512a92449922449922449922449922449922449922449922449922449922449922449922449922449d217edbd03fe",
-		LastMeta, nil,
+		desc:   "input hex-string '55'*25",
+		input:  dh("55555555555555555555555555555555555555555555555555"),
+		output: dh("3540860592a824499224499224499224499224499224499224499224499224499224499224499224499224fdd1de7b02fe"),
+		last:   LastStream,
 	}, {
-		"the input hex-string '55'*27",
-		"555555555555555555555555555555555555555555555555555555", "1c40860542a924499224499224499224499224499224499224499224499224499224499224499224499224499224fdd0de03fe",
-		LastNil, nil,
+		desc:   "input hex-string '55'*26",
+		input:  dh("5555555555555555555555555555555555555555555555555555"),
+		output: dh("2c40860512a92449922449922449922449922449922449922449922449922449922449922449922449922449d217edbd03fe"),
+		last:   LastMeta,
 	}, {
-		"the input hex-string '55'*28",
-		"55555555555555555555555555555555555555555555555555555555", "2d408605121a9224499224499224499224499224499224499224499224499224499224499224499224499224499224e983f604fe",
-		LastStream, nil,
+		desc:   "input hex-string '55'*27",
+		input:  dh("555555555555555555555555555555555555555555555555555555"),
+		output: dh("1c40860542a924499224499224499224499224499224499224499224499224499224499224499224499224499224fdd0de03fe"),
+		last:   LastNil,
 	}, {
-		"the input hex-string '55'*29",
-		"5555555555555555555555555555555555555555555555555555555555", "2c4086059234244992244992244992244992244992244992244992244992244992244992244992244992244992244992241dd006fe",
-		LastMeta, nil,
+		desc:   "input hex-string '55'*28",
+		input:  dh("55555555555555555555555555555555555555555555555555555555"),
+		output: dh("2d408605121a9224499224499224499224499224499224499224499224499224499224499224499224499224499224e983f604fe"),
+		last:   LastStream,
 	}, {
-		"the input hex-string '55'*30",
-		"555555555555555555555555555555555555555555555555555555555555", "0440860582962449922449922449922449922449922449922449922449922449922449922449922449922449922449922449321bfe",
-		LastNil, nil,
+		desc:   "input hex-string '55'*29",
+		input:  dh("5555555555555555555555555555555555555555555555555555555555"),
+		output: dh("2c4086059234244992244992244992244992244992244992244992244992244992244992244992244992244992244992241dd006fe"),
+		last:   LastMeta,
 	}, {
-		"the input hex-string '55'*31",
-		"55555555555555555555555555555555555555555555555555555555555555", "",
-		LastStream, errMetaInvalid,
+		desc:   "input hex-string '55'*30",
+		input:  dh("555555555555555555555555555555555555555555555555555555555555"),
+		output: dh("34408605325a9224499224499224499224499224499224499224499224499224499224499224499224499224499224499224c96c00fe"),
+		last:   LastNil,
 	}, {
-		"the input hex-string '55'*32",
-		"5555555555555555555555555555555555555555555555555555555555555555", "",
-		LastMeta, errMetaInvalid,
+		desc:  "input hex-string '55'*31",
+		input: dh("55555555555555555555555555555555555555555555555555555555555555"),
+		last:  LastStream,
+		err:   ErrInvalid,
 	}, {
-		"the input hex-string '73de76bebcf69d5fed3fb3cee87bacfd7de876facffedf'",
-		"73de76bebcf69d5fed3fb3cee87bacfd7de876facffedf", "2480860580688842414428908244209499443645915054024145223bd01022946c8a1ee8b50afc",
-		LastNil, nil,
+		desc:  "input hex-string '55'*32",
+		input: dh("5555555555555555555555555555555555555555555555555555555555555555"),
+		last:  LastMeta,
+		err:   ErrInvalid,
 	}, {
-		"the input hex-string '73de76bebcf69d5fed3fb3cee87bacfd7de876facffede'",
-		"73de76bebcf69d5fed3fb3cee87bacfd7de876facffede", "",
-		LastStream, errMetaInvalid,
+		desc:   "input hex-string '73de76bebcf69d5fed3fb3cee87bacfd7de876facffedf'",
+		input:  dh("73de76bebcf69d5fed3fb3cee87bacfd7de876facffedf"),
+		output: dh("14808605806888421911a1ac9491c80a6526914d51241495ac8c8a447656438850b2297aa0d72afc"),
+		last:   LastNil,
 	}, {
-		"the input hex-string 'def773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9'",
-		"def773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9", "2480860580941604320b992189a4a10492fe088164662b082102158448a06ce98508b2eb862245b60afc",
-		LastMeta, nil,
+		desc:  "input hex-string '73de76bebcf69d5fed3fb3cee87bacfd7de876facffede'",
+		input: dh("73de76bebcf69d5fed3fb3cee87bacfd7de876facffede"),
+		last:  LastStream,
+		err:   ErrInvalid,
 	}, {
-		"the input hex-string 'dff773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9'",
-		"dff773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9", "",
-		LastMeta, errMetaInvalid,
+		desc:   "input hex-string 'def773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9'",
+		input:  dh("def773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9"),
+		output: dh("3c808605809496919559c80c49240d252be98f9095cc6c6584105995112259654b2f444676dd50a4c85601fc"),
+		last:   LastMeta,
+	}, {
+		desc:  "input hex-string 'dff773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9'",
+		input: dh("dff773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9"),
+		last:  LastMeta,
+		err:   ErrInvalid,
 	}}
 
-	var mw Writer
 	for i, v := range vectors {
-		var b bits.Buffer
-		input, _ := hex.DecodeString(v.input)
-		cnt, err := mw.encodeBlock(&b, input, v.last)
-		output := hex.EncodeToString(b.Bytes())
-
-		fmt := "Check '%s' in trial %d: %s"
-		if err == nil {
-			assert.Equal(t, v.output, output, fmt, "output", i, v.desc)
+		var b bytes.Buffer
+		mw := NewWriter(&b)
+		mw.bufCnt = copy(mw.buf[:], v.input)
+		for _, b := range v.input {
+			b0s, b1s := numBits(b)
+			mw.buf0s, mw.buf1s = b0s+mw.buf0s, b1s+mw.buf1s
 		}
-		assert.Equal(t, len(b.Bytes()), cnt, fmt, "cnt", i, v.desc)
-		assert.Equal(t, v.err, err, fmt, "err", i, v.desc)
+		err := mw.encodeBlock(v.last)
+		output := b.Bytes()
+
+		if !bytes.Equal(output, v.output) {
+			t.Errorf("test %d (%s), mismatching data:\ngot  %x\nwant %x", i, v.desc, output, v.output)
+		}
+		if len(output) != int(mw.OutputOffset) {
+			t.Errorf("test %d (%s), mismatching offset: got %d, want %d", i, v.desc, len(output), mw.OutputOffset)
+		}
+		if err != v.err {
+			t.Errorf("test %d (%s), unexpected error: got %v, want %v", i, v.desc, err, v.err)
+		}
+	}
+}
+
+type faultyWriter struct{}
+
+func (faultyWriter) Write([]byte) (int, error) { return 0, io.ErrShortWrite }
+
+func TestWriterReset(t *testing.T) {
+	bb := new(bytes.Buffer)
+	mw := NewWriter(bb)
+	buf := make([]byte, 512)
+
+	// Test Writer for idempotent Close.
+	if err := mw.Close(); err != nil {
+		t.Errorf("unexpected error, Close() = %v", err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Errorf("unexpected error, Close() = %v", err)
+	}
+	if _, err := mw.Write(buf); err != errClosed {
+		t.Errorf("unexpected error, Write(...) = %v, want %v", err, errClosed)
+	}
+
+	// Test Writer with faulty writer.
+	mw.Reset(faultyWriter{})
+	if _, err := mw.Write(buf); err != io.ErrShortWrite {
+		t.Errorf("unexpected error, Write(...) = %v, want %v", err, io.ErrShortWrite)
+	}
+	if err := mw.Close(); err != io.ErrShortWrite {
+		t.Errorf("unexpected error, Close() = %v, want %v", err, io.ErrShortWrite)
+	}
+
+	// Test Writer in normal use.
+	bb.Reset()
+	mw.Reset(bb)
+	data := []byte("The quick brown fox jumped over the lazy dog.")
+	cnt, err := mw.Write(data)
+	if err != nil {
+		t.Errorf("unexpected error, Write(...) = %v", err)
+	}
+	if cnt != len(data) {
+		t.Errorf("write count mismatch, got %d, want %d", cnt, len(data))
+	}
+	if err := mw.Close(); err != nil {
+		t.Errorf("unexpected error, Close() = %v", err)
+	}
+	if mw.InputOffset != int64(len(data)) {
+		t.Errorf("input offset mismatch, got %d, want %d", mw.InputOffset, len(data))
+	}
+	if mw.OutputOffset != int64(bb.Len()) {
+		t.Errorf("output offset mismatch, got %d, want %d", mw.OutputOffset, bb.Len())
 	}
 }
 
 func BenchmarkWriter(b *testing.B) {
-	data := randBytes(1 << 16) // 64kiB
-	bb := bits.NewBuffer(nil)
-	mw := NewWriter(nil, LastStream)
+	data := make([]byte, 1<<16)
+	rand.Read(data)
+	bb := bytes.NewBuffer(nil)
+	mw := NewWriter(nil)
 
-	runtime.GC()
 	b.ReportAllocs()
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
-	for idx := 0; idx < b.N; idx++ {
+	for i := 0; i < b.N; i++ {
 		bb.Reset()
-		mw.Reset(bb, LastStream)
-		mw.Write(data)
-		mw.Close()
+		mw.Reset(bb)
+
+		cnt, err := io.Copy(mw, bytes.NewReader(data))
+		if cnt != int64(len(data)) {
+			b.Fatalf("mismatching count, Copy(...) = %d, want %d", cnt, len(data))
+		}
+		if err != nil {
+			b.Fatalf("unexpected error, Copy(...) = %v", err)
+		}
+		if err := mw.Close(); err != nil {
+			b.Fatalf("unexpected error, Close() = %v", err)
+		}
 	}
 }

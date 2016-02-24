@@ -4,259 +4,258 @@
 
 package meta
 
-import "io"
-import "github.com/dsnet/golib/bits"
-import "github.com/dsnet/golib/errs"
+import (
+	"bytes"
+	"encoding/binary"
+	"io"
+
+	"github.com/dsnet/compress/internal/prefix"
+)
 
 type Writer struct {
-	wr     io.Writer         // Underlying writer
-	cnt    int64             // Total number of bytes written
-	blkCnt int64             // Total number of blocks written
+	InputOffset  int64 // Total number of bytes issued to Write
+	OutputOffset int64 // Total number of bytes written to underlying io.Writer
+	BlockCount   int64 // Number of blocks encoded
+
+	// LastMode determines which last bits (if any) to set.
+	// This must be set prior to a call to Close.
+	LastMode LastMode
+
+	wr io.Writer
+	bw prefix.Writer // Temporary bit writer
+	bb bytes.Buffer  // Buffer for bw to write into
+
+	cnts   []int
 	buf0s  int               // Number of 0-bits in buf
 	buf1s  int               // Number of 1-bits in buf
 	bufCnt int               // Number of bytes in buf
 	buf    [MaxRawBytes]byte // Buffer to collect raw bytes to be encoded
-	last   LastMode          // Last bits to be set upon Close
 	err    error             // Persistent error
-
-	// These fields are lazily allocated and reused for efficiency.
-	bb   bits.Buffer
-	cnts []int
 }
 
-// NewWriter creates a new Writer.
-//
-// The last mode determines which last bits should be set in the last block when
-// the Close method is called. If the output of multiple writers are going to be
-// concatenated together, then LastNil or LastMeta should be used. If this
-// writer should mark the end of a DEFLATE stream, then use LastStream.
-func NewWriter(wr io.Writer, last LastMode) *Writer {
+func NewWriter(wr io.Writer) *Writer {
 	mw := new(Writer)
-	mw.Reset(wr, last)
+	mw.Reset(wr)
 	return mw
 }
 
-// WriteCount reports the number of bytes written to the underlying writer.
-func (mw *Writer) WriteCount() int64 { return mw.cnt }
-
-// BlockCount reports the number of blocks successfully written.
-func (mw *Writer) BlockCount() int64 { return mw.blkCnt }
-
-// Write writes multiple bytes, flushing only when necessary.
-// If no bytes have been written thus far, this is guaranteed to write at least
-// EnsureRawBytes in a single meta block.
-func (mw *Writer) Write(buf []byte) (cnt int, err error) {
-	for idx, val := range buf {
-		if err = mw.WriteByte(val); err != nil {
-			return idx, err
-		}
+func (mw *Writer) Reset(wr io.Writer) {
+	*mw = Writer{
+		wr:   wr,
+		bw:   mw.bw,
+		bb:   mw.bb,
+		cnts: mw.cnts,
 	}
-	return len(buf), nil
+	return
 }
 
-// WriteByte writes the next byte. The Writer will buffer as many bytes as will
-// fit in a single meta block before flushing.
-func (mw *Writer) WriteByte(val byte) (err error) {
-	if err == nil {
-		ones := bits.CountByte(val)
-		zeros := 8 - ones
-		notEnsured := mw.bufCnt >= EnsureRawBytes
-		if notEnsured && mw.computeHuffLen(mw.buf0s+zeros, mw.buf1s+ones) == 0 {
-			err = mw.flush(LastNil)
-		}
-		if err == nil {
-			mw.buf0s += zeros
-			mw.buf1s += ones
-			mw.buf[mw.bufCnt] = val
-			mw.bufCnt++
-		}
+func (mw *Writer) Write(buf []byte) (int, error) {
+	if mw.err != nil {
+		return 0, mw.err
 	}
-	return err
-}
 
-// Close closes the writer.
-// It will flush the last block with appropriate last bits set.
-func (mw *Writer) Close() error {
-	err := mw.flush(mw.last)
-	if err == nil {
-		mw.err = io.ErrClosedPipe
-	}
-	return err
-}
-
-// Reset resets the Writer with a new io.Writer.
-func (mw *Writer) Reset(wr io.Writer, last LastMode) {
-	mw.wr, mw.cnt, mw.blkCnt = wr, 0, 0
-	mw.bufCnt, mw.buf0s, mw.buf1s = 0, 0, 0
-	mw.last, mw.err = last, nil
-
-	mw.bb.Reset()
-	mw.cnts = mw.cnts[:0]
-}
-
-// Flush the current buffer. This encodes the current buffer as a single meta
-// block. The invariants maintained by ReadByte and Read ensure that the buffer
-// is encodable in a single block.
-func (mw *Writer) flush(last LastMode) error {
 	var wrCnt int
-	if mw.err == nil {
-		buf := mw.buf[:mw.bufCnt]
-		wrCnt, mw.err = mw.encodeBlock(mw.wr, buf, last)
-		if mw.err == nil {
-			mw.bufCnt, mw.buf0s, mw.buf1s = 0, 0, 0
-			mw.blkCnt++
+	for _, b := range buf {
+		zeros, ones := numBits(b)
+
+		// If possible, avoid flushing to maintain high efficiency.
+		if ensured := mw.bufCnt <= EnsureRawBytes; ensured {
+			goto skipEncode
 		}
-		mw.cnt += int64(wrCnt)
+		if huffLen, _ := mw.computeHuffLen(mw.buf0s+zeros, mw.buf1s+ones); huffLen > 0 {
+			goto skipEncode
+		}
+
+		mw.err = mw.encodeBlock(LastNil)
+		if mw.err != nil {
+			break
+		}
+
+	skipEncode:
+		mw.buf0s += zeros
+		mw.buf1s += ones
+		mw.buf[mw.bufCnt] = b
+		mw.bufCnt++
+		wrCnt++
 	}
-	return mw.err
+
+	mw.InputOffset += int64(wrCnt)
+	return wrCnt, mw.err
 }
 
-// Compute the shortest Huffman length needed to encode the data.
-// If we fail to compute a valid huffLen, then the input data is too large.
-//
-// This function does not depend on Writer, but is related to work it does.
-func (*Writer) computeHuffLen(zeros, ones int) int {
-	if ones > zeros { // If too many ones, invert the data
+// Close ends the meta stream and flushes all buffered data.
+// The desired LastMode must be set prior to calling Close.
+func (mw *Writer) Close() error {
+	if mw.err == errClosed {
+		return nil
+	}
+	if mw.err != nil {
+		return mw.err
+	}
+
+	err := mw.encodeBlock(mw.LastMode)
+	if err != nil {
+		mw.err = err
+	} else {
+		mw.err = errClosed
+	}
+	mw.wr = nil // Release reference to underlying Writer
+	return err
+}
+
+// computeHuffLen computes the shortest Huffman length to encode the data.
+// If the input data is too large, then 0 is returned.
+func (*Writer) computeHuffLen(zeros, ones int) (huffLen uint, inv bool) {
+	if inv = ones > zeros; inv {
 		zeros, ones = ones, zeros
 	}
-	for huffLen := minHuffLen; huffLen <= maxHuffLen; huffLen++ {
+	for huffLen = minHuffLen; huffLen <= maxHuffLen; huffLen++ {
 		maxOnes := 1 << uint(huffLen)
 		if maxSyms-maxOnes >= zeros+8 && maxOnes >= ones+8 {
-			return huffLen
+			return huffLen, inv
 		}
 	}
-	return 0
+	return 0, false
 }
 
-// Compute the counts of necessary 0s and 1s to form the data. A positive count
-// of +n means to repeat a '1' bit n times, while a negative count of -n means
-// to repeat a '0' bit n times.
+// computeCounts computes counts of necessary 0s and 1s to form the data.
+// A positive count of +n means to repeat a '1' bit n times,
+// while a negative count of -n means to repeat a '0' bit n times.
 //
 // For example (LSB on left):
 //	01101011 11100011  =>  [-1, +2, -1, +1, -1, +5, -3, +2]
-//
-// The only state that this function depends on in mw is mw.cnts.
-// It reuses this object for efficiency purposes.
-func (mw *Writer) computeCounts(data []byte, maxOnes int, invert, last bool) []int {
-	zeros, ones := 0, 0
-	mw.cnts = append(mw.cnts[:0], 0)
-	addCnts := func(n int) {
-		if (n > 0) != (mw.cnts[len(mw.cnts)-1] > 0) {
-			mw.cnts = append(mw.cnts, 0) // Polarity changed, so add new slot
-		}
-		mw.cnts[len(mw.cnts)-1] += n // Increment count
-		zeros -= min(0, n)
-		ones += max(0, n)
-	}
-
-	addCnts(-1)                                         // Always start with zero
-	addCnts(sign(last))                                 // Status bit as last meta block
-	addCnts(sign(invert))                               // Status bit that data is inverted
-	for sz := len(data) | (1 << 5); sz != 1; sz >>= 1 { // Data size (LSB first)
-		addCnts(sign(sz&1 > 0))
-	}
-
-	// The code below is an optimized form of the following:
-	/*
-		for _, val := range data {
-			for val := int(val) | (1 << 8); val != 1; val >>= 1 { // Data bits (LSB first)
-				addCnts(sign(invert != (val&1 > 0)))
-			}
-		}
-	*/
-	inv := byte(0x00)
-	dataOnes := bits.Count(data)
+func (mw *Writer) computeCounts(buf []byte, maxOnes int, last, invert bool) []int {
+	// Stack copy of buf for safe mutations.
+	var arr [1 + MaxRawBytes]byte
+	copy(arr[1:], buf)
+	flags := &arr[0]
+	buf = arr[1 : 1+len(buf)]
 	if invert {
-		inv = byte(0xff) // XOR with 0xff is effectively invert
-		dataOnes = 8*len(data) - dataOnes
-	}
-	pcnt := &mw.cnts[len(mw.cnts)-1] // Pointer to last count
-	for _, val := range data {
-		for val := int(val^inv) | (1 << 8); val != 1; val >>= 1 { // Data bits (LSB first)
-			if (val&1 > 0) != (*pcnt > 0) {
-				mw.cnts = append(mw.cnts, 0) // Polarity changed, so add new slot
-				pcnt = &mw.cnts[len(mw.cnts)-1]
-			}
-			*pcnt += (val&1)*2 - 1 // Add +1 or -1; same as sign(val&1 > 0)
+		for i, b := range buf {
+			buf[i] = ^b
 		}
 	}
-	ones += dataOnes
-	zeros += 8*len(data) - dataOnes
 
-	addCnts(-1 * (maxSyms - maxOnes - zeros)) // Add needed zeros
-	addCnts(+1 * (maxOnes - ones))            // Add needed ones (includes EOM)
-	return mw.cnts
+	// Set the flags.
+	*flags |= byte(0) << 0            // Always start with zero bit
+	*flags |= byte(btoi(last)) << 1   // Status bit as last meta block
+	*flags |= byte(btoi(invert)) << 2 // Status bit that data is inverted
+	*flags |= byte(len(buf)) << 3     // Data size
+
+	// Compute the counts.
+	var zeros, ones int
+	cnts, pcnt := mw.cnts[:0], 0
+	for _, b := range arr[:1+len(buf)] {
+		for b := int(b) | (1 << 8); b != 1; b >>= 1 { // Data bits (LSB first)
+			if (b&1 > 0) != (pcnt > 0) {
+				cnts, pcnt = append(cnts, pcnt), 0
+			}
+			pcnt += (b&1)*2 - 1 // Add +1 or -1
+		}
+		b0s, b1s := numBits(b)
+		zeros, ones = zeros+b0s, ones+b1s
+	}
+	if pcnt > 0 {
+		cnts, pcnt = append(cnts, pcnt), 0
+	}
+	pcnt += -1 * (maxSyms - maxOnes - zeros) // Add needed zeros
+	if pcnt < 0 {
+		cnts, pcnt = append(cnts, pcnt), 0
+	}
+	pcnt += +1 * (maxOnes - ones) // Add needed ones (includes EOM)
+	cnts = append(cnts, pcnt)
+
+	mw.cnts = cnts
+	return cnts
 }
 
-// Encode the input data into a single meta block.
-// The count returned is the number of bytes written to wr.
-//
-// The only state that this function depends on in mw is mw.bb and mw.cnts.
-// It reuses these objects for efficiency purposes.
-func (mw *Writer) encodeBlock(wr io.Writer, data []byte, last LastMode) (cnt int, err error) {
-	defer errs.Recover(&err)
+// encodeBlock encodes a single meta block from mw.buf into the
+// underlying Writer. The values buf0s and buf1s must accurately reflect
+// what is in buf. If successful, it will clear bufCnt, buf0s, and buf1s.
+// It also manages the statistic variables: OutputOffset and BlockCount.
+func (mw *Writer) encodeBlock(last LastMode) (err error) {
+	defer errRecover(&err)
 
-	ones := bits.Count(data)
-	zeros := 8*len(data) - ones
-	huffLen := mw.computeHuffLen(zeros, ones)
-	errs.Assert(huffLen > 0, errMetaInvalid)
+	mw.bb.Reset()
+	mw.bw.Init(&mw.bb, false)
 
-	bb := &mw.bb
-	bb.Reset()
+	buf := mw.buf[:mw.bufCnt]
+	huffLen, inv := mw.computeHuffLen(mw.buf0s, mw.buf1s)
+	if huffLen == 0 {
+		panic(ErrInvalid)
+	}
 
 	// Encode header.
 	numHCLen := 4 + (8-huffLen)*2 // Based on XFLATE specification
-	bb.Write(magicVals[:])
-	bits.Set(bb.Bytes(), last == LastStream, 0)
-	bits.SetN(bb.Bytes(), uint(numHCLen-4), 4, 13) // 6..18, always even
-	for idx := 5; idx < numHCLen-1; idx++ {
-		bb.WriteBits(0, 3) // Empty HCLen code
+	magic := uint(binary.LittleEndian.Uint32(magicVals[:]))
+	magic |= uint(btoi(last == LastStream)) << 0 // Set last DEFLATE block bit
+	magic |= uint(numHCLen-4) << 13              // numHCLen: 6..18, always even
+	mw.bw.WriteBits(magic, 32)
+	for i := uint(5); i < numHCLen-1; i++ {
+		mw.bw.WriteBits(0, 3) // Empty HCLen code
 	}
-	bb.WriteBits(2, 3) // Final HCLen code
+	mw.bw.WriteBits(2, 3) // Final HCLen code
 
 	// Encode data segment.
-	cnts := mw.computeCounts(data, 1<<uint(huffLen), ones > zeros, last != LastNil)
+	cnts := mw.computeCounts(buf, 1<<uint(huffLen), last != LastNil, inv)
 	val, pre := 0, 0
 	for len(cnts) > 0 {
-		cur := sign(cnts[0] > 0) // If zero: -1, if one: +1
-		sym := (cur + 1) / 2     // If zero:  0, if one:  1
-		ext := 1 - cur           // If zero:  2, if one:  0
-		cnt := cur * cnts[0]     // Count as positive integer
-
-		// The ext variable is 2 if we are encoding zero bits. The use of this
-		// variable is to restrict when we can use symRepLast. The reason is
-		// that symRepLast (and its additional 2bit count) occupies a total of
-		// 5 bits, while each zero bit occupies 1bit. Thus, it is more efficient
-		// to encode using symRepLast only if there are 5 or more zero bits.
-
-		switch {
-		case cur < 0 && cnt >= minRepZero: // Use repeated zero code
-			val = min(maxRepZero, cnt)
-			encodeSym(bb, symRepZero)
-			bb.WriteBits(uint(val-minRepZero), 7)
-		case pre == cur && cnt >= minRepLast+ext: // Use repeated last code
-			val = min(maxRepLast, cnt)
-			encodeSym(bb, symRepLast)
-			bb.WriteBits(uint(val-minRepLast), 2)
-		case cnt > 0: // Use literal value
-			val = 1
-			encodeSym(bb, symbol(sym))
-		default: // Discard count if empty
+		if cnts[0] == 0 {
 			cnts = cnts[1:]
 			continue
+		}
+		sym := btoi(cnts[0] > 0) // If zero:  0, if one:  1
+		cur := sym*2 - 1         // If zero: -1, if one: +1
+		cnt := cur * cnts[0]     // Count as positive integer
+
+		switch {
+		case pre != 0 && cur < 0 && cnt >= minRepZero: // Use repeated zero code
+			if val = maxRepZero; val > cnt {
+				val = cnt
+			}
+			if ok := mw.bw.TryWriteSymbol(symRepZero, &encHuff); !ok {
+				mw.bw.WriteSymbol(symRepZero, &encHuff)
+			}
+			if ok := mw.bw.TryWriteBits(uint(val-minRepZero), 7); !ok {
+				mw.bw.WriteBits(uint(val-minRepZero), 7)
+			}
+		case pre == cur && cnt >= minRepLast: // Use repeated last code
+			if val = maxRepLast; val > cnt {
+				val = cnt
+			}
+			if ok := mw.bw.TryWriteSymbol(symRepLast, &encHuff); !ok {
+				mw.bw.WriteSymbol(symRepLast, &encHuff)
+			}
+			if ok := mw.bw.TryWriteBits(uint(val-minRepLast), 2); !ok {
+				mw.bw.WriteBits(uint(val-minRepLast), 2)
+			}
+		default: // Use literal value
+			val = 1
+			if ok := mw.bw.TryWriteSymbol(uint(sym), &encHuff); !ok {
+				mw.bw.WriteSymbol(uint(sym), &encHuff)
+			}
 		}
 
 		cnts[0] -= cur * val // Decrement count
 		pre = cur            // Store previous sign
 	}
 
-	// Encode footer.
-	pads := numPads(int(bb.BitsWritten()) + 1 + huffLen)
-	bb.WriteBits(0, pads)                       // Pad to nearest byte
-	bb.WriteBits(0, 1)                          // Empty HDistTree
-	bb.WriteBits((1<<uint(huffLen))-1, huffLen) // Encode EOM marker
-	bits.SetN(bb.Bytes(), uint(pads), 3, 3)     // Update NumHLit size
+	// Encode footer (and update header with known padding size).
+	pads := numPads(uint(mw.bw.BitsWritten()) + 1 + huffLen)
+	mw.bw.WriteBits(0, pads)                 // Pad to nearest byte
+	mw.bw.WriteBits(0, 1)                    // Empty HDistTree
+	mw.bw.WriteBits((1<<huffLen)-1, huffLen) // Encode EOM marker
 
-	errs.Assert(bb.WriteAligned(), errMetaInvalid) // This should never occur
-	return wr.Write(bb.Bytes())                    // Final write deals with IO errors
+	mw.bw.Flush()                       // Flush all data to the bytes.Buffer
+	mw.bb.Bytes()[0] |= byte(pads) << 3 // Update NumHLit size
+
+	// Write the encoded block.
+	cnt, err := mw.wr.Write(mw.bb.Bytes())
+	mw.OutputOffset += int64(cnt)
+	if err != nil {
+		panic(err)
+	}
+	mw.bufCnt, mw.buf0s, mw.buf1s = 0, 0, 0
+	mw.BlockCount++
+	return nil
 }
