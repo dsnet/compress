@@ -120,7 +120,7 @@ func (e Error) CompressError() {}
 
 var (
 	errClosed  error = Error("stream is closed")
-	ErrInvalid error = Error("cannot encode to block")
+	ErrInvalid error = Error("cannot encode block")
 	ErrCorrupt error = Error("block is corrupted")
 )
 

@@ -15,7 +15,7 @@ import (
 type Reader struct {
 	InputOffset  int64 // Total number of bytes read from underlying io.Reader
 	OutputOffset int64 // Total number of bytes emitted from Read
-	BlockCount   int64 // Number of blocks decoded
+	NumBlocks    int64 // Number of blocks decoded
 
 	// LastMode determines which last bits (if any) were be set.
 	// This will be valid after a call to Close.
@@ -102,7 +102,7 @@ func (mr *Reader) Close() error {
 
 // decodeBlock decodes a single meta block from the underlying Reader
 // into mr.buf. If successful, it also sets last.
-// It also manages the statistic variables: InputOffset and BlockCount.
+// It also manages the statistic variables: InputOffset and NumBlocks.
 func (mr *Reader) decodeBlock() (err error) {
 	defer errRecover(&err)
 
@@ -246,6 +246,6 @@ func (mr *Reader) decodeBlock() (err error) {
 	}
 
 	mr.buf, mr.last = buf, last
-	mr.BlockCount++
+	mr.NumBlocks++
 	return nil
 }

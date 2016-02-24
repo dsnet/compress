@@ -287,9 +287,9 @@ func TestReaderReset(t *testing.T) {
 		"4844120a91125191069590128508452175527befbdf7de01fe",
 	)
 	var vectors = []struct {
-		data                  string
-		inOff, outOff, blkCnt int64
-		last                  LastMode
+		data                   string
+		inOff, outOff, numBlks int64
+		last                   LastMode
 	}{{
 		"The quick brown fox jumped over the lazy dog.",
 		93, 45, 2, LastMeta,
@@ -320,8 +320,8 @@ func TestReaderReset(t *testing.T) {
 		if mr.OutputOffset != v.outOff {
 			t.Errorf("test %d, output offset mismatch, got %d, want %d", i, mr.OutputOffset, v.outOff)
 		}
-		if mr.BlockCount != v.blkCnt {
-			t.Errorf("test %d, block count mismatch, got %d, want %d", i, mr.BlockCount, v.blkCnt)
+		if mr.NumBlocks != v.numBlks {
+			t.Errorf("test %d, block count mismatch, got %d, want %d", i, mr.NumBlocks, v.numBlks)
 		}
 		if mr.LastMode != v.last {
 			t.Errorf("test %d, last mode mismatch, got %d, want %d", i, mr.LastMode, v.last)

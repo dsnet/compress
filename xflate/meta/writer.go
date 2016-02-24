@@ -15,7 +15,7 @@ import (
 type Writer struct {
 	InputOffset  int64 // Total number of bytes issued to Write
 	OutputOffset int64 // Total number of bytes written to underlying io.Writer
-	BlockCount   int64 // Number of blocks encoded
+	NumBlocks    int64 // Number of blocks encoded
 
 	// LastMode determines which last bits (if any) to set.
 	// This must be set prior to a call to Close.
@@ -172,7 +172,7 @@ func (mw *Writer) computeCounts(buf []byte, maxOnes int, last, invert bool) []in
 // encodeBlock encodes a single meta block from mw.buf into the
 // underlying Writer. The values buf0s and buf1s must accurately reflect
 // what is in buf. If successful, it will clear bufCnt, buf0s, and buf1s.
-// It also manages the statistic variables: OutputOffset and BlockCount.
+// It also manages the statistic variables: OutputOffset and NumBlocks.
 func (mw *Writer) encodeBlock(last LastMode) (err error) {
 	defer errRecover(&err)
 
@@ -256,6 +256,6 @@ func (mw *Writer) encodeBlock(last LastMode) (err error) {
 		panic(err)
 	}
 	mw.bufCnt, mw.buf0s, mw.buf1s = 0, 0, 0
-	mw.BlockCount++
+	mw.NumBlocks++
 	return nil
 }

@@ -118,7 +118,7 @@ func main() {
 				if err := mw.Close(); err != nil {
 					panic(err)
 				}
-				if mw.BlockCount != 1 {
+				if mw.NumBlocks != 1 {
 					panic("unexpected extra blocks")
 				}
 

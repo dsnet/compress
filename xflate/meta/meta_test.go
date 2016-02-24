@@ -67,7 +67,7 @@ func TestReverseSearch(t *testing.T) {
 	}
 
 	// Reverse search all the blocks.
-	var blkCnt int64
+	var numBlks int64
 	data = buf.Bytes()
 	for len(data) > 0 {
 		pos := ReverseSearch(data)
@@ -75,10 +75,10 @@ func TestReverseSearch(t *testing.T) {
 			break
 		}
 		data = data[:pos]
-		blkCnt++
+		numBlks++
 	}
-	if blkCnt != mw.BlockCount {
-		t.Errorf("mismatching block count: got %d, want %d", blkCnt, mw.BlockCount)
+	if numBlks != mw.NumBlocks {
+		t.Errorf("mismatching block count: got %d, want %d", numBlks, mw.NumBlocks)
 	}
 	if len(data) > 0 {
 		t.Errorf("unexpected residual data: got %d bytes", len(data))
@@ -228,7 +228,7 @@ func TestRandom(t *testing.T) {
 	if mr.OutputOffset != mw.InputOffset {
 		t.Errorf("mismatching output offset: got %d, want %d", mr.OutputOffset, mw.OutputOffset)
 	}
-	if mr.BlockCount != mw.BlockCount {
-		t.Errorf("mismatching block count: got %d, want %d", mr.BlockCount, mw.BlockCount)
+	if mr.NumBlocks != mw.NumBlocks {
+		t.Errorf("mismatching block count: got %d, want %d", mr.NumBlocks, mw.NumBlocks)
 	}
 }
