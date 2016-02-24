@@ -68,6 +68,16 @@ func (pr *Reader) Init(r io.Reader, bigEndian bool) {
 	}
 }
 
+// BitsRead reports the total number of bits emitted from any Read method.
+func (pr *Reader) BitsRead() int64 {
+	offset := 8*pr.Offset - int64(pr.numBits)
+	if pr.bufRd != nil {
+		discardBits := pr.discardBits + int(pr.fedBits-pr.numBits)
+		offset = 8*pr.Offset + int64(discardBits)
+	}
+	return offset
+}
+
 // IsBufferedReader reports whether the underlying io.Reader is also a
 // compress.BufferedReader.
 func (pr *Reader) IsBufferedReader() bool {

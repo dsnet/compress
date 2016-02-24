@@ -122,17 +122,7 @@ func TestReader(t *testing.T) {
 
 			r := testutil.NewRand(0)
 		loop:
-			for j := 0; ; j++ {
-				// Stop if we read enough bits.
-				offset := 8*br.Offset - int64(br.numBits)
-				if br.bufRd != nil {
-					discardBits := br.discardBits + int(br.fedBits-br.numBits)
-					offset = 8*br.Offset + int64(discardBits)
-				}
-				if offset > 8*testSize {
-					break
-				}
-
+			for j := 0; br.BitsRead() < 8*testSize; j++ {
 				switch j % 4 {
 				case 0:
 					// Test unaligned Read.
@@ -241,7 +231,7 @@ func TestWriter(t *testing.T) {
 
 		r := testutil.NewRand(0)
 	loop:
-		for j := 0; 8*bw.Offset+int64(8*bw.cntBuf)+int64(bw.numBits) < 8*testSize; j++ {
+		for j := 0; bw.BitsWritten() < 8*testSize; j++ {
 			switch j % 4 {
 			case 0:
 				// Test unaligned Write.
