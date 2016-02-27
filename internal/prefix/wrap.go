@@ -53,8 +53,8 @@ func (r *buffer) Discard(n int) (int, error) {
 }
 
 func (r *bytesReader) Buffered() int {
-	if r.Len() > len(r.arr) {
-		return len(r.arr)
+	if r.Len() > len(r.buf) {
+		return len(r.buf)
 	}
 	return r.Len()
 }
@@ -64,6 +64,7 @@ func (r *bytesReader) Peek(n int) ([]byte, error) {
 		return nil, io.ErrShortBuffer
 	}
 
+	// Return sub-slice of local buffer if possible.
 	pos, _ := r.Seek(0, os.SEEK_CUR)
 	if off := pos - r.pos; off > 0 && off < int64(len(r.buf)) {
 		r.buf, r.pos = r.buf[off:], pos
@@ -72,6 +73,7 @@ func (r *bytesReader) Peek(n int) ([]byte, error) {
 		return r.buf[:n], nil
 	}
 
+	// Fill entire local buffer, and return appropriate sub-slice.
 	cnt, err := r.ReadAt(r.arr[:], pos)
 	r.buf, r.pos = r.arr[:cnt], pos
 	if cnt < n {
@@ -90,8 +92,8 @@ func (r *bytesReader) Discard(n int) (int, error) {
 }
 
 func (r *stringReader) Buffered() int {
-	if r.Len() > len(r.arr) {
-		return len(r.arr)
+	if r.Len() > len(r.buf) {
+		return len(r.buf)
 	}
 	return r.Len()
 }
@@ -101,14 +103,16 @@ func (r *stringReader) Peek(n int) ([]byte, error) {
 		return nil, io.ErrShortBuffer
 	}
 
+	// Return sub-slice of local buffer if possible.
 	pos, _ := r.Seek(0, os.SEEK_CUR)
 	if off := pos - r.pos; off > 0 && off < int64(len(r.buf)) {
 		r.buf, r.pos = r.buf[off:], pos
 	}
-	if n <= len(r.buf) && pos == r.pos {
+	if len(r.buf) >= n && r.pos == pos {
 		return r.buf[:n], nil
 	}
 
+	// Fill entire local buffer, and return appropriate sub-slice.
 	cnt, err := r.ReadAt(r.arr[:], pos)
 	r.buf, r.pos = r.arr[:cnt], pos
 	if cnt < n {
