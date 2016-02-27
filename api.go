@@ -14,7 +14,7 @@ type Error interface {
 	CompressError()
 }
 
-// ByteReader is a common interface accepted by all compression Readers.
+// ByteReader is an interface accepted by all decompression Readers.
 // It guarantees that the decompressor never reads more data than is necessary
 // from the underlying io.Reader.
 type ByteReader interface {
@@ -24,7 +24,7 @@ type ByteReader interface {
 
 var _ ByteReader = (*bufio.Reader)(nil)
 
-// BufferedReader is another interface accepted by all compression Readers.
+// BufferedReader is an interface accepted by all decompression Readers.
 // It guarantees that the decompressor never reads more data than is necessary
 // from the underlying io.Reader. Since BufferedReader allows a decompressor
 // to peek at bytes further along in the stream without advancing the read
@@ -37,6 +37,8 @@ type BufferedReader interface {
 	io.Reader
 
 	// Buffered returns the number of bytes currently buffered.
+	//
+	// This value becomes invalid following the next Read/Discard operation.
 	Buffered() int
 
 	// Peek returns the next n bytes without advancing the reader.
@@ -45,6 +47,8 @@ type BufferedReader interface {
 	// why the peek is short. Peek must support peeking of at least 8 bytes.
 	// If 0 <= n <= Buffered(), Peek is guaranteed to succeed without reading
 	// from the underlying io.Reader.
+	//
+	// This result becomes invalid following the next Read/Discard operation.
 	Peek(n int) ([]byte, error)
 
 	// Discard skips the next n bytes, returning the number of bytes discarded.
