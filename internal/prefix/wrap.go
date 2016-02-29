@@ -53,6 +53,7 @@ func (r *buffer) Discard(n int) (int, error) {
 }
 
 func (r *bytesReader) Buffered() int {
+	r.update()
 	if r.Len() > len(r.buf) {
 		return len(r.buf)
 	}
@@ -65,17 +66,14 @@ func (r *bytesReader) Peek(n int) ([]byte, error) {
 	}
 
 	// Return sub-slice of local buffer if possible.
-	pos, _ := r.Seek(0, os.SEEK_CUR)
-	if off := pos - r.pos; off > 0 && off < int64(len(r.buf)) {
-		r.buf, r.pos = r.buf[off:], pos
-	}
-	if len(r.buf) >= n && r.pos == pos {
+	r.update()
+	if len(r.buf) >= n {
 		return r.buf[:n], nil
 	}
 
 	// Fill entire local buffer, and return appropriate sub-slice.
-	cnt, err := r.ReadAt(r.arr[:], pos)
-	r.buf, r.pos = r.arr[:cnt], pos
+	cnt, err := r.ReadAt(r.arr[:], r.pos)
+	r.buf = r.arr[:cnt]
 	if cnt < n {
 		return r.arr[:cnt], err
 	}
@@ -91,7 +89,18 @@ func (r *bytesReader) Discard(n int) (int, error) {
 	return n, err
 }
 
+// update reslices the internal buffer to be consistent with the read offset.
+func (r *bytesReader) update() {
+	pos, _ := r.Seek(0, os.SEEK_CUR)
+	if off := pos - r.pos; off >= 0 && off < int64(len(r.buf)) {
+		r.buf, r.pos = r.buf[off:], pos
+	} else {
+		r.buf, r.pos = nil, pos
+	}
+}
+
 func (r *stringReader) Buffered() int {
+	r.update()
 	if r.Len() > len(r.buf) {
 		return len(r.buf)
 	}
@@ -104,17 +113,14 @@ func (r *stringReader) Peek(n int) ([]byte, error) {
 	}
 
 	// Return sub-slice of local buffer if possible.
-	pos, _ := r.Seek(0, os.SEEK_CUR)
-	if off := pos - r.pos; off > 0 && off < int64(len(r.buf)) {
-		r.buf, r.pos = r.buf[off:], pos
-	}
-	if len(r.buf) >= n && r.pos == pos {
+	r.update()
+	if len(r.buf) >= n {
 		return r.buf[:n], nil
 	}
 
 	// Fill entire local buffer, and return appropriate sub-slice.
-	cnt, err := r.ReadAt(r.arr[:], pos)
-	r.buf, r.pos = r.arr[:cnt], pos
+	cnt, err := r.ReadAt(r.arr[:], r.pos)
+	r.buf = r.arr[:cnt]
 	if cnt < n {
 		return r.arr[:cnt], err
 	}
@@ -128,4 +134,14 @@ func (r *stringReader) Discard(n int) (int, error) {
 	}
 	r.Seek(int64(n), os.SEEK_CUR)
 	return n, err
+}
+
+// update reslices the internal buffer to be consistent with the read offset.
+func (r *stringReader) update() {
+	pos, _ := r.Seek(0, os.SEEK_CUR)
+	if off := pos - r.pos; off >= 0 && off < int64(len(r.buf)) {
+		r.buf, r.pos = r.buf[off:], pos
+	} else {
+		r.buf, r.pos = nil, pos
+	}
 }
