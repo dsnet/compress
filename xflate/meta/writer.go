@@ -59,7 +59,7 @@ func (mw *Writer) Write(buf []byte) (int, error) {
 		zeros, ones := numBits(b)
 
 		// If possible, avoid flushing to maintain high efficiency.
-		if ensured := mw.bufCnt <= EnsureRawBytes; ensured {
+		if ensured := mw.bufCnt < EnsureRawBytes; ensured {
 			goto skipEncode
 		}
 		if huffLen, _ := mw.computeHuffLen(mw.buf0s+zeros, mw.buf1s+ones); huffLen > 0 {

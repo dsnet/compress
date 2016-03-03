@@ -8,9 +8,12 @@ import (
 	"bytes"
 	"compress/flate"
 	"encoding/hex"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"testing"
+
+	"github.com/dsnet/compress/internal/testutil"
 )
 
 func mustDecodeHex(s string) []byte {
@@ -20,6 +23,16 @@ func mustDecodeHex(s string) []byte {
 	}
 	return b
 }
+
+var (
+	testBinary  = testutil.MustLoadFile("../../testdata/binary.bin", -1)
+	testDigits  = testutil.MustLoadFile("../../testdata/digits.txt", -1)
+	testHuffman = testutil.MustLoadFile("../../testdata/huffman.txt", -1)
+	testRandom  = testutil.MustLoadFile("../../testdata/random.bin", -1)
+	testRepeats = testutil.MustLoadFile("../../testdata/repeats.bin", -1)
+	testTwain   = testutil.MustLoadFile("../../testdata/twain.txt", -1)
+	testZeros   = testutil.MustLoadFile("../../testdata/zeros.bin", -1)
+)
 
 func testBackwardCompatibility(t *testing.T, b []byte) {
 	// Works only on Go 1.5 and above due to a bug in Go's flate implementation.
@@ -43,6 +56,39 @@ func testBackwardCompatibility(t *testing.T, b []byte) {
 	}
 	if want := "test"; string(got) != want {
 		t.Fatalf("mismatching output, ReadAll() = %q, want %q", got, want)
+	}
+}
+
+func TestRoundTrip(t *testing.T) {
+	testBackwardCompatibility(t, nil)
+
+	var vectors = [][]byte{
+		nil, testBinary, testDigits, testHuffman, testRandom, testRepeats, testTwain, testZeros,
+	}
+
+	for i, input := range vectors {
+		var buf bytes.Buffer
+		rd := bytes.NewReader(input)
+		wr := NewWriter(&buf)
+		cnt, err := io.Copy(wr, rd)
+		if err != nil {
+			t.Errorf("test %d, write error: got %v", i, err)
+		}
+		if cnt != int64(len(input)) {
+			t.Errorf("test %d, write count mismatch: got %d, want %d", i, cnt, len(input))
+		}
+		if err := wr.Close(); err != nil {
+			t.Errorf("test %d, close error: got %v", i, err)
+		}
+
+		output, err := ioutil.ReadAll(NewReader(&buf))
+		if err != nil {
+			t.Errorf("test %d, read error: got %v", i, err)
+		}
+
+		if !bytes.Equal(output, input) {
+			t.Errorf("test %d, output data mismatch", i)
+		}
 	}
 }
 
