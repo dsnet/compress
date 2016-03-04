@@ -156,13 +156,18 @@ func (mr *Reader) decodeBlock() (err error) {
 	if mr.rd.ReadBits(3) != 2 {
 		panic(ErrCorrupt) // Final HCLen code
 	}
+	if mr.rd.ReadBits(1) != 0 {
+		panic(ErrCorrupt) // First symbol always symZero
+	}
+	mr.bw.WriteBits(0, 1)
+
 	huffLen := 8 - (numHCLen-4)/2 // Based on XFLATE specification
 	huffRange := 1 << uint(huffLen)
 
 	// Read symbols.
 	var bit, ones uint
 	fifo := byte(0xff)
-	for idx := 0; idx < maxSyms; {
+	for idx := 0; idx < maxSyms-1; {
 		cnt := 1
 		sym, ok := mr.rd.TryReadSymbol(&decHuff)
 		if !ok {
@@ -194,12 +199,9 @@ func (mr *Reader) decodeBlock() (err error) {
 			fifo = (fifo >> 7) | byte(val<<1)
 		}
 
-		if idx == 0 && sym != symZero {
-			panic(ErrCorrupt) // First symbol always symZero
-		}
 		if fifo == 0x00 {
 			// The specification forbids a sequence of 8 zero bits to appear
-			// in the symbol section. This ensures that the magic value never
+			// in the data section. This ensures that the magic value never
 			// appears in the meta encoding by accident.
 			panic(ErrCorrupt)
 		}
