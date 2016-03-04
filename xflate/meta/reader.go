@@ -12,31 +12,40 @@ import (
 	"github.com/dsnet/compress/internal/prefix"
 )
 
+// A Reader is an io.Reader that can read XFLATE's meta encoding.
+// The zero value of Reader is valid once Reset is called.
 type Reader struct {
 	InputOffset  int64 // Total number of bytes read from underlying io.Reader
 	OutputOffset int64 // Total number of bytes emitted from Read
 	NumBlocks    int64 // Number of blocks decoded
 
-	// LastMode determines which last bits (if any) were be set.
-	// This will be valid after a call to Close.
-	LastMode LastMode
+	// FinalMode indicates which final bits (if any) were set.
+	// This will be valid after a call to Close or upon hitting io.EOF.
+	FinalMode FinalMode
 
 	rd *prefix.Reader
 	br prefix.Reader // Pre-allocated prefix.Reader to wrap input Reader
 	bw prefix.Writer // Temporary bit writer
 	bb bytes.Buffer  // Buffer for bw to write into
 
-	last LastMode
-	buf  []byte
-	err  error
+	final FinalMode
+	buf   []byte
+	err   error
 }
 
+// NewReader creates a new Reader reading from the given reader.
+// If rd does not also implement compress.ByteReader or compress.BufferedReader,
+// then the decoder may read more data than necessary from rd.
 func NewReader(rd io.Reader) *Reader {
 	mr := new(Reader)
 	mr.Reset(rd)
 	return mr
 }
 
+// Reset discards the Reader's state and makes it equivalent to the result
+// of a call to NewReader, but reading from rd instead.
+//
+// This is used to reduce memory allocations.
 func (mr *Reader) Reset(rd io.Reader) {
 	*mr = Reader{
 		br: mr.br,
@@ -54,6 +63,9 @@ func (mr *Reader) Reset(rd io.Reader) {
 	return
 }
 
+// Read reads the decoded meta data from the underlying io.Reader.
+// This returns io.EOF either when a meta block with final bits set is found or
+// when io.EOF is hit in the underlying reader.
 func (mr *Reader) Read(buf []byte) (int, error) {
 	if mr.err != nil {
 		return 0, mr.err
@@ -68,8 +80,8 @@ func (mr *Reader) Read(buf []byte) (int, error) {
 			break
 		}
 
-		if mr.last != LastNil {
-			mr.LastMode = mr.last
+		if mr.final != FinalNil {
+			mr.FinalMode = mr.final
 			mr.err = io.EOF
 			break
 		}
@@ -85,7 +97,7 @@ func (mr *Reader) Read(buf []byte) (int, error) {
 }
 
 // Close ends the meta stream.
-// The LastMode encountered becomes valid after calling Close.
+// The FinalMode encountered becomes valid after calling Close.
 func (mr *Reader) Close() error {
 	if mr.err == errClosed {
 		return nil
@@ -94,14 +106,14 @@ func (mr *Reader) Close() error {
 		return mr.err
 	}
 
-	mr.LastMode = mr.last
+	mr.FinalMode = mr.final
 	mr.err = errClosed
 	mr.rd = nil // Release reference to underlying Reader
 	return nil
 }
 
 // decodeBlock decodes a single meta block from the underlying Reader
-// into mr.buf. If successful, it also sets last.
+// into mr.buf and sets mr.final based on the block's final bits.
 // It also manages the statistic variables: InputOffset and NumBlocks.
 func (mr *Reader) decodeBlock() (err error) {
 	defer errRecover(&err)
@@ -130,7 +142,7 @@ func (mr *Reader) decodeBlock() (err error) {
 	if ReverseSearch(magicBuf[:]) != 0 {
 		panic(ErrCorrupt) // Magic must appear
 	}
-	lastStream := (magic>>0)&1 > 0
+	finalStream := (magic>>0)&1 > 0
 	pads := (magic >> 3) & 7       // 0..7
 	numHCLen := 4 + (magic>>13)&15 // 6..18, always even
 	if numHCLen < 6 {
@@ -215,7 +227,7 @@ func (mr *Reader) decodeBlock() (err error) {
 	}
 
 	flags := syms[0]
-	lastMeta := (flags>>1)&1 > 0
+	finalMeta := (flags>>1)&1 > 0
 	invert := (flags>>2)&1 > 0
 	size := (flags >> 3) & 31 // 0..31
 
@@ -226,8 +238,8 @@ func (mr *Reader) decodeBlock() (err error) {
 		}
 	}
 
-	last := LastMode(btoi(lastMeta) + btoi(lastStream))
-	if lastStream && !lastMeta {
+	final := FinalMode(btoi(finalMeta) + btoi(finalStream))
+	if finalStream && !finalMeta {
 		panic(ErrCorrupt)
 	}
 
@@ -245,7 +257,7 @@ func (mr *Reader) decodeBlock() (err error) {
 		panic(ErrCorrupt) // Bit reader not byte-aligned
 	}
 
-	mr.buf, mr.last = buf, last
+	mr.buf, mr.final = buf, final
 	mr.NumBlocks++
 	return nil
 }

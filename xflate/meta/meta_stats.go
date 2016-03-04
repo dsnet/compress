@@ -7,7 +7,7 @@
 // meta_stats is used to measure the efficiency of meta encoding.
 //
 // The XFLATE meta encoding is a block-based format that allows in-band encoding
-// of arbitrary meta data into a DEFLATE stream. This is possible, because when
+// of arbitrary meta data into a DEFLATE stream. This is possible because when
 // XFLATE meta encoding is decoded using a DEFLATE decoder, it produces zero
 // output. This allows XFLATE to add information on top of DEFLATE in a
 // backwards compatible manner.
@@ -38,9 +38,9 @@ import (
 )
 
 func main() {
-	// It would be impractical to try all possible input strings. Thus, we
-	// randomly sample random strings from the domain. Thus, perform numSamples
-	// trials per size class.
+	// It would be impractical to try all possible input strings.
+	// Thus, we sample random strings from the domain by performing
+	// numSamples trials per size class.
 	numSamples := flag.Int("n", 256, "number of strings to sample per size class")
 	randSeed := flag.Int("s", 0, "random number generator seed")
 	flag.Parse()
@@ -161,8 +161,8 @@ func main() {
 func computeHuffLen(zeros, ones int) (huffLen uint, inv bool) {
 	const (
 		maxSyms    = 257 // Maximum number of literal codes (with EOM marker)
-		minHuffLen = 1   // Minimum number of bits for each huffman code
-		maxHuffLen = 7   // Maximum number of bits for each huffman code
+		minHuffLen = 1   // Minimum number of bits for each Huffman code
+		maxHuffLen = 7   // Maximum number of bits for each Huffman code
 	)
 
 	if inv = ones > zeros; inv {

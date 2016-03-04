@@ -7,7 +7,6 @@ package meta
 import (
 	"bytes"
 	"compress/flate"
-	"encoding/hex"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -15,14 +14,6 @@ import (
 
 	"github.com/dsnet/compress/internal/testutil"
 )
-
-func mustDecodeHex(s string) []byte {
-	b, err := hex.DecodeString(s)
-	if err != nil {
-		panic(err)
-	}
-	return b
-}
 
 var (
 	testBinary  = testutil.MustLoadFile("../../testdata/binary.bin", -1)
@@ -47,15 +38,15 @@ func testBackwardCompatibility(t *testing.T, b []byte) {
 		t.Fatal("Empty HDistTree bug found in compress/flate, please use Go 1.5 and above")
 	}
 
-	// Append last stream block that just contains the string "test\n".
+	// Append final stream block that just contains the string "test\n".
 	const rawTestBlock = "\x01\x04\x00\xfb\xfftest"
 	zd = flate.NewReader(bytes.NewBuffer([]byte(string(b) + rawTestBlock)))
 	got, err := ioutil.ReadAll(zd)
 	if err != nil {
-		t.Fatalf("unexpected error, ReadAll() = %v", err)
+		t.Fatalf("unexpected error: ReadAll() = %v", err)
 	}
 	if want := "test"; string(got) != want {
-		t.Fatalf("mismatching output, ReadAll() = %q, want %q", got, want)
+		t.Fatalf("mismatching output: ReadAll() = %q, want %q", got, want)
 	}
 }
 
@@ -67,67 +58,36 @@ func TestRoundTrip(t *testing.T) {
 	}
 
 	for i, input := range vectors {
-		var buf bytes.Buffer
-		rd := bytes.NewReader(input)
-		wr := NewWriter(&buf)
-		cnt, err := io.Copy(wr, rd)
+		var wb, rb bytes.Buffer
+
+		mw := NewWriter(&wb)
+		cnt, err := io.Copy(mw, bytes.NewReader(input))
 		if err != nil {
-			t.Errorf("test %d, write error: got %v", i, err)
+			t.Errorf("test %d, unexpected error: Write() = %v", i, err)
 		}
 		if cnt != int64(len(input)) {
 			t.Errorf("test %d, write count mismatch: got %d, want %d", i, cnt, len(input))
 		}
-		if err := wr.Close(); err != nil {
-			t.Errorf("test %d, close error: got %v", i, err)
+		if err := mw.Close(); err != nil {
+			t.Errorf("test %d, unexpected error: Close() = %v", i, err)
 		}
 
-		output, err := ioutil.ReadAll(NewReader(&buf))
+		mr := NewReader(&wb)
+		cnt, err = io.Copy(&rb, mr)
 		if err != nil {
-			t.Errorf("test %d, read error: got %v", i, err)
+			t.Errorf("test %d, unexpected error: Read() = %v", i, err)
+		}
+		if cnt != int64(len(input)) {
+			t.Errorf("test %d, read count mismatch: got %d, want %d", i, cnt, len(input))
+		}
+		if err := mr.Close(); err != nil {
+			t.Errorf("test %d, unexpected error: Close() = %v", i, err)
 		}
 
+		output := rb.Bytes()
 		if !bytes.Equal(output, input) {
 			t.Errorf("test %d, output data mismatch", i)
 		}
-	}
-}
-
-func TestReverseSearch(t *testing.T) {
-	rand := rand.New(rand.NewSource(0))
-
-	// Search random data (not found).
-	data := make([]byte, 1<<12) // 4KiB
-	rand.Read(data)
-	if idx := ReverseSearch(data); idx != -1 {
-		t.Errorf("unexpected meta magic: got %d, want %d", idx, -1)
-	}
-
-	// Write arbitrary data.
-	buf := bytes.NewBuffer(nil)
-	mw := NewWriter(buf)
-	for i := 0; i < 4096; i++ {
-		cnt := rand.Intn(MaxEncBytes)
-		rand.Read(data[:cnt])
-		mw.Write(data[:cnt])
-		mw.encodeBlock(LastMode(rand.Intn(3)))
-	}
-
-	// Reverse search all the blocks.
-	var numBlks int64
-	data = buf.Bytes()
-	for len(data) > 0 {
-		pos := ReverseSearch(data)
-		if pos == -1 {
-			break
-		}
-		data = data[:pos]
-		numBlks++
-	}
-	if numBlks != mw.NumBlocks {
-		t.Errorf("mismatching block count: got %d, want %d", numBlks, mw.NumBlocks)
-	}
-	if len(data) > 0 {
-		t.Errorf("unexpected residual data: got %d bytes", len(data))
 	}
 }
 
@@ -136,9 +96,9 @@ func TestFuzz(t *testing.T) {
 
 	bb := bytes.NewBuffer(nil)
 	type X struct {
-		buf  []byte
-		cnt  int
-		last LastMode
+		buf   []byte
+		cnt   int
+		final FinalMode
 	}
 	wants := []X{}
 
@@ -167,12 +127,12 @@ func TestFuzz(t *testing.T) {
 				}
 				buf = append(buf, b)
 			}
-			for _, l := range []LastMode{LastNil, LastMeta} {
+			for _, l := range []FinalMode{FinalNil, FinalMeta} {
 				mw.Reset(bb)
 				mw.bufCnt = copy(mw.buf[:], buf)
 				mw.buf0s, mw.buf1s = zeros, ones
 				if err := mw.encodeBlock(l); err != nil {
-					t.Fatalf("unexpected error, encodeBlock() = %v", err)
+					t.Fatalf("unexpected error: encodeBlock() = %v", err)
 				}
 				cnt := int(mw.OutputOffset)
 				wants = append(wants, X{buf, cnt, l})
@@ -195,14 +155,14 @@ func TestFuzz(t *testing.T) {
 	for _, x := range wants {
 		mr.Reset(bb)
 		if err := mr.decodeBlock(); err != nil {
-			t.Fatalf("unexpected error, decodeBlock() = %v", err)
+			t.Fatalf("unexpected error: decodeBlock() = %v", err)
 		}
 
 		if !bytes.Equal(mr.buf, x.buf) {
 			t.Fatalf("mismatching data:\ngot  %x\nwant %x", mr.buf, x.buf)
 		}
-		if mr.last != x.last {
-			t.Fatalf("mismatching last mode: got %d, want %d", mr.last, x.last)
+		if mr.final != x.final {
+			t.Fatalf("mismatching final mode: got %d, want %d", mr.final, x.final)
 		}
 		if cnt := int(mr.InputOffset); cnt != x.cnt {
 			t.Fatalf("mismatching count: got %d, want %d", cnt, x.cnt)
@@ -226,10 +186,10 @@ func TestRandom(t *testing.T) {
 
 		wrCnt, err := mw.Write(buf[:cnt])
 		if err != nil {
-			t.Fatalf("unexpected error, Write() = %v", err)
+			t.Fatalf("unexpected error: Write() = %v", err)
 		}
 		if wrCnt != cnt {
-			t.Fatalf("mismatching write count, Write() = %d, want %d", wrCnt, cnt)
+			t.Fatalf("mismatching write count: Write() = %d, want %d", wrCnt, cnt)
 		}
 		if int(mw.InputOffset) != ibuf.Len() {
 			t.Fatalf("mismatching input offset: got %d, want %d", int(mw.InputOffset), ibuf.Len())
@@ -238,9 +198,9 @@ func TestRandom(t *testing.T) {
 			t.Fatalf("mismatching output offset: got %d, want %d", int(mw.OutputOffset), obuf.Len())
 		}
 	}
-	mw.LastMode = LastMeta
+	mw.FinalMode = FinalMeta
 	if err := mw.Close(); err != nil {
-		t.Fatalf("unexpected error, Close() = %v", err)
+		t.Fatalf("unexpected error: Close() = %v", err)
 	}
 
 	testBackwardCompatibility(t, obuf.Bytes())
@@ -255,16 +215,16 @@ func TestRandom(t *testing.T) {
 	mr := NewReader(bytes.NewReader(obuf.Bytes()))
 	buf, err := ioutil.ReadAll(mr)
 	if err != nil {
-		t.Errorf("unexpected error, Read() = %v", err)
+		t.Errorf("unexpected error: Read() = %v", err)
 	}
 	if !bytes.Equal(buf, ibuf.Bytes()) {
-		t.Errorf("mismatching output, Read()")
+		t.Errorf("mismatching output for Read()")
 	}
 	if err := mr.Close(); err != nil {
-		t.Errorf("unexpected error, Close() = %v", err)
+		t.Errorf("unexpected error: Close() = %v", err)
 	}
-	if last := mr.LastMode; last != LastMeta {
-		t.Errorf("mismatching last mode: got %d, want %d", last, LastMeta)
+	if final := mr.FinalMode; final != FinalMeta {
+		t.Errorf("mismatching final mode: got %d, want %d", final, FinalMeta)
 	}
 
 	// Verify that statistic agree between Reader/Writer.
@@ -276,5 +236,44 @@ func TestRandom(t *testing.T) {
 	}
 	if mr.NumBlocks != mw.NumBlocks {
 		t.Errorf("mismatching block count: got %d, want %d", mr.NumBlocks, mw.NumBlocks)
+	}
+}
+
+func TestReverseSearch(t *testing.T) {
+	rand := rand.New(rand.NewSource(0))
+
+	// Search random data (not found).
+	data := make([]byte, 1<<12) // 4KiB
+	rand.Read(data)
+	if idx := ReverseSearch(data); idx != -1 {
+		t.Errorf("unexpected meta magic: got %d, want %d", idx, -1)
+	}
+
+	// Write arbitrary data.
+	buf := bytes.NewBuffer(nil)
+	mw := NewWriter(buf)
+	for i := 0; i < 4096; i++ {
+		cnt := rand.Intn(MaxEncBytes)
+		rand.Read(data[:cnt])
+		mw.Write(data[:cnt])
+		mw.encodeBlock(FinalMode(rand.Intn(3)))
+	}
+
+	// Reverse search all the blocks.
+	var numBlks int64
+	data = buf.Bytes()
+	for len(data) > 0 {
+		pos := ReverseSearch(data)
+		if pos == -1 {
+			break
+		}
+		data = data[:pos]
+		numBlks++
+	}
+	if numBlks != mw.NumBlocks {
+		t.Errorf("mismatching block count: got %d, want %d", numBlks, mw.NumBlocks)
+	}
+	if len(data) > 0 {
+		t.Errorf("unexpected residual data: got %d bytes", len(data))
 	}
 }

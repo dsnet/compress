@@ -11,6 +11,8 @@ import (
 	"math/rand"
 	"strings"
 	"testing"
+
+	"github.com/dsnet/compress/internal/testutil"
 )
 
 // TestReader tests that the reader is able to properly decode a set of valid
@@ -18,34 +20,34 @@ import (
 // strings. A third-party decoder should verify that it has the same behavior
 // when processing these input vectors.
 func TestReader(t *testing.T) {
-	var dh = mustDecodeHex
+	var dh = testutil.MustDecodeHex
 
 	var vectors = []struct {
-		desc   string   // Description of the test
-		input  []byte   // Test input string
-		output []byte   // Expected output string
-		last   LastMode // Expected LastMode value
-		err    error    // Expected error
+		desc   string    // Description of the test
+		input  []byte    // Test input string
+		output []byte    // Expected output string
+		final  FinalMode // Expected FinalMode value
+		err    error     // Expected error
 	}{{
 		desc:   "empty string",
 		input:  dh(""),
 		output: dh(""),
 		err:    io.EOF,
 	}, {
-		desc:   "bad empty meta block (LastNil, first symbol not symZero)",
+		desc:   "bad empty meta block (FinalNil, first symbol not symZero)",
 		input:  dh("24408705000000faffe476e0"),
 		output: dh(""),
 		err:    ErrCorrupt,
 	}, {
-		desc:   "empty meta block (LastNil)",
+		desc:   "empty meta block (FinalNil)",
 		input:  dh("1c408705000000f2ffc7ede0"),
 		output: dh(""),
-		last:   LastNil,
+		final:  FinalNil,
 	}, {
-		desc:   "empty meta block (LastMeta)",
+		desc:   "empty meta block (FinalMeta)",
 		input:  dh("1c408705000000d2ff1fb7e1"),
 		output: dh(""),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "bad empty meta block, contains the magic value mid way",
 		input:  dh("0580870500000080040004008605ff7f07ca"),
@@ -55,97 +57,97 @@ func TestReader(t *testing.T) {
 		desc:   "meta block containing the string 'a'",
 		input:  dh("1400870500004882a0febfb4bdf0"),
 		output: dh("61"),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "meta block containing the string 'ab'",
 		input:  dh("1400870500004884a008f5ff9bedf0"),
 		output: dh("6162"),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "meta block containing the string 'abc'",
 		input:  dh("14c0860500202904452885faffbaf6def8"),
 		output: dh("616263"),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "meta block containing the string 'Hello, world!'",
 		input:  dh("148086058024059144a1144a692894eca8541a8aa8500a5182de6f2ffc"),
 		output: dh("48656c6c6f2c20776f726c6421"),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "meta block containing the hex-string '00'*4",
 		input:  dh("3440870500000012faffe026e0"),
 		output: dh("00000000"),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "meta block containing the hex-string '00'*8",
 		input:  dh("2c40870500000012f4ffbf4de0"),
 		output: dh("0000000000000000"),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "meta block containing the hex-string '00'*16",
 		input:  dh("2440870500000012e8ff7b9be0"),
 		output: dh("00000000000000000000000000000000"),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "meta block containing the hex-string 'ff'*4",
 		input:  dh("2c40870500000052f4ffc32de0"),
 		output: dh("ffffffff"),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "meta block containing the hex-string 'ff'*8",
 		input:  dh("2440870500000052e8ff835be0"),
 		output: dh("ffffffffffffffff"),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "meta block containing the hex-string 'ff'*16",
 		input:  dh("1c40870500000052d0ffffb6e0"),
 		output: dh("ffffffffffffffffffffffffffffffff"),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "meta block containing the random hex-string '911fe47084a4668b'",
 		input:  dh("1c808605800409d1045141852022294a09fd7f417befbd07fc"),
 		output: dh("911fe47084a4668b"),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "meta block containing the random hex-string 'de9fa94cb16f40fc'",
 		input:  dh("24808605801412641725294a2a02d156fdff447befbd0bfc"),
 		output: dh("de9fa94cb16f40fc"),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "empty meta block with a huffLen of 1",
 		input:  dh("34c087050000000020fdff7480"),
 		output: dh(""),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "empty meta block with a huffLen of 2",
 		input:  dh("3c80870500000080f47ffd1cc0"),
 		output: dh(""),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "empty meta block with a huffLen of 3",
 		input:  dh("24408705000000d2ff55f571e0"),
 		output: dh(""),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "empty meta block with a huffLen of 4",
 		input:  dh("0c008705000048ff575555d5b7f1"),
 		output: dh(""),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "empty meta block with a huffLen of 5",
 		input:  dh("34c086050020fd5f555555555555555f06f8"),
 		output: dh(""),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "empty meta block with a huffLen of 6",
 		input:  dh("1c80860580f47f5555555555555555555555555555557d15fc"),
 		output: dh(""),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "empty meta block with a huffLen of 7",
 		input:  dh("14408605d2eb5555555555555555555555555555555555555555555555555555555555555515fe"),
 		output: dh(""),
-		last:   LastMeta,
+		final:  FinalMeta,
 	}, {
 		desc:   "shortest meta block",
 		input:  dh("1c408705000000f2ffc7ede0"),
@@ -207,7 +209,7 @@ func TestReader(t *testing.T) {
 		input: dh("34c087050000000020fd7f740001"),
 		err:   ErrCorrupt,
 	}, {
-		desc:  "meta block with LastStream set, but not LastMeta",
+		desc:  "meta block with FinalStream set, but not FinalMeta",
 		input: dh("35c087050000000020faffe80001"),
 		err:   ErrCorrupt,
 	}, {
@@ -239,8 +241,8 @@ func TestReader(t *testing.T) {
 		if int(mr.InputOffset) != len(v.input) && err == nil {
 			t.Errorf("test %d (%s), mismatching offset: got %d, want %d", i, v.desc, mr.InputOffset, len(v.input))
 		}
-		if mr.last != v.last {
-			t.Errorf("test %d (%s), mismatching last mode: got %d, want %d", i, v.desc, mr.last, v.last)
+		if mr.final != v.final {
+			t.Errorf("test %d (%s), mismatching final mode: got %d, want %d", i, v.desc, mr.final, v.final)
 		}
 		if err != v.err {
 			t.Errorf("test %d (%s), unexpected error: got %v, want %v", i, v.desc, err, v.err)
@@ -254,26 +256,26 @@ func TestReaderReset(t *testing.T) {
 
 	// Test Reader for idempotent Close.
 	if err := mr.Close(); err != nil {
-		t.Errorf("unexpected error, Close() = %v", err)
+		t.Errorf("unexpected error: Close() = %v", err)
 	}
 	if err := mr.Close(); err != nil {
-		t.Errorf("unexpected error, Close() = %v", err)
+		t.Errorf("unexpected error: Close() = %v", err)
 	}
 	if _, err := mr.Read(buf); err != errClosed {
-		t.Errorf("unexpected error, Read(...) = %v, want %v", err, errClosed)
+		t.Errorf("unexpected error: Read() = %v, want %v", err, errClosed)
 	}
 
 	// Test Reader with corrupt data.
 	mr.Reset(strings.NewReader("corrupt"))
 	if _, err := mr.Read(buf); err != ErrCorrupt {
-		t.Errorf("unexpected error, Read(...) = %v, want %v", err, ErrCorrupt)
+		t.Errorf("unexpected error: Read() = %v, want %v", err, ErrCorrupt)
 	}
 	if err := mr.Close(); err != ErrCorrupt {
-		t.Errorf("unexpected error, Close() = %v, want %v", err, ErrCorrupt)
+		t.Errorf("unexpected error: Close() = %v, want %v", err, ErrCorrupt)
 	}
 
 	// Test Reader on multiple back-to-back streams.
-	var data = mustDecodeHex("" +
+	var data = testutil.MustDecodeHex("" +
 		"3c408605b22a928c944499112a4925520aa5a4cc108aa834944a45a5cc509486" +
 		"321a66484a524929ab92284499d150667bef00fe2c4086059290524914519919" +
 		"a98c94449919a564146988869911a5a15414959e6aefbdf7de7bef02fe3c4086" +
@@ -289,16 +291,16 @@ func TestReaderReset(t *testing.T) {
 	var vectors = []struct {
 		data                   string
 		inOff, outOff, numBlks int64
-		last                   LastMode
+		final                  FinalMode
 	}{{
 		"The quick brown fox jumped over the lazy dog.",
-		93, 45, 2, LastMeta,
+		93, 45, 2, FinalMeta,
 	}, {
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-		104, 56, 2, LastStream,
+		104, 56, 2, FinalStream,
 	}, {
 		"Do not communicate by sharing memory; instead, share memory by communicating.",
-		148, 77, 3, LastNil,
+		148, 77, 3, FinalNil,
 	}}
 
 	rd := bytes.NewReader(data)
@@ -306,13 +308,13 @@ func TestReaderReset(t *testing.T) {
 		mr.Reset(rd)
 		buf, err := ioutil.ReadAll(mr)
 		if err != nil {
-			t.Errorf("test %d, unexpected error, ReadAll(...) = %v", i, err)
+			t.Errorf("test %d, unexpected error: ReadAll() = %v", i, err)
 		}
 		if str := string(buf); str != v.data {
 			t.Errorf("test %d, output mismatch:\ngot  %s\nwant %s", i, str, v.data)
 		}
 		if err := mr.Close(); err != nil {
-			t.Errorf("test %d, unexpected error, Close() = %v", i, err)
+			t.Errorf("test %d, unexpected error: Close() = %v", i, err)
 		}
 		if mr.InputOffset != v.inOff {
 			t.Errorf("test %d, input offset mismatch, got %d, want %d", i, mr.InputOffset, v.inOff)
@@ -323,8 +325,8 @@ func TestReaderReset(t *testing.T) {
 		if mr.NumBlocks != v.numBlks {
 			t.Errorf("test %d, block count mismatch, got %d, want %d", i, mr.NumBlocks, v.numBlks)
 		}
-		if mr.LastMode != v.last {
-			t.Errorf("test %d, last mode mismatch, got %d, want %d", i, mr.LastMode, v.last)
+		if mr.FinalMode != v.final {
+			t.Errorf("test %d, final mode mismatch, got %d, want %d", i, mr.FinalMode, v.final)
 		}
 	}
 }
@@ -333,32 +335,29 @@ func BenchmarkReader(b *testing.B) {
 	data := make([]byte, 1<<16)
 	rand.Read(data)
 	bb := bytes.NewBuffer(nil)
+	mr := NewReader(nil)
 
 	mw := NewWriter(bb)
 	mw.Write(data)
 	mw.Close()
-
-	rd := bytes.NewBuffer(nil)
-	mr := NewReader(nil)
 
 	b.ReportAllocs()
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		rd.Reset()
-		rd.Write(bb.Bytes())
+		rd := bytes.NewReader(bb.Bytes())
 		mr.Reset(rd)
 
 		cnt, err := io.Copy(ioutil.Discard, mr)
 		if cnt != int64(len(data)) {
-			b.Fatalf("mismatching count, Copy(...) = %d, want %d", cnt, len(data))
+			b.Fatalf("mismatching count: Copy() = %d, want %d", cnt, len(data))
 		}
 		if err != nil {
-			b.Fatalf("unexpected error, Copy(...) = %v", err)
+			b.Fatalf("unexpected error: Copy() = %v", err)
 		}
 		if err := mr.Close(); err != nil {
-			b.Fatalf("unexpected error, Close() = %v", err)
+			b.Fatalf("unexpected error: Close() = %v", err)
 		}
 	}
 }

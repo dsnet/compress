@@ -12,33 +12,41 @@ import (
 	"github.com/dsnet/compress/internal/prefix"
 )
 
+// A Writer is an io.Writer that can write XFLATE's meta encoding.
+// The zero value of Writer is valid once Reset is called.
 type Writer struct {
 	InputOffset  int64 // Total number of bytes issued to Write
 	OutputOffset int64 // Total number of bytes written to underlying io.Writer
 	NumBlocks    int64 // Number of blocks encoded
 
-	// LastMode determines which last bits (if any) to set.
+	// FinalMode determines which final bits (if any) to set.
 	// This must be set prior to a call to Close.
-	LastMode LastMode
+	FinalMode FinalMode
 
 	wr io.Writer
 	bw prefix.Writer // Temporary bit writer
 	bb bytes.Buffer  // Buffer for bw to write into
 
-	cnts   []int
 	buf0s  int               // Number of 0-bits in buf
 	buf1s  int               // Number of 1-bits in buf
 	bufCnt int               // Number of bytes in buf
 	buf    [MaxRawBytes]byte // Buffer to collect raw bytes to be encoded
+	cnts   []int             // Slice of counts (reused to avoid allocations)
 	err    error             // Persistent error
 }
 
+// NewWriter creates a new Writer writing to the given writer.
+// It is the caller's responsibility to call Close to complete the meta stream.
 func NewWriter(wr io.Writer) *Writer {
 	mw := new(Writer)
 	mw.Reset(wr)
 	return mw
 }
 
+// Reset discards the Writer's state and makes it equivalent to the result
+// of a call to NewWriter, but writes to wr instead.
+//
+// This is used to reduce memory allocations.
 func (mw *Writer) Reset(wr io.Writer) {
 	*mw = Writer{
 		wr:   wr,
@@ -49,6 +57,8 @@ func (mw *Writer) Reset(wr io.Writer) {
 	return
 }
 
+// Write writes the encoded form of buf to the underlying io.Writer.
+// The Writer may buffer the input in order to produce larger meta blocks.
 func (mw *Writer) Write(buf []byte) (int, error) {
 	if mw.err != nil {
 		return 0, mw.err
@@ -66,7 +76,7 @@ func (mw *Writer) Write(buf []byte) (int, error) {
 			goto skipEncode
 		}
 
-		mw.err = mw.encodeBlock(LastNil)
+		mw.err = mw.encodeBlock(FinalNil)
 		if mw.err != nil {
 			break
 		}
@@ -84,7 +94,7 @@ func (mw *Writer) Write(buf []byte) (int, error) {
 }
 
 // Close ends the meta stream and flushes all buffered data.
-// The desired LastMode must be set prior to calling Close.
+// The desired FinalMode must be set prior to calling Close.
 func (mw *Writer) Close() error {
 	if mw.err == errClosed {
 		return nil
@@ -93,7 +103,7 @@ func (mw *Writer) Close() error {
 		return mw.err
 	}
 
-	err := mw.encodeBlock(mw.LastMode)
+	err := mw.encodeBlock(mw.FinalMode)
 	if err != nil {
 		mw.err = err
 	} else {
@@ -103,7 +113,8 @@ func (mw *Writer) Close() error {
 	return err
 }
 
-// computeHuffLen computes the shortest Huffman length to encode the data.
+// computeHuffLen computes the shortest Huffman length to encode the data and
+// reports whether the data bits should be inverted.
 // If the input data is too large, then 0 is returned.
 func (*Writer) computeHuffLen(zeros, ones int) (huffLen uint, inv bool) {
 	if inv = ones > zeros; inv {
@@ -124,7 +135,7 @@ func (*Writer) computeHuffLen(zeros, ones int) (huffLen uint, inv bool) {
 //
 // For example (LSB on left):
 //	01101011 11100011  =>  [-1, +2, -1, +1, -1, +5, -3, +2]
-func (mw *Writer) computeCounts(buf []byte, maxOnes int, last, invert bool) []int {
+func (mw *Writer) computeCounts(buf []byte, maxOnes int, final, invert bool) []int {
 	// Stack copy of buf for safe mutations.
 	var arr [1 + MaxRawBytes]byte
 	copy(arr[1:], buf)
@@ -138,7 +149,7 @@ func (mw *Writer) computeCounts(buf []byte, maxOnes int, last, invert bool) []in
 
 	// Set the flags.
 	*flags |= byte(0) << 0            // Always start with zero bit
-	*flags |= byte(btoi(last)) << 1   // Status bit as last meta block
+	*flags |= byte(btoi(final)) << 1  // Status bit as final meta block
 	*flags |= byte(btoi(invert)) << 2 // Status bit that data is inverted
 	*flags |= byte(len(buf)) << 3     // Data size
 
@@ -173,7 +184,7 @@ func (mw *Writer) computeCounts(buf []byte, maxOnes int, last, invert bool) []in
 // underlying Writer. The values buf0s and buf1s must accurately reflect
 // what is in buf. If successful, it will clear bufCnt, buf0s, and buf1s.
 // It also manages the statistic variables: OutputOffset and NumBlocks.
-func (mw *Writer) encodeBlock(last LastMode) (err error) {
+func (mw *Writer) encodeBlock(final FinalMode) (err error) {
 	defer errRecover(&err)
 
 	mw.bb.Reset()
@@ -188,8 +199,8 @@ func (mw *Writer) encodeBlock(last LastMode) (err error) {
 	// Encode header.
 	numHCLen := 4 + (8-huffLen)*2 // Based on XFLATE specification
 	magic := uint(binary.LittleEndian.Uint32(magicVals[:]))
-	magic |= uint(btoi(last == LastStream)) << 0 // Set last DEFLATE block bit
-	magic |= uint(numHCLen-4) << 13              // numHCLen: 6..18, always even
+	magic |= uint(btoi(final == FinalStream)) << 0 // Set final DEFLATE block bit
+	magic |= uint(numHCLen-4) << 13                // numHCLen: 6..18, always even
 	mw.bw.WriteBits(magic, 32)
 	for i := uint(5); i < numHCLen-1; i++ {
 		mw.bw.WriteBits(0, 3) // Empty HCLen code
@@ -197,7 +208,7 @@ func (mw *Writer) encodeBlock(last LastMode) (err error) {
 	mw.bw.WriteBits(2, 3) // Final HCLen code
 
 	// Encode data segment.
-	cnts := mw.computeCounts(buf, 1<<uint(huffLen), last != LastNil, inv)
+	cnts := mw.computeCounts(buf, 1<<uint(huffLen), final != FinalNil, inv)
 	val, pre := 0, 0
 	for len(cnts) > 0 {
 		if cnts[0] == 0 {
