@@ -174,7 +174,7 @@ func TestIndexSearch(t *testing.T) {
 
 	for i, v := range vectors {
 		for j, q := range v.qs {
-			prev, curr := v.idx.GetRecord(v.idx.Search(q.offset))
+			prev, curr := v.idx.GetRecords(v.idx.Search(q.offset))
 			if prev != q.prev || curr != q.curr {
 				t.Errorf("test %d, query %d, search result mismatch: Search(%d) = (%v %v), want (%v %v)",
 					i, j, q.offset, prev, curr, q.prev, q.curr)

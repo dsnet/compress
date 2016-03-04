@@ -242,10 +242,10 @@ func (xr *Reader) Seek(offset int64, whence int) (int64, error) {
 
 	// Query the index for the chunk to start decoding from.
 	// Attempt to use the subsequent record before resorting to binary search.
-	prev, curr := xr.idx.GetRecord(xr.ri)
+	prev, curr := xr.idx.GetRecords(xr.ri)
 	if !(prev.RawOffset <= pos && pos <= curr.RawOffset) {
 		xr.ri = xr.idx.Search(pos)
-		prev, curr = xr.idx.GetRecord(xr.ri)
+		prev, curr = xr.idx.GetRecords(xr.ri)
 	}
 	xr.ri++
 	if xr.ri > len(xr.idx.Records) {

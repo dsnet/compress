@@ -75,7 +75,7 @@ func (idx *index) AppendIndex(other *index) bool {
 // RawOffset that is still greater than the given offset.
 // It return -1 if such a record does not exist.
 //
-// This method is intended to be used in conjunction with GetRecord,
+// This method is intended to be used in conjunction with GetRecords,
 // which returns a pair of records (prev, curr).
 // With these records, the following can be computed:
 //
@@ -109,11 +109,11 @@ func (idx *index) Search(offset int64) int {
 	return i + 1
 }
 
-// Get returns the previous and current records.
+// GetRecords returns the previous and current records at the given position.
 // This method will automatically bind the search position within the bounds
 // of the index. Thus, this will return zero value records if the position is
 // too low, and the last record if the value is too high.
-func (idx *index) GetRecord(i int) (prev, curr record) {
+func (idx *index) GetRecords(i int) (prev, curr record) {
 	recs := idx.Records
 	if i > len(recs) {
 		i = len(recs)
