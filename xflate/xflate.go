@@ -102,6 +102,7 @@ const (
 	// dictionary, write the contents of the current index table, and then
 	// clears the index. The intended use case for this is for callers with
 	// limited memory to ensure that the index does not grow without limit.
+	// Rather than calling this manually, consider using WriterConfig.IndexSize.
 	//
 	// Performing this action often can be detrimental to the compression ratio
 	// and should be use sparingly.
