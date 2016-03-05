@@ -39,14 +39,9 @@ package xflate
 
 import (
 	"compress/flate"
-	"fmt"
-	"os"
 
 	"github.com/dsnet/compress/xflate/meta"
 )
-
-func pf(f string, a ...interface{}) { fmt.Fprintf(os.Stderr, f, a...) }
-func pl(a ...interface{})           { fmt.Fprintln(os.Stderr, a...) }
 
 // These are the magic values found in the XFLATE footer.
 //
