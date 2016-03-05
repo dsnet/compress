@@ -84,13 +84,26 @@ func TestReader(t *testing.T) {
 		),
 		output: make([]byte, 3000),
 	}, {
-		desc: "quick brown fox",
+		desc: "quick brown fox - manual chunking/indexing",
 		input: dh("" +
 			"2ac94855282ccd4cce06000000ffff52482aca2fcf5348cbaf00000000ffff00" +
 			"0000ffff52c82acd2d484d51c82f4b2d5228c94805000000ffff248086058044" +
 			"6553762a0ad14211d207253b234546a1528ad4d3edbd0bfc52c849acaa5448c9" +
 			"4f07000000ffff2c8086058044a281ec8611190d23b21221ca0851fdafbdf7de" +
 			"05fc1dc08605002021ab44219b52ff7fd6de3bf8",
+		),
+		output: []byte("the quick brown fox jumped over the lazy dog"),
+	}, {
+		desc: "quick brown fox - automatic chunking/indexing",
+		input: dh("" +
+			"2ac9485500000000ffff2a2ccd4c06000000ffffca56482a02000000ffff2c80" +
+			"86058044655376c32a2b9999c9cc4c665691d04ea5a474747bef01fcca2fcf53" +
+			"00000000ffff4acbaf5000000000ffffca2acd2d00000000ffff048086058044" +
+			"45036537acb2929999cccc6466cb48112a45a193db7beffc4a4d51c807000000" +
+			"ffff2a4b2d5200000000ffff2ac9485500000000ffff04808605804445036537" +
+			"acb2929999cccc6466cb48112a45a193db7beffcca49acaa04000000ffff5248" +
+			"c94f07000000ffff148086058084a261644b665632339399d9425629a44877b7" +
+			"f7de3bfc15c08605002021ab44a103aaff2f6bef5df8",
 		),
 		output: []byte("the quick brown fox jumped over the lazy dog"),
 	}, {

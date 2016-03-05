@@ -72,6 +72,12 @@ const (
 	// This value was chosen so that the overhead of the XFLATE format would be
 	// approximately 1% for the average dataset.
 	DefaultChunkSize = 1 << 18 // 256 KiB
+
+	// DefaultIndexSize specifies the default number of records that each index
+	// should contain. This value was chosen so that the maximum amount of
+	// memory used for the index is comparable to the memory requirements for
+	// DEFLATE compression itself.
+	DefaultIndexSize = 1 << 12 // 64 KiB
 )
 
 // The FlushMode constants can be passed to Writer.Flush to control the

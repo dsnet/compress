@@ -26,6 +26,7 @@ type Writer struct {
 	zw *flateWriter // DEFLATE compressor
 
 	idx  index // Index table of seekable offsets
+	nidx int64 // Number of records per index
 	nchk int64 // Raw size of each independent chunk
 	err  error // Persistent error
 
@@ -51,6 +52,19 @@ type WriterConfig struct {
 	// Smaller ChunkSizes provide better random access properties, while larger
 	// sizes provide better compression ratio.
 	ChunkSize int64
+
+	// The number of records in each index.
+	//
+	// When this number is reached, the index is automatically flushed. This is
+	// done to ensure that there is some limit on the amount of memory needed to
+	// represent the index. A negative value indicates that the Writer will
+	// not automatically flush the index.
+	//
+	// The multiplication of the IndexSize and the size of each record (16 B)
+	// gives an approximation for how much memory the index will occupy.
+	// The multiplication of the IndexSize and the ChunkSize gives an
+	// approximation for how much uncompressed data each index represents.
+	IndexSize int64
 }
 
 // NewWriter creates a new Writer writing to the given writer.
@@ -60,7 +74,7 @@ type WriterConfig struct {
 // all configuration values as necessary and does not store conf.
 func NewWriter(wr io.Writer, conf *WriterConfig) (*Writer, error) {
 	var lvl int
-	var nchk int64
+	var nchk, nidx int64
 	if conf != nil {
 		lvl = conf.Level
 		switch {
@@ -69,13 +83,21 @@ func NewWriter(wr io.Writer, conf *WriterConfig) (*Writer, error) {
 		case conf.ChunkSize > 0:
 			nchk = conf.ChunkSize
 		}
+		switch {
+		case conf.IndexSize < 0:
+			nidx = -1
+		case conf.IndexSize > 0:
+			nidx = conf.IndexSize
+		}
 	}
 
 	zw, err := newFlateWriter(wr, lvl)
 	if err != nil {
 		return nil, err
 	}
-	return &Writer{wr: wr, zw: zw, nchk: nchk}, nil
+	xw := &Writer{wr: wr, zw: zw, nchk: nchk, nidx: nidx}
+	xw.Reset(wr)
+	return xw, nil
 }
 
 // Reset discards the Writer's state and makes it equivalent to the result
@@ -89,6 +111,7 @@ func (xw *Writer) Reset(wr io.Writer) {
 		mw:   xw.mw,
 		zw:   xw.zw,
 		nchk: xw.nchk,
+		nidx: xw.nidx,
 		idx:  xw.idx,
 	}
 	if xw.zw == nil {
@@ -98,6 +121,9 @@ func (xw *Writer) Reset(wr io.Writer) {
 	}
 	if xw.nchk == 0 {
 		xw.nchk = DefaultChunkSize
+	}
+	if xw.nidx == 0 {
+		xw.nidx = DefaultIndexSize
 	}
 	xw.idx.Reset()
 	return
@@ -149,9 +175,14 @@ func (xw *Writer) Flush(mode FlushMode) error {
 		xw.OutputOffset += xw.zw.OutputOffset - offset
 		return xw.err
 	case FlushFull:
-		xw.err = xw.Flush(FlushSync)
+		if xw.err = xw.Flush(FlushSync); xw.err != nil {
+			return xw.err
+		}
 		xw.idx.AppendRecord(xw.zw.OutputOffset, xw.zw.InputOffset, deflateType)
 		xw.zw.Reset(xw.wr)
+		if int64(len(xw.idx.Records)) == xw.nidx {
+			xw.err = xw.Flush(FlushIndex)
+		}
 		return xw.err
 	case FlushIndex:
 		if xw.zw.InputOffset+xw.zw.OutputOffset > 0 {
