@@ -485,7 +485,7 @@ func TestReaderSeek(t *testing.T) {
 	}
 }
 
-// BenchmarkWriter benchmarks the overhead of the XFLATE format over DEFLATE.
+// BenchmarkReader benchmarks the overhead of the XFLATE format over DEFLATE.
 // Thus, it intentionally uses a very small chunk size with no compression.
 // This benchmark reads the input file in reverse to excite poor behavior.
 func BenchmarkReader(b *testing.B) {
