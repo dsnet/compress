@@ -206,10 +206,12 @@ func (mw *Writer) encodeBlock(final FinalMode) (err error) {
 		mw.bw.WriteBits(0, 3) // Empty HCLen code
 	}
 	mw.bw.WriteBits(2, 3) // Final HCLen code
+	mw.bw.WriteBits(0, 1) // First HLit code must be zero
 
 	// Encode data segment.
 	cnts := mw.computeCounts(buf, 1<<uint(huffLen), final != FinalNil, inv)
-	val, pre := 0, 0
+	cnts[0]++ // Remove first zero bit, treated as part of the header
+	val, pre := 0, -1
 	for len(cnts) > 0 {
 		if cnts[0] == 0 {
 			cnts = cnts[1:]
@@ -220,7 +222,7 @@ func (mw *Writer) encodeBlock(final FinalMode) (err error) {
 		cnt := cur * cnts[0]     // Count as positive integer
 
 		switch {
-		case pre != 0 && cur < 0 && cnt >= minRepZero: // Use repeated zero code
+		case cur < 0 && cnt >= minRepZero: // Use repeated zero code
 			if val = maxRepZero; val > cnt {
 				val = cnt
 			}
