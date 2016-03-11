@@ -237,6 +237,15 @@ func TestReader(t *testing.T) {
 		),
 		err: ErrCorrupt,
 	}, {
+		desc: "index back size causes integer overflow",
+		input: dh("" +
+			"4a4c4a4e494d4bcfc8cccacec9cdcb2f282c2a2e292d2bafa8ac02000000ffff" +
+			"048086058044b2e98190b285148a844a0b95a4f7db7bef3dfc4a4c4a4e494d4b" +
+			"cfc8cccacec9cdcb2f282c2a2e292d2bafa8ac02000000ffff2c8086058094e8" +
+			"bcb4a74ab4538986529284cc3e6def05fc2d008705000048c82a51e881faffc1" +
+			"26f0"),
+		err: ErrCorrupt,
+	}, {
 		desc: "raw chunk with final bit and bad size",
 		input: dh("" +
 			"010900f6ff0000ffff248086058044b2c98e8cc8888cc828ed9d284afa7fb4f7" +

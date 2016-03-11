@@ -285,14 +285,21 @@ func (xr *Reader) Close() error {
 // Even if the index is fragmented in the source stream, this method will merge
 // all of the index fragments into a single index table.
 func (xr *Reader) decodeIndexes(backSize int64) error {
+	pos, err := xr.rd.Seek(0, os.SEEK_CUR)
+	if err != nil {
+		return err
+	}
+
 	// Read all indexes.
-	var err error
-	var pos, compSize int64
+	var compSize int64
 	xr.idxs = xr.idxs[:0]
 	for {
 		// Seek backwards past index and compressed blocks.
-		pos, err = xr.rd.Seek(-(backSize + compSize), os.SEEK_CUR)
-		if err != nil {
+		newPos := pos - (backSize + compSize)
+		if newPos < 0 || newPos > pos {
+			return ErrCorrupt // Integer overflow for new seek position
+		}
+		if pos, err = xr.rd.Seek(newPos, os.SEEK_SET); err != nil {
 			return err
 		}
 		if backSize == 0 {
