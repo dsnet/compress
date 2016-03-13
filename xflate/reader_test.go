@@ -494,6 +494,62 @@ func TestReaderSeek(t *testing.T) {
 	}
 }
 
+func TestRecursiveReader(t *testing.T) {
+	twain := testutil.MustLoadFile("../testdata/twain.txt", -1)
+
+	const numIters = 5
+	var bb bytes.Buffer
+
+	// Recursively compress the same input data multiple times using XFLATE.
+	// Run as a closured function to ensure defer statements execute.
+	func() {
+		var wlast io.Writer = &bb // Latest writer
+		for i := uint(0); i < numIters; i++ {
+			xw, err := NewWriter(wlast, &WriterConfig{ChunkSize: 1 << (10 + i)})
+			if err != nil {
+				t.Fatalf("unexpected error: NewWriter() = %v", err)
+			}
+			defer func() {
+				if err := xw.Close(); err != nil {
+					t.Fatalf("unexpected error: Close() = %v", err)
+				}
+			}()
+			wlast = xw
+		}
+		if _, err := wlast.Write(twain); err != nil {
+			t.Fatalf("unexpected error: Write() = %v", err)
+		}
+	}()
+
+	// Recursively decompress the same input stream multiple times.
+	func() {
+		var rlast io.ReadSeeker = bytes.NewReader(bb.Bytes())
+		for i := uint(0); i < numIters; i++ {
+			xr, err := NewReader(rlast, nil)
+			if err != nil {
+				t.Fatalf("unexpected error: NewReader() = %v", err)
+			}
+			defer func() {
+				if err := xr.Close(); err != nil {
+					t.Fatalf("unexpected error: Close() = %v", err)
+				}
+			}()
+			rlast = xr
+		}
+
+		buf := make([]byte, 321)
+		if _, err := rlast.Seek(int64(len(twain))/2, os.SEEK_SET); err != nil {
+			t.Fatalf("unexpected error: Seek() = %v", err)
+		}
+		if _, err := io.ReadFull(rlast, buf); err != nil {
+			t.Fatalf("unexpected error: Read() = %v", err)
+		}
+		if got, want := string(buf), string(twain[len(twain)/2:][:321]); got != want {
+			t.Errorf("output mismatch:\ngot  %q\nwant %q", got, want)
+		}
+	}()
+}
+
 // BenchmarkReader benchmarks the overhead of the XFLATE format over DEFLATE.
 // Thus, it intentionally uses a very small chunk size with no compression.
 // This benchmark reads the input file in reverse to excite poor behavior.
