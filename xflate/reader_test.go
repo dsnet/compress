@@ -84,6 +84,15 @@ func TestReader(t *testing.T) {
 		),
 		output: make([]byte, 3000),
 	}, {
+		desc: "quick brown fox - spec example",
+		input: dh("" +
+			"0ac94855282ccd4cce560028a928bf3c4f212dbf4201a0acd2dc82d41485fcb2" +
+			"d42205804a80f2398955950a00000000ffff4ac94f5704000000ffff24808605" +
+			"8084b247b60629218a48486656d2b442ca489fb7f7de0bfc3cc08605002019a1" +
+			"3aa454548a122ad5fff7b403f815c08605002021ab44219ba4ff2f6bef5df8",
+		),
+		output: []byte("The quick brown fox jumped over the lazy dog!"),
+	}, {
 		desc: "quick brown fox - manual chunking/indexing",
 		input: dh("" +
 			"2ac94855282ccd4cce06000000ffff52482aca2fcf5348cbaf00000000ffff00" +
