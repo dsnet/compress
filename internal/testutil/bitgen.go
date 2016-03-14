@@ -198,12 +198,21 @@ func DecodeBitGen(str string) ([]byte, error) {
 		case reRaw.MatchString(t):
 			// Handle raw bytes tokens.
 			tx := t[2:]
-			b, err := hex.DecodeString(tx)
+			buf, err := hex.DecodeString(tx)
 			if err != nil {
 				return nil, errors.New("testutil: invalid raw bytes token: " + t)
 			}
-			b = bytes.Repeat(b, rep)
-			if _, err := bw.Write(b); err != nil {
+			if packMode {
+				// Hexadecimal tokens should not be affected by the bit-packing
+				// order. Thus, if the order is reversed, we preemptively
+				// reverse the bits knowing that it will reversed back to normal
+				// in the final stage.
+				for i, b := range buf {
+					buf[i] = internal.ReverseLUT[b]
+				}
+			}
+			buf = bytes.Repeat(buf, rep)
+			if _, err := bw.Write(buf); err != nil {
 				return nil, err
 			}
 		default:
