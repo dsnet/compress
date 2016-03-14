@@ -216,7 +216,7 @@ func (xr *Reader) Seek(offset int64, whence int) (int64, error) {
 
 	// Determine which position to seek to.
 	var pos int64
-	end := int64(xr.idx.LastRecord().RawOffset)
+	end := xr.idx.LastRecord().RawOffset
 	switch whence {
 	case os.SEEK_SET:
 		pos = offset
