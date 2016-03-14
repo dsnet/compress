@@ -49,7 +49,7 @@ func ReverseUint32(v uint32) (x uint32) {
 
 // ReverseUint32N reverses the lower n bits of v.
 func ReverseUint32N(v uint32, n uint) (x uint32) {
-	return uint32(ReverseUint32(uint32(v << (32 - n))))
+	return ReverseUint32(v << (32 - n))
 }
 
 // ReverseUint64 reverses all bits of v.
@@ -67,7 +67,7 @@ func ReverseUint64(v uint64) (x uint64) {
 
 // ReverseUint64N reverses the lower n bits of v.
 func ReverseUint64N(v uint64, n uint) (x uint64) {
-	return uint64(ReverseUint64(uint64(v << (64 - n))))
+	return ReverseUint64(v << (64 - n))
 }
 
 // MoveToFront is a data structure that allows for more efficient move-to-front
