@@ -7,8 +7,10 @@ package flate
 import (
 	"bufio"
 	"bytes"
+	"flag"
 	"io"
 	"io/ioutil"
+	"os/exec"
 	"runtime"
 	"strings"
 	"testing"
@@ -16,15 +18,26 @@ import (
 	"github.com/dsnet/compress/internal/testutil"
 )
 
+var zcheck = flag.Bool("zcheck", false, "verify reader test vectors with C zlib library")
+
 func TestReader(t *testing.T) {
+	db := testutil.MustDecodeBitGen
+	dh := testutil.MustDecodeHex
+
 	// To verify any of these inputs as valid or invalid DEFLATE streams
 	// according to the C zlib library, you can use the Python wrapper library:
 	//	>>> hex_string = "010100feff11"
 	//	>>> import zlib
 	//	>>> zlib.decompress(hex_string.decode("hex"), -15) # Negative means raw DEFLATE
 	//	'\x11'
-	db := testutil.MustDecodeBitGen
-	dh := testutil.MustDecodeHex
+	var pyDecompress = func(input []byte) ([]byte, error) {
+		var buf bytes.Buffer
+		cmd := exec.Command("python", "-c", "import sys, zlib; sys.stdout.write(zlib.decompress(sys.stdin.read(), -15))")
+		cmd.Stdin = bytes.NewReader(input)
+		cmd.Stdout = &buf
+		err := cmd.Run()
+		return buf.Bytes(), err
+	}
 
 	var vectors = []struct {
 		desc   string // Description of the test
@@ -646,6 +659,19 @@ func TestReader(t *testing.T) {
 		}
 		if rd.OutputOffset != v.outIdx {
 			t.Errorf("test %d, %s\noutput offset mismatch: got %d, want %d", i, v.desc, rd.OutputOffset, v.outIdx)
+		}
+
+		// If the zcheck flag is set, then we verify that the test vectors
+		// themselves are consistent with what the C zlib library outputs.
+		// To do that, we use the python wrapper around the library.
+		if *zcheck {
+			output, err := pyDecompress(v.input)
+			if got, want := bool(v.err == nil), bool(err == nil); got != want {
+				t.Errorf("test %d, %s\npass mismatch: got %v, want %v", i, v.desc, got, want)
+			}
+			if err == nil && !bytes.Equal(v.output, output) {
+				t.Errorf("test %d, %s\noutput mismatch:\ngot  %x\nwant %x", i, v.desc, v.output, output)
+			}
 		}
 	}
 }
