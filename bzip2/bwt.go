@@ -79,8 +79,7 @@ func (bwt *burrowsWheelerTransform) Decode(buf []byte, ptr int) {
 	// Step 2: Compute the P permutation, where P[ptr] contains the index of the
 	// first byte and the index to the pointer to the index of the next byte.
 	p := make([]uint32, len(buf))
-	for i := range buf {
-		b := buf[i]
+	for i, b := range buf {
 		p[c[b]] = uint32(i)
 		c[b]++
 	}
