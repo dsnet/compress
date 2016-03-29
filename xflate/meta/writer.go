@@ -6,7 +6,6 @@ package meta
 
 import (
 	"bytes"
-	"encoding/binary"
 	"io"
 
 	"github.com/dsnet/compress/internal/prefix"
@@ -121,7 +120,7 @@ func (*Writer) computeHuffLen(zeros, ones int) (huffLen uint, inv bool) {
 		zeros, ones = ones, zeros
 	}
 	for huffLen = minHuffLen; huffLen <= maxHuffLen; huffLen++ {
-		maxOnes := 1 << uint(huffLen)
+		maxOnes := 1 << huffLen
 		if maxSyms-maxOnes >= zeros+8 && maxOnes >= ones+8 {
 			return huffLen, inv
 		}
@@ -198,10 +197,10 @@ func (mw *Writer) encodeBlock(final FinalMode) (err error) {
 
 	// Encode header.
 	numHCLen := 4 + (8-huffLen)*2 // Based on XFLATE specification
-	magic := uint(binary.LittleEndian.Uint32(magicVals[:]))
-	magic |= uint(btoi(final == FinalStream)) << 0 // Set final DEFLATE block bit
-	magic |= uint(numHCLen-4) << 13                // numHCLen: 6..18, always even
-	mw.bw.WriteBits(magic, 32)
+	magic := magicVals
+	magic |= uint32(btoi(final == FinalStream)) << 0 // Set final DEFLATE block bit
+	magic |= uint32(numHCLen-4) << 13                // numHCLen: 6..18, always even
+	mw.bw.WriteBits(uint(magic), 32)
 	for i := uint(5); i < numHCLen-1; i++ {
 		mw.bw.WriteBits(0, 3) // Empty HCLen code
 	}
@@ -209,7 +208,7 @@ func (mw *Writer) encodeBlock(final FinalMode) (err error) {
 	mw.bw.WriteBits(0, 1) // First HLit code must be zero
 
 	// Encode data segment.
-	cnts := mw.computeCounts(buf, 1<<uint(huffLen), final != FinalNil, inv)
+	cnts := mw.computeCounts(buf, 1<<huffLen, final != FinalNil, inv)
 	cnts[0]++ // Remove first zero bit, treated as part of the header
 	val, pre := 0, -1
 	for len(cnts) > 0 {

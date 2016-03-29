@@ -6,7 +6,6 @@ package meta
 
 import (
 	"bytes"
-	"encoding/binary"
 	"io"
 
 	"github.com/dsnet/compress/internal/prefix"
@@ -130,7 +129,6 @@ func (mr *Reader) decodeBlock() (err error) {
 	mr.bb.Reset()
 	mr.bw.Init(&mr.bb, false)
 
-	var magicBuf [4]byte
 	if err := mr.rd.PullBits(1); err != nil {
 		if err == io.ErrUnexpectedEOF {
 			panic(io.EOF) // EOF is okay for first bit
@@ -138,8 +136,7 @@ func (mr *Reader) decodeBlock() (err error) {
 		panic(err)
 	}
 	magic := mr.rd.ReadBits(32)
-	binary.LittleEndian.PutUint32(magicBuf[:], uint32(magic))
-	if ReverseSearch(magicBuf[:]) != 0 {
+	if uint32(magic)&magicMask != magicVals {
 		panic(ErrCorrupt) // Magic must appear
 	}
 	finalStream := (magic>>0)&1 > 0
@@ -162,7 +159,7 @@ func (mr *Reader) decodeBlock() (err error) {
 	mr.bw.WriteBits(0, 1)
 
 	huffLen := 8 - (numHCLen-4)/2 // Based on XFLATE specification
-	huffRange := 1 << uint(huffLen)
+	huffRange := 1 << huffLen
 
 	// Read symbols.
 	var bit, ones uint

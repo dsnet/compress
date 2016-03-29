@@ -24,12 +24,8 @@ import (
 )
 
 // These are the magic values that begin every single meta block.
-const magicLen = 4
-
-var (
-	magicVals = [magicLen]byte{0x04, 0x00, 0x86, 0x05}
-	magicMask = [magicLen]byte{0xc6, 0x3f, 0xfe, 0xff}
-)
+const magicVals uint32 = 0x05860004
+const magicMask uint32 = 0xfffe3fc6
 
 const (
 	maxSyms    = 257 // Maximum number of literal codes (with EOM marker)
@@ -168,14 +164,12 @@ func errRecover(err *error) {
 // ReverseSearch searches for a meta header in reverse. This returns the last
 // index where the header was found. If not found, it returns -1.
 func ReverseSearch(data []byte) int {
-revLoop:
-	for i := len(data) - magicLen; i >= 0; i-- {
-		for i, v := range data[i : i+magicLen] {
-			if v&magicMask[i] != magicVals[i] {
-				continue revLoop
-			}
+	var magic uint32
+	for i := len(data) - 1; i >= 0; i-- {
+		magic = (magic << 8) | uint32(data[i])
+		if magic&magicMask == magicVals {
+			return i
 		}
-		return i
 	}
 	return -1
 }
