@@ -43,6 +43,8 @@ func (zr *Reader) Reset(r io.Reader) {
 		rd:   zr.rd,
 		step: (*Reader).readBlockHeader,
 		dict: zr.dict,
+		pd1:  zr.pd1,
+		pd2:  zr.pd2,
 	}
 	zr.rd.Init(r)
 	zr.dict.Init(maxHistSize)
