@@ -78,3 +78,60 @@ func TestRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// TestSync tests that the Reader can read all data compressed thus far by the
+// Writer once Flush is called.
+func TestSync(t *testing.T) {
+	const prime = 13
+	var flushSizes []int
+	for i := 1; i < 1000; i++ {
+		flushSizes = append(flushSizes, i)
+	}
+	for i := 1; i <= 1<<16; i *= 2 {
+		flushSizes = append(flushSizes, i)
+		flushSizes = append(flushSizes, i+prime)
+	}
+	for i := 1; i <= 10000; i *= 10 {
+		flushSizes = append(flushSizes, i)
+		flushSizes = append(flushSizes, i+prime)
+	}
+
+	// Load test data of sufficient size.
+	var maxSize, totalSize int
+	for _, n := range flushSizes {
+		totalSize += n
+		if maxSize < n {
+			maxSize = n
+		}
+	}
+	rdBuf := make([]byte, maxSize)
+	data := testutil.MustLoadFile(twain, totalSize)
+
+	var buf bytes.Buffer
+	wr, _ := flate.NewWriter(&buf, flate.DefaultCompression)
+	rd := NewReader(&buf)
+	for i, n := range flushSizes {
+		// Write and flush some portion of the test data.
+		want := data[:n]
+		data = data[n:]
+		if _, err := wr.Write(want); err != nil {
+			t.Errorf("test %d, flushSize: %d, unexpected Write error: %v", i, n, err)
+		}
+		if err := wr.Flush(); err != nil {
+			t.Errorf("test %d, flushSize: %d, unexpected Flush error: %v", i, n, err)
+		}
+
+		// Verify that we can read all data flushed so far.
+		m, err := io.ReadAtLeast(rd, rdBuf, n)
+		if err != nil {
+			t.Errorf("test %d, flushSize: %d, unexpected ReadAtLeast error: %v", i, n, err)
+		}
+		got := rdBuf[:m]
+		if !bytes.Equal(got, want) {
+			t.Errorf("test %d, flushSize: %d, output mismatch:\ngot  %q\nwant %q", i, n, got, want)
+		}
+		if buf.Len() != 0 {
+			t.Errorf("test %d, flushSize: %d, unconsumed buffer data: %d bytes", i, n, buf.Len())
+		}
+	}
+}

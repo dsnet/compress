@@ -575,6 +575,32 @@ func TestReader(t *testing.T) {
 		inIdx: 4,
 		err:   ErrCorrupt,
 	}, {
+		// Make sure the use of a dynamic block, following a fixed block does
+		// not alter the global Decoder tables.
+		desc: "fixed, dynamic, fixed, dynamic blocks",
+		input: db(`<<<
+			< 0 01               # Non-last, fixed block
+			> 00110000 0000000   # Compressed data
+
+			< 0 10               # Non-last, dynamic block
+			< D5:0 D5:3 D4:15    # HLit: 257, HDist: 4, HCLen: 19
+			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
+			> 0 1*256 0*4        # HLits: {*:8}, HDists: {}
+			> 00000000 11111111  # Compressed data
+
+			< 0 01               # Non-last, fixed block
+			> 00110000 0000000   # Compressed data
+
+			< 1 10               # Last, dynamic block
+			< D5:0 D5:3 D4:15    # HLit: 257, HDist: 4, HCLen: 19
+			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
+			> 0 1*256 0*4        # HLits: {*:8}, HDists: {}
+			> 00000000 11111111  # Compressed data
+		`),
+		output: dh("00010001"),
+		inIdx:  93,
+		outIdx: 4,
+	}, {
 		desc: "issue 3816 - large HLitTree caused a panic",
 		input: db(`<<<
 			< 0 10             # Non-last, dynamic block

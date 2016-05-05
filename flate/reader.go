@@ -26,9 +26,10 @@ type Reader struct {
 	step      func(*Reader) // Single step of decompression work (can panic)
 	stepState int           // The sub-step state for certain steps
 
-	dict     dictDecoder    // Dynamic sliding dictionary
-	litTree  prefix.Decoder // Literal and length symbol prefix decoder
-	distTree prefix.Decoder // Backward distance symbol prefix decoder
+	dict     dictDecoder     // Dynamic sliding dictionary
+	litTree  *prefix.Decoder // Literal and length symbol prefix decoder
+	distTree *prefix.Decoder // Backward distance symbol prefix decoder
+	pd1, pd2 prefix.Decoder  // Local Decoder objects to reduce allocations
 }
 
 func NewReader(r io.Reader) *Reader {
@@ -118,11 +119,12 @@ func (zr *Reader) readBlockHeader() {
 		zr.step = (*Reader).readRawData
 	case 1:
 		// Fixed prefix block (RFC section 3.2.6).
-		zr.litTree, zr.distTree = decLit, decDist
+		zr.litTree, zr.distTree = &decLit, &decDist
 		zr.step = (*Reader).readBlock
 	case 2:
 		// Dynamic prefix block (RFC section 3.2.7).
-		zr.rd.ReadPrefixCodes(&zr.litTree, &zr.distTree)
+		zr.litTree, zr.distTree = &zr.pd1, &zr.pd2
+		zr.rd.ReadPrefixCodes(zr.litTree, zr.distTree)
 		zr.step = (*Reader).readBlock
 	default:
 		// Reserved block (RFC section 3.2.3).
@@ -180,9 +182,9 @@ readLiteral:
 		}
 
 		// Read the literal symbol.
-		litSym, ok := zr.rd.TryReadSymbol(&zr.litTree)
+		litSym, ok := zr.rd.TryReadSymbol(zr.litTree)
 		if !ok {
-			litSym = zr.rd.ReadSymbol(&zr.litTree)
+			litSym = zr.rd.ReadSymbol(zr.litTree)
 		}
 		switch {
 		case litSym < endBlockSym:
@@ -202,9 +204,9 @@ readLiteral:
 			zr.cpyLen = int(rec.Base) + int(extra)
 
 			// Read the distance symbol.
-			distSym, ok := zr.rd.TryReadSymbol(&zr.distTree)
+			distSym, ok := zr.rd.TryReadSymbol(zr.distTree)
 			if !ok {
-				distSym = zr.rd.ReadSymbol(&zr.distTree)
+				distSym = zr.rd.ReadSymbol(zr.distTree)
 			}
 			if distSym >= maxNumDistSyms {
 				panic(ErrCorrupt)
