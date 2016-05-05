@@ -67,20 +67,27 @@ func errRecover(err *error) {
 	}
 }
 
-// updateCRC returns the result of adding the bytes in buf to the crc.
-func updateCRC(crc uint32, buf []byte) uint32 {
+// crc computes the CRC-32 used by BZip2.
+// The byte array is used as an intermediate buffer to swap the bits of every
+// byte of the input.
+type crc [4096]byte
+
+// update computes the CRC-32 of appending buf to crc.
+func (c *crc) update(crc uint32, buf []byte) uint32 {
 	// The CRC-32 computation in bzip2 treats bytes as having bits in big-endian
 	// order. That is, the MSB is read before the LSB. Thus, we can use the
 	// standard library version of CRC-32 IEEE with some minor adjustments.
 	crc = internal.ReverseUint32(crc)
-	var arr [4096]byte
 	for len(buf) > 0 {
-		cnt := copy(arr[:], buf)
-		buf = buf[cnt:]
-		for i, b := range arr[:cnt] {
-			arr[i] = internal.ReverseLUT[b]
+		n := len(buf)
+		if n > len(c) {
+			n = len(c)
 		}
-		crc = crc32.Update(crc, crc32.IEEETable, arr[:cnt])
+		for i, b := range buf[:n] {
+			c[i] = internal.ReverseLUT[b]
+		}
+		crc = crc32.Update(crc, crc32.IEEETable, c[:n])
+		buf = buf[n:]
 	}
 	return internal.ReverseUint32(crc)
 }

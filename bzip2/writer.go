@@ -22,6 +22,7 @@ type Writer struct {
 	blkCRC uint32 // CRC-32 IEEE of each block
 	endCRC uint32 // Checksum of all blocks using bzip2's custom method
 
+	crc crc
 	rle runLengthEncoding
 	bwt burrowsWheelerTransform
 	mtf moveToFront
@@ -73,7 +74,7 @@ func (zw *Writer) Write(buf []byte) (int, error) {
 	cnt := len(buf)
 	for {
 		wrCnt, _ := zw.rle.Write(buf)
-		zw.blkCRC = updateCRC(zw.blkCRC, buf[:wrCnt])
+		zw.blkCRC = zw.crc.update(zw.blkCRC, buf[:wrCnt])
 		buf = buf[wrCnt:]
 		if len(buf) == 0 {
 			zw.InputOffset += int64(cnt)

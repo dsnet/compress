@@ -46,6 +46,7 @@ func TestCRC(t *testing.T) {
 		{0xa4302570, "How can you write a big system without C++?  -Paul Glick"},
 	}
 
+	var crc crc
 	for i, v := range vectors {
 		splits := []int{
 			0 * (len(v.str) / 1),
@@ -56,9 +57,9 @@ func TestCRC(t *testing.T) {
 		}
 		for _, j := range splits {
 			str1, str2 := []byte(v.str[:j]), []byte(v.str[j:])
-			crc1 := updateCRC(0, str1)
-			if crc := updateCRC(crc1, str2); crc != v.crc {
-				t.Errorf("test %d, updateCRC(crc1, str2): got 0x%08x, want 0x%08x", i, crc, v.crc)
+			crc1 := crc.update(0, str1)
+			if crc := crc.update(crc1, str2); crc != v.crc {
+				t.Errorf("test %d, crc.update(crc1, str2): got 0x%08x, want 0x%08x", i, crc, v.crc)
 			}
 		}
 	}

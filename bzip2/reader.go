@@ -22,6 +22,7 @@ type Reader struct {
 	blkCRC uint32 // CRC-32 IEEE of each block
 	endCRC uint32 // Checksum of all blocks using bzip2's custom method
 
+	crc crc
 	mtf moveToFront
 	bwt burrowsWheelerTransform
 	rle runLengthEncoding
