@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	countBits  = 5  // Number of bits to store the bit-length of the code
-	valueBits  = 27 // Number of bits to store the code value
+	countBits = 5  // Number of bits to store the bit-length of the code
+	valueBits = 27 // Number of bits to store the code value
 
 	countMask = (1 << countBits) - 1
 )
