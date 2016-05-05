@@ -601,7 +601,7 @@ func TestReader(t *testing.T) {
 		inIdx:  93,
 		outIdx: 4,
 	}, {
-		desc: "issue 3815 - large HLitTree caused a panic",
+		desc: "golang.org/issues/3815 - large HLitTree caused a panic",
 		input: db(`<<<
 			< 0 10             # Non-last, dynamic block
 			< D5:31 D5:30 D4:7 # HLit: 288, HDist: 31, HCLen: 11
@@ -614,7 +614,7 @@ func TestReader(t *testing.T) {
 		inIdx: 3,
 		err:   ErrCorrupt,
 	}, {
-		desc: "issue 10426 - over-subscribed HCLenTree caused a hang",
+		desc: "golang.org/issues/10426 - over-subscribed HCLenTree caused a hang",
 		input: db(`<<<
 			< 0 10                  # Non-last, dynamic block
 			< D5:6 D5:12 D4:2       # HLit: 263, HDist: 13, HCLen: 6
@@ -624,7 +624,7 @@ func TestReader(t *testing.T) {
 		inIdx: 5,
 		err:   ErrCorrupt,
 	}, {
-		desc: "issue 11030 - empty HDistTree unexpectedly led to error",
+		desc: "golang.org/issues/11030 - empty HDistTree unexpectedly led to error",
 		input: db(`<<<
 			< 1 10            # Last, dynamic block
 			< D5:0 D5:0 D4:14 # HLit: 257, HDist: 1, HCLen: 18
@@ -639,7 +639,7 @@ func TestReader(t *testing.T) {
 		`),
 		inIdx: 14,
 	}, {
-		desc: "issue 11033 - empty HDistTree unexpectedly led to error",
+		desc: "golang.org/issues/11033 - empty HDistTree unexpectedly led to error",
 		input: db(`<<<
 			< 1 10           # Last, dynamic block
 			< D5:0 D5:0 D4:8 # HLit: 257, HDist: 1, HCLen: 12
