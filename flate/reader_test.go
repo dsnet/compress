@@ -601,7 +601,7 @@ func TestReader(t *testing.T) {
 		inIdx:  93,
 		outIdx: 4,
 	}, {
-		desc: "issue 3816 - large HLitTree caused a panic",
+		desc: "issue 3815 - large HLitTree caused a panic",
 		input: db(`<<<
 			< 0 10             # Non-last, dynamic block
 			< D5:31 D5:30 D4:7 # HLit: 288, HDist: 31, HCLen: 11
