@@ -7,6 +7,7 @@ package flate
 import (
 	"bufio"
 	"bytes"
+	"compress/flate"
 	"flag"
 	"io"
 	"io/ioutil"
@@ -698,6 +699,85 @@ func TestReader(t *testing.T) {
 			if err == nil && !bytes.Equal(v.output, output) {
 				t.Errorf("test %d, %s\noutput mismatch:\ngot  %x\nwant %x", i, v.desc, v.output, output)
 			}
+		}
+	}
+}
+
+// TestReaderEarlyEOF tests that Reader returns io.EOF eagerly when possible.
+// There are two situations when it is unable to do so:
+//	* There is an non-last, empty, raw block at the end of the stream.
+//	Flushing semantics dictate that we must return at that point in the stream
+//	prior to knowing whether the end of the stream has been hit or not.
+//	* We previously returned from Read because the internal dictionary was full
+//	and it so happens that there is no more data to read. This is rare.
+func TestReaderEarlyEOF(t *testing.T) {
+	const maxSize = 1 << 18
+	const dampRatio = 32 // Higer value means more trials
+
+	data := make([]byte, maxSize)
+	for i := range data {
+		data[i] = byte(i)
+	}
+
+	// generateStream generates a DEFLATE stream that decompresses to n bytes
+	// of arbitrary data. If flush is set, then a final Flush is called at the
+	// very end of the stream.
+	var wrBuf bytes.Buffer
+	wr, _ := flate.NewWriter(nil, flate.BestSpeed)
+	generateStream := func(n int, flush bool) []byte {
+		wrBuf.Reset()
+		wr.Reset(&wrBuf)
+		wr.Write(data[:n])
+		if flush {
+			wr.Flush()
+		}
+		wr.Close()
+		return wrBuf.Bytes()
+	}
+
+	// readStream reads all the data and reports whether an early EOF occured.
+	var rd Reader
+	rdBuf := make([]byte, 2111)
+	readStream := func(data []byte) (bool, error) {
+		rd.Reset(bytes.NewReader(data))
+		for {
+			n, err := rd.Read(rdBuf)
+			if err != nil {
+				if err == io.EOF {
+					err = nil
+				}
+				return n > 0, err
+			}
+		}
+	}
+
+	// There is no gurantee that early io.EOF occurs for all DEFLATE streams,
+	// but it should occur for most cases.
+	var numEarly, numTotal int
+	for i := 0; i < maxSize; i += 1 + i/dampRatio {
+		earlyEOF, err := readStream(generateStream(i, false))
+		if err != nil {
+			t.Errorf("unexpected Read error: %v", err)
+		}
+		if earlyEOF {
+			numEarly++
+		}
+		numTotal++
+	}
+	got := 100 * float64(numEarly) / float64(numTotal)
+	if want := 95.0; got < want {
+		t.Errorf("too few early EOFs: %0.1f%% < %0.1f%%", got, want)
+	}
+
+	// If there is a flush block at the end of all the data, an early io.EOF
+	// is never possible. Check for this case.
+	for i := 0; i < maxSize; i += 1 + i/dampRatio {
+		earlyEOF, err := readStream(generateStream(i, true))
+		if err != nil {
+			t.Errorf("unexpected Read error: %v", err)
+		}
+		if earlyEOF {
+			t.Errorf("size: %d, unexpected early EOF with terminating flush", i)
 		}
 	}
 }
