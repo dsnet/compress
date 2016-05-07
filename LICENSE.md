@@ -1,4 +1,4 @@
-Copyright © 2015, Joe Tsai. All rights reserved.
+Copyright © 2015, Joe Tsai and The Go Authors. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
