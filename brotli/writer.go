@@ -16,8 +16,10 @@ type writer struct {
 	err error     // Persistent error
 }
 
-func newWriter(w io.Writer) *writer {
-	return nil
+type writerConfig struct{}
+
+func newWriter(w io.Writer, conf *writerConfig) (*writer, error) {
+	return nil, nil
 }
 
 func (bw *writer) Write(buf []byte) (int, error) {

@@ -66,10 +66,12 @@ type blockDecoder struct {
 	prefixes []prefixDecoder // Prefix decoders for each block type
 }
 
-func NewReader(r io.Reader) *Reader {
+type ReaderConfig struct{}
+
+func NewReader(r io.Reader, conf *ReaderConfig) (*Reader, error) {
 	br := new(Reader)
 	br.Reset(r)
-	return br
+	return br, nil
 }
 
 func (br *Reader) Read(buf []byte) (int, error) {
