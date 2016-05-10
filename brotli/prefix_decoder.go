@@ -179,22 +179,4 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 			}
 		}
 	}
-
-	if debug && !checkPrefixes(codes) {
-		panic(ErrCorrupt) // The codes do not form a valid prefix tree.
-	}
-}
-
-// checkPrefixes reports whether any codes have overlapping prefixes.
-// This check is expensive and runs in O(n^2) time!
-func checkPrefixes(codes []prefixCode) bool {
-	for i, c1 := range codes {
-		for j, c2 := range codes {
-			mask := uint32(1)<<c1.len - 1
-			if i != j && c1.len <= c2.len && c1.val&mask == c2.val&mask {
-				return false
-			}
-		}
-	}
-	return true
 }

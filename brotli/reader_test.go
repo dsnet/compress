@@ -4,14 +4,16 @@
 
 package brotli
 
-import "io"
-import "io/ioutil"
-import "bufio"
-import "bytes"
-import "strings"
-import "encoding/hex"
-import "runtime"
-import "testing"
+import (
+	"bufio"
+	"bytes"
+	"encoding/hex"
+	"io"
+	"io/ioutil"
+	"runtime"
+	"strings"
+	"testing"
+)
 
 func TestReader(t *testing.T) {
 	var vectors = []struct {
@@ -300,7 +302,10 @@ func TestReader(t *testing.T) {
 
 	for i, v := range vectors {
 		input, _ := hex.DecodeString(v.input)
-		rd := NewReader(bytes.NewReader(input))
+		rd, err := NewReader(bytes.NewReader(input), nil)
+		if err != nil {
+			t.Errorf("test %d, unexpected NewReader error: %v", i, err)
+		}
 		data, err := ioutil.ReadAll(rd)
 		output := hex.EncodeToString(data)
 
@@ -380,7 +385,10 @@ func TestReaderGolden(t *testing.T) {
 			continue
 		}
 
-		rd := NewReader(bytes.NewReader(input))
+		rd, err := NewReader(bytes.NewReader(input), nil)
+		if err != nil {
+			t.Errorf("test %d, unexpected NewReader error: %v", i, err)
+		}
 		data, err := ioutil.ReadAll(rd)
 		if err != nil {
 			t.Errorf("test %d, %s\nerror mismatch: got %v, want nil", i, v.input, err)
@@ -399,7 +407,11 @@ func benchmarkDecode(b *testing.B, testfile string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	output, err := ioutil.ReadAll(NewReader(bytes.NewReader(input)))
+	rd, err := NewReader(bytes.NewReader(input), nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+	output, err := ioutil.ReadAll(rd)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -411,7 +423,11 @@ func benchmarkDecode(b *testing.B, testfile string) {
 	b.SetBytes(nb)
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		cnt, err := io.Copy(ioutil.Discard, NewReader(bufio.NewReader(bytes.NewReader(input))))
+		rd, err := NewReader(bufio.NewReader(bytes.NewReader(input)), nil)
+		if err != nil {
+			b.Fatalf("unexpected NewReader error: %v", err)
+		}
+		cnt, err := io.Copy(ioutil.Discard, rd)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
 		}
