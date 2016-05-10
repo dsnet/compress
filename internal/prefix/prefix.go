@@ -12,9 +12,8 @@ import (
 )
 
 const (
-	countBits  = 5  // Number of bits to store the bit-length of the code
-	symbolBits = 27 // Number of bits to store the symbol
-	valueBits  = 27 // Number of bits to store the code value
+	countBits = 5  // Number of bits to store the bit-length of the code
+	valueBits = 27 // Number of bits to store the code value
 
 	countMask = (1 << countBits) - 1
 )
@@ -91,7 +90,7 @@ func (pc PrefixCodes) checkCanonical() bool {
 	var last PrefixCode
 	for _, v := range vals {
 		if v.Cnt > 0 {
-			curVal := v.Val - uint32(v.Cnt) + 1
+			curVal := v.Val - v.Cnt + 1
 			if last.Cnt != 0 && last.Val >= curVal {
 				return false
 			}
