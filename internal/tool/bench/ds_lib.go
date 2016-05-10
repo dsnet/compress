@@ -17,15 +17,23 @@ import (
 func init() {
 	RegisterDecoder(FormatBrotli, "ds",
 		func(r io.Reader) io.ReadCloser {
-			return brotli.NewReader(r)
+			zr, err := brotli.NewReader(r, nil)
+			if err != nil {
+				panic(err)
+			}
+			return zr
 		})
 	RegisterDecoder(FormatFlate, "ds",
 		func(r io.Reader) io.ReadCloser {
-			return flate.NewReader(r)
+			zr, err := flate.NewReader(r, nil)
+			if err != nil {
+				panic(err)
+			}
+			return zr
 		})
 	RegisterEncoder(FormatBZ2, "ds",
 		func(w io.Writer, lvl int) io.WriteCloser {
-			zw, err := bzip2.NewWriterLevel(w, lvl)
+			zw, err := bzip2.NewWriter(w, &bzip2.WriterConfig{Level: lvl})
 			if err != nil {
 				panic(err)
 			}
@@ -33,6 +41,10 @@ func init() {
 		})
 	RegisterDecoder(FormatBZ2, "ds",
 		func(r io.Reader) io.ReadCloser {
-			return bzip2.NewReader(r)
+			zr, err := bzip2.NewReader(r, nil)
+			if err != nil {
+				panic(err)
+			}
+			return zr
 		})
 }
