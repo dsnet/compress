@@ -26,8 +26,8 @@ type Reader struct {
 	Offset int64 // Number of bytes read from the underlying io.Reader
 
 	rd     io.Reader
-	byteRd compress.ByteReader
-	bufRd  compress.BufferedReader
+	byteRd compress.ByteReader     // Set if rd is a ByteReader
+	bufRd  compress.BufferedReader // Set if rd is a BufferedReader
 
 	bufBits   uint64    // Buffer to hold some bits
 	numBits   uint      // Number of valid bits in bufBits
@@ -37,6 +37,12 @@ type Reader struct {
 	bufPeek     []byte // Buffer for the Peek data
 	discardBits int    // Number of bits to discard from reader
 	fedBits     uint   // Number of bits fed in last call to PullBits
+
+	// These fields are used to reduce allocations.
+	bb *buffer
+	br *bytesReader
+	sr *stringReader
+	bu *bufio.Reader
 }
 
 // Init initializes the bit Reader to read from r. If bigEndian is true, then
@@ -44,21 +50,43 @@ type Reader struct {
 // (as done in bzip2), otherwise it will read starting from the
 // least-significant bits of a byte (such as for deflate and brotli).
 func (pr *Reader) Init(r io.Reader, bigEndian bool) {
-	*pr = Reader{rd: r}
+	*pr = Reader{
+		rd: r,
+
+		bb: pr.bb,
+		br: pr.br,
+		sr: pr.sr,
+		bu: pr.bu,
+	}
 	switch rr := r.(type) {
 	case *bytes.Buffer:
-		pr.bufRd = &buffer{Buffer: rr}
+		if pr.bb == nil {
+			pr.bb = new(buffer)
+		}
+		*pr.bb = buffer{Buffer: rr}
+		pr.bufRd = pr.bb
 	case *bytes.Reader:
-		pr.bufRd = &bytesReader{Reader: rr}
+		if pr.br == nil {
+			pr.br = new(bytesReader)
+		}
+		*pr.br = bytesReader{Reader: rr}
+		pr.bufRd = pr.br
 	case *strings.Reader:
-		pr.bufRd = &stringReader{Reader: rr}
+		if pr.sr == nil {
+			pr.sr = new(stringReader)
+		}
+		*pr.sr = stringReader{Reader: rr}
+		pr.bufRd = pr.sr
 	case compress.BufferedReader:
 		pr.bufRd = rr
 	case compress.ByteReader:
 		pr.byteRd = rr
 	default:
-		br := bufio.NewReader(r)
-		pr.rd, pr.bufRd = br, br
+		if pr.bu == nil {
+			pr.bu = bufio.NewReader(nil)
+		}
+		pr.bu.Reset(r)
+		pr.rd, pr.bufRd = pr.bu, pr.bu
 	}
 
 	if bigEndian {
@@ -66,6 +94,16 @@ func (pr *Reader) Init(r io.Reader, bigEndian bool) {
 	} else {
 		copy(pr.transform[:], internal.IdentityLUT[:])
 	}
+}
+
+// BitsRead reports the total number of bits emitted from any Read method.
+func (pr *Reader) BitsRead() int64 {
+	offset := 8*pr.Offset - int64(pr.numBits)
+	if pr.bufRd != nil {
+		discardBits := pr.discardBits + int(pr.fedBits-pr.numBits)
+		offset = 8*pr.Offset + int64(discardBits)
+	}
+	return offset
 }
 
 // IsBufferedReader reports whether the underlying io.Reader is also a

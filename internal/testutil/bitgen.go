@@ -18,14 +18,19 @@ import (
 var (
 	reBin = regexp.MustCompile("^[01]{1,64}$")
 	reDec = regexp.MustCompile("^D[0-9]+:[0-9]+$")
-	reHex = regexp.MustCompile("^X:[0-9a-fA-F]+$")
+	reHex = regexp.MustCompile("^H[0-9]+:[0-9a-fA-F]{1,16}$")
+	reRaw = regexp.MustCompile("^X:[0-9a-fA-F]+$")
 	reQnt = regexp.MustCompile("[*][0-9]+$")
 )
 
 // DecodeBitGen decodes a BitGen formatted string.
 //
 // The BitGen format allows bit-streams to be generated from a series of tokens
-// describing bits in the resulting string.
+// describing bits in the resulting string. The format is designed for testing
+// purposes by aiding a human in the manual scripting of compression stream
+// from individual bit-strings. It is designed to be relatively succinct, but
+// allow the user to have control over the bit-order and also to allow the
+// presence of comments to encode authorial intent.
 //
 // The format consists of a series of tokens separated by white space of any
 // kind. The '#' character is used for commenting. Thus, any bytes on a given
@@ -42,18 +47,19 @@ var (
 // current bit-parsing mode, which alters the way subsequent tokens are
 // processed. The format defaults to using a little-endian bit-parsing mode.
 //
-// A token that is of the pattern "[01]{1,64}" forms a bit-string (e.g. 11010).
+// A token of the pattern "[01]{1,64}" forms a bit-string (e.g. 11010).
 // If the current bit-parsing mode is little-endian, then the right-most bits of
 // the bit-string are written first to the resulting bit-stream. Likewise, if
 // the bit-parsing mode is big-endian, then the left-most bits of the bit-string
 // are written first to the resulting bit-stream.
 //
-// A token that is of the pattern "D[0-9]+:[0-9]+" represents a decimal value
-// that should be converted to the unsigned representation of the value.
-// The first number indicates the bit-length of the bit-string and must be
-// between 0 and 64 bits. The second number indicates the value to convert to
-// an unsigned binary number. The bit-length must be long enough to contain the
-// resulting binary value. If the current bit-parsing mode is little-endian,
+// A token of the pattern "D[0-9]+:[0-9]+" or "H[0-9]+:[0-9a-fA-F]{1,16}"
+// represents either a decimal value or a hexadecimal value, respectively.
+// This numeric value is converted to the unsigned binary representation and
+// used as the bit-string to write. The first number indicates the bit-length
+// of the bit-string and must be between 0 and 64 bits. The second number
+// represents the numeric value. The bit-length must be long enough to contain
+// the resulting binary value. If the current bit-parsing mode is little-endian,
 // then the least-significant bits of this binary number are written first to
 // the resulting bit-stream. Likewise, the opposite holds for big-endian mode.
 //
@@ -66,7 +72,7 @@ var (
 // any binary token or decimal token. This will affect the bit-parsing mode
 // for that token only. It will not set the overall global mode. That still
 // needs to be done by standalone "<" and ">" tokens. This decorator has no
-// effect if applied to the hexadecimal token.
+// effect if applied to the literal bytes token.
 //
 // A token decorator of the pattern "[*][0-9]+" may trail any token. This is
 // a quantifier decorator which indicates that the current token is to be
@@ -75,6 +81,24 @@ var (
 //
 // If the total bit-stream does not end on a byte-aligned edge, then the stream
 // will automatically be padded up to the nearest byte with 0 bits.
+//
+// Example BitGen file:
+//	<<< # DEFLATE uses LE bit-packing order
+//
+//	< 0 00 0*5                 # Non-last, raw block, padding
+//	< H16:0004 H16:fffb        # RawSize: 4
+//	X:deadcafe                 # Raw data
+//
+//	< 1 10                     # Last, dynamic block
+//	< D5:1 D5:0 D4:15          # HLit: 258, HDist: 1, HCLen: 19
+//	< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
+//	> 0*256 1*2                # HLits: {256:1, 257:1}
+//	> 0                        # HDists: {}
+//	> 1 0                      # Use invalid HDist code 0
+//
+// Generated output stream (in hexadecimal):
+//	"000400fbffdeadcafe0de0010400000000100000000000000000000000000000" +
+//	"0000000000000000000000000000000000002c"
 func DecodeBitGen(str string) ([]byte, error) {
 	// Tokenize the input string by removing comments and superfluous spaces.
 	var toks []string
@@ -114,7 +138,7 @@ func DecodeBitGen(str string) ([]byte, error) {
 			pm = bool(t[0] == '>')
 			t = t[1:]
 			if len(t) == 0 {
-				parseMode = pm
+				parseMode = pm // This is a global modifier, so remember it
 				continue
 			}
 		}
@@ -146,15 +170,20 @@ func DecodeBitGen(str string) ([]byte, error) {
 			for i := 0; i < rep; i++ {
 				bw.WriteBits64(v, uint(len(t)))
 			}
-		case reDec.MatchString(t):
-			// Handle decimal tokens.
+		case reDec.MatchString(t) || reHex.MatchString(t):
+			// Handle decimal and hexadecimal tokens.
 			i := strings.IndexByte(t, ':')
-			tn, tv := t[1:i], t[i+1:]
+			tb, tn, tv := t[0], t[1:i], t[i+1:]
+
+			base := 10
+			if tb == 'H' {
+				base = 16
+			}
 
 			n, err1 := strconv.Atoi(tn)
-			v, err2 := strconv.ParseUint(tv, 10, 64)
-			if err1 != nil || err2 != nil {
-				return nil, errors.New("testutil: invalid decimal token: " + t)
+			v, err2 := strconv.ParseUint(tv, base, 64)
+			if err1 != nil || err2 != nil || n > 64 {
+				return nil, errors.New("testutil: invalid numeric token: " + t)
 			}
 			if n < 64 && v&((1<<uint(n))-1) != v {
 				return nil, errors.New("testutil: integer overflow on token: " + t)
@@ -166,15 +195,24 @@ func DecodeBitGen(str string) ([]byte, error) {
 			for i := 0; i < rep; i++ {
 				bw.WriteBits64(v, uint(n))
 			}
-		case reHex.MatchString(t):
-			// Handle hexadecimal tokens.
+		case reRaw.MatchString(t):
+			// Handle raw bytes tokens.
 			tx := t[2:]
-			b, err := hex.DecodeString(tx)
+			buf, err := hex.DecodeString(tx)
 			if err != nil {
-				return nil, errors.New("testutil: invalid hexadecimal token: " + t)
+				return nil, errors.New("testutil: invalid raw bytes token: " + t)
 			}
-			b = bytes.Repeat(b, rep)
-			if _, err := bw.Write(b); err != nil {
+			if packMode {
+				// Hexadecimal tokens should not be affected by the bit-packing
+				// order. Thus, if the order is reversed, we preemptively
+				// reverse the bits knowing that it will reversed back to normal
+				// in the final stage.
+				for i, b := range buf {
+					buf[i] = internal.ReverseLUT[b]
+				}
+			}
+			buf = bytes.Repeat(buf, rep)
+			if _, err := bw.Write(buf); err != nil {
 				return nil, err
 			}
 		default:

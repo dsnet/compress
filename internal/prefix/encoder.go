@@ -61,6 +61,6 @@ retry:
 			numChunks <<= 1
 			goto retry
 		}
-		pe.chunks[c.Sym&pe.chunkMask] = c.Val<<countBits | uint32(c.Len)
+		pe.chunks[c.Sym&pe.chunkMask] = c.Val<<countBits | c.Len
 	}
 }

@@ -56,6 +56,21 @@ func TestDecodeBitGen(t *testing.T) {
 		output: []byte{0x0f, 0x1b},
 		valid:  true,
 	}, {
+		input:  `<<< < H16:0f1b`,
+		output: []byte{0x1b, 0x0f},
+		valid:  true,
+	}, {
+		input:  `<<< < H12:0f1b`,
+		output: []byte{0x1b, 0x0f},
+		valid:  true,
+	}, {
+		input:  `<<< < H12:0f1b H12:0f1b`,
+		output: []byte{0x1b, 0xbf, 0xf1},
+		valid:  true,
+	}, {
+		input: `<<< < H12:0f1b H11:0f1b`,
+		valid: false,
+	}, {
 		input: `>>>
 			< 110 D64:18364758544493064720 # Comment
 			> 110 D64:18364758544493064720 # Comment
@@ -138,10 +153,30 @@ func TestDecodeBitGen(t *testing.T) {
 			< 01101 D11:1337
 			X:abcdef01
 			>X:abcdef01
+			<X:abcdef01
 		`,
 		output: []byte{
 			0xb6, 0x9c, 0x2d, 0xa7, // 0b10110110 0b10011100 0b00101101 0b10100111
 			0xb6, 0x9c, 0x2d, 0xa7, // 0b10110110 0b10011100 0b00101101 0b10100111
+			0xab, 0xcd, 0xef, 0x01,
+			0xab, 0xcd, 0xef, 0x01,
+			0xab, 0xcd, 0xef, 0x01,
+		},
+		valid: true,
+	}, {
+		input: `>>>
+			< >01101 >D11:1337
+			> <01101 <D11:1337
+			  01101 D11:1337
+			< 01101 D11:1337
+			X:abcdef01
+			>X:abcdef01
+			<X:abcdef01
+		`,
+		output: []byte{
+			0x6d, 0x39, 0xb4, 0xe5, // 0b01101101 0b00111001 0b10110100 0b11100101
+			0x6d, 0x39, 0xb4, 0xe5, // 0b01101101 0b00111001 0b10110100 0b11100101
+			0xab, 0xcd, 0xef, 0x01,
 			0xab, 0xcd, 0xef, 0x01,
 			0xab, 0xcd, 0xef, 0x01,
 		},
