@@ -33,6 +33,11 @@ func (pw *Writer) Init(w io.Writer, bigEndian bool) {
 	return
 }
 
+// BitsWritten reports the total number of bits issued to any Write method.
+func (pw *Writer) BitsWritten() int64 {
+	return 8*pw.Offset + 8*int64(pw.cntBuf) + int64(pw.numBits)
+}
+
 // WritePads writes 0-7 bits to the bit buffer to achieve byte-alignment.
 func (pw *Writer) WritePads(v uint) {
 	nb := -pw.numBits & 7
