@@ -134,7 +134,7 @@ func BenchmarkDecoder(input []byte, dec Decoder) testing.BenchmarkResult {
 			if err != nil {
 				b.Fatalf("unexpected error: %v", err)
 			}
-			b.SetBytes(int64(cnt))
+			b.SetBytes(cnt)
 		}
 	})
 }
