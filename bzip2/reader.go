@@ -22,15 +22,18 @@ type Reader struct {
 	blkCRC uint32 // CRC-32 IEEE of each block
 	endCRC uint32 // Checksum of all blocks using bzip2's custom method
 
+	crc crc
 	mtf moveToFront
 	bwt burrowsWheelerTransform
 	rle runLengthEncoding
 }
 
-func NewReader(r io.Reader) *Reader {
+type ReaderConfig struct{}
+
+func NewReader(r io.Reader, conf *ReaderConfig) (*Reader, error) {
 	zr := new(Reader)
 	zr.Reset(r)
-	return zr
+	return zr, nil
 }
 
 func (zr *Reader) Reset(r io.Reader) {

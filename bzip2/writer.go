@@ -22,6 +22,7 @@ type Writer struct {
 	blkCRC uint32 // CRC-32 IEEE of each block
 	endCRC uint32 // Checksum of all blocks using bzip2's custom method
 
+	crc crc
 	rle runLengthEncoding
 	bwt burrowsWheelerTransform
 	mtf moveToFront
@@ -29,17 +30,17 @@ type Writer struct {
 	buf []byte
 }
 
-func NewWriter(w io.Writer) *Writer {
-	zw, err := NewWriterLevel(w, DefaultCompression)
-	if err != nil {
-		panic(err) // Should never happen; here for sanity
-	}
-	return zw
+type WriterConfig struct {
+	Level int
 }
 
-func NewWriterLevel(w io.Writer, lvl int) (*Writer, error) {
-	if lvl == DefaultCompression {
-		lvl = 6
+func NewWriter(w io.Writer, conf *WriterConfig) (*Writer, error) {
+	var lvl int
+	if conf != nil {
+		lvl = conf.Level
+	}
+	if lvl == 0 {
+		lvl = DefaultCompression
 	}
 	if lvl < BestSpeed || lvl > BestCompression {
 		return nil, Error{"invalid compression level"}
@@ -73,7 +74,7 @@ func (zw *Writer) Write(buf []byte) (int, error) {
 	cnt := len(buf)
 	for {
 		wrCnt, _ := zw.rle.Write(buf)
-		zw.blkCRC = updateCRC(zw.blkCRC, buf[:wrCnt])
+		zw.blkCRC = zw.crc.update(zw.blkCRC, buf[:wrCnt])
 		buf = buf[wrCnt:]
 		if len(buf) == 0 {
 			zw.InputOffset += int64(cnt)
@@ -132,6 +133,13 @@ func (zw *Writer) Close() error {
 	zw.wr.Offset = zw.OutputOffset
 	func() {
 		defer errRecover(&zw.err)
+		if !zw.wrHdr {
+			// Write stream header.
+			zw.wr.WriteBitsBE64(hdrMagic, 16)
+			zw.wr.WriteBitsBE64('h', 8)
+			zw.wr.WriteBitsBE64(uint64('0'+zw.level), 8)
+			zw.wrHdr = true
+		}
 		zw.wr.WriteBitsBE64(endMagic, 48)
 		zw.wr.WriteBitsBE64(uint64(zw.endCRC), 32)
 		zw.wr.WritePads(0)

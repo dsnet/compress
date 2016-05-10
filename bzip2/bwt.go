@@ -64,34 +64,33 @@ func (bwt *burrowsWheelerTransform) Decode(buf []byte, ptr int) {
 		return
 	}
 
-	// Step 1: Compute the C array, where C[ch] reports the total number of
+	// Step 1: Compute cumm, where cumm[ch] reports the total number of
 	// characters that precede the character ch in the alphabet.
-	var c [256]int
+	var cumm [256]int
 	for _, v := range buf {
-		c[v]++
+		cumm[v]++
 	}
 	var sum int
-	for i, v := range c {
+	for i, v := range cumm {
+		cumm[i] = sum
 		sum += v
-		c[i] = sum - v
 	}
 
-	// Step 2: Compute the P permutation, where P[ptr] contains the index of the
-	// first byte and the index to the pointer to the index of the next byte.
-	p := make([]uint32, len(buf))
-	for i := range buf {
-		b := buf[i]
-		p[c[b]] = uint32(i)
-		c[b]++
+	// Step 2: Compute perm, where perm[ptr] contains a pointer to the next
+	// byte in buf and the next pointer in perm itself.
+	perm := make([]uint32, len(buf))
+	for i, b := range buf {
+		perm[cumm[b]] = uint32(i)
+		cumm[b]++
 	}
 
-	// Step 3: Follow each pointer in P to the next byte, starting with the
+	// Step 3: Follow each pointer in perm to the next byte, starting with the
 	// origin pointer.
 	buf2 := make([]byte, len(buf))
-	tPos := p[ptr]
-	for i := range p {
-		buf2[i] = buf[tPos]
-		tPos = p[tPos]
+	i := perm[ptr]
+	for j := range buf2 {
+		buf2[j] = buf[i]
+		i = perm[i]
 	}
 	copy(buf, buf2)
 }
