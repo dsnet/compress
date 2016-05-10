@@ -60,7 +60,10 @@ func TestRoundTrip(t *testing.T) {
 		buf.WriteByte(0x7a)
 
 		// Decompress the output.
-		rd := NewReader(&struct{ compress.ByteReader }{&buf})
+		rd, err := NewReader(&struct{ compress.ByteReader }{&buf}, nil)
+		if err != nil {
+			t.Errorf("test %d, NewReader error: got %v", i, err)
+		}
 		output, err := ioutil.ReadAll(rd)
 		if err != nil {
 			t.Errorf("test %d, read error: got %v", i, err)
@@ -109,7 +112,10 @@ func TestSync(t *testing.T) {
 
 	var buf bytes.Buffer
 	wr, _ := flate.NewWriter(&buf, flate.DefaultCompression)
-	rd := NewReader(&buf)
+	rd, err := NewReader(&buf, nil)
+	if err != nil {
+		t.Errorf("unexpected NewReader error: %v", err)
+	}
 	for i, n := range flushSizes {
 		// Write and flush some portion of the test data.
 		want := data[:n]
