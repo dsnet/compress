@@ -7,8 +7,11 @@ package flate
 import (
 	"bufio"
 	"bytes"
+	"compress/flate"
+	"flag"
 	"io"
 	"io/ioutil"
+	"os/exec"
 	"runtime"
 	"strings"
 	"testing"
@@ -16,15 +19,26 @@ import (
 	"github.com/dsnet/compress/internal/testutil"
 )
 
+var zcheck = flag.Bool("zcheck", false, "verify reader test vectors with C zlib library")
+
 func TestReader(t *testing.T) {
+	db := testutil.MustDecodeBitGen
+	dh := testutil.MustDecodeHex
+
 	// To verify any of these inputs as valid or invalid DEFLATE streams
 	// according to the C zlib library, you can use the Python wrapper library:
 	//	>>> hex_string = "010100feff11"
 	//	>>> import zlib
 	//	>>> zlib.decompress(hex_string.decode("hex"), -15) # Negative means raw DEFLATE
 	//	'\x11'
-	db := testutil.MustDecodeBitGen
-	dh := testutil.MustDecodeHex
+	var pyDecompress = func(input []byte) ([]byte, error) {
+		var buf bytes.Buffer
+		cmd := exec.Command("python", "-c", "import sys, zlib; sys.stdout.write(zlib.decompress(sys.stdin.read(), -15))")
+		cmd.Stdin = bytes.NewReader(input)
+		cmd.Stdout = &buf
+		err := cmd.Run()
+		return buf.Bytes(), err
+	}
 
 	var vectors = []struct {
 		desc   string // Description of the test
@@ -34,7 +48,7 @@ func TestReader(t *testing.T) {
 		outIdx int64  // Expected output offset after reading
 		err    error  // Expected error
 	}{{
-		desc: "empty string (truncated)",
+		desc: "empty string",
 		err:  io.ErrUnexpectedEOF,
 	}, {
 		desc: "raw block, truncated after block header",
@@ -44,7 +58,7 @@ func TestReader(t *testing.T) {
 		inIdx: 1,
 		err:   io.ErrUnexpectedEOF,
 	}, {
-		desc: "raw block, truncated in size field",
+		desc: "raw block, truncated inside size field",
 		input: db(`<<<
 			< 0 00 0*5 # Non-last, raw block, padding
 			< H8:0c    # RawSize: 12
@@ -68,7 +82,7 @@ func TestReader(t *testing.T) {
 		inIdx: 5,
 		err:   io.ErrUnexpectedEOF,
 	}, {
-		desc: "raw block, truncated before raw data",
+		desc: "raw block, truncated inside raw data",
 		input: db(`<<<
 			< 0 00 0*5          # Non-last, raw block, padding
 			< H16:000c H16:fff3 # RawSize: 12
@@ -79,7 +93,7 @@ func TestReader(t *testing.T) {
 		outIdx: 5,
 		err:    io.ErrUnexpectedEOF,
 	}, {
-		desc: "raw block, truncated before raw data",
+		desc: "raw block, truncated before next block",
 		input: db(`<<<
 			< 0 00 0*5                 # Non-last, raw block, padding
 			< H16:000c H16:fff3        # RawSize: 12
@@ -104,6 +118,57 @@ func TestReader(t *testing.T) {
 		outIdx: 12,
 		err:    io.ErrUnexpectedEOF,
 	}, {
+		desc: "raw block with non-zero padding",
+		input: db(`<<<
+			< 1 00 10101        # Last, raw block, padding
+			< H16:0001 H16:fffe # RawSize: 1
+			X:11                # Raw data
+		`),
+		output: dh("11"),
+		inIdx:  6,
+		outIdx: 1,
+	}, {
+		desc: "shortest raw block",
+		input: db(`<<<
+			< 1 00 0*5          # Last, raw block, padding
+			< H16:0000 H16:ffff # RawSize: 0
+		`),
+		inIdx: 5,
+	}, {
+		desc: "longest raw block",
+		input: db(`<<<
+			< 1 00 0*5          # Last, raw block, padding
+			< H16:ffff H16:0000 # RawSize: 65535
+			X:7a*65535
+		`),
+		output: db("<<< X:7a*65535"),
+		inIdx:  65540,
+		outIdx: 65535,
+	}, {
+		desc: "raw block with bad size",
+		input: db(`<<<
+			< 1 00 0*5          # Last, raw block, padding
+			< H16:0001 H16:fffd # RawSize: 1
+			X:11                # Raw data
+		`),
+		inIdx: 5,
+		err:   ErrCorrupt,
+	}, {
+		desc: "shortest fixed block",
+		input: db(`<<<
+			< 1 01    # Last, fixed block
+			> 0000000 # EOB marker
+		`),
+		inIdx: 2,
+	}, {
+		desc: "reserved block",
+		input: db(`<<<
+			< 1 11 0*5 # Last, reserved block, padding
+			X:deadcafe # ???
+		`),
+		inIdx: 1,
+		err:   ErrCorrupt,
+	}, {
 		desc: "degenerate HCLenTree",
 		input: db(`<<<
 			< 1 10            # Last, dynamic block
@@ -114,7 +179,7 @@ func TestReader(t *testing.T) {
 		inIdx: 42,
 		err:   ErrCorrupt,
 	}, {
-		desc: "complete HCLenTree, empty HLitTree, empty HDistTree",
+		desc: "degenerate HCLenTree, empty HLitTree, empty HDistTree",
 		input: db(`<<<
 			< 1 10             # Last, dynamic block
 			< D5:0 D5:0 D4:15  # HLit: 257, HDist: 1, HCLen: 19
@@ -202,13 +267,13 @@ func TestReader(t *testing.T) {
 		input: db(`<<<
 			< 1 10                           # Last, dynamic block
 			< D5:29 D5:29 D4:15              # HLit: 286, HDist: 30, HCLen: 19
-			< 011 000 011 001 000*13 010 000 # HCLens: {0:0,1:2,16:3,18:3}
+			< 011 000 011 001 000*13 010 000 # HCLens: {0:0, 1:2, 16:3, 18:3}
 			> 10 0*255 10 111 <D7:49 1       # Excessive repeater symbol
 		`),
 		inIdx: 43,
 		err:   ErrCorrupt,
 	}, {
-		desc: "complete HCLenTree, complete HLitTree, empty HDistTree of normal length 30",
+		desc: "complete HCLenTree, complete HLitTree, empty HDistTree of length 30",
 		input: db(`<<<
 			< 1 10               # Last, dynamic block
 			< D5:0 D5:29 D4:15   # HLit: 257, HDist: 30, HCLen: 19
@@ -218,7 +283,7 @@ func TestReader(t *testing.T) {
 		`),
 		inIdx: 47,
 	}, {
-		desc: "complete HCLenTree, complete HLitTree, bad HDistTree",
+		desc: "complete HCLenTree, complete HLitTree, under-subscribed HDistTree",
 		input: db(`<<<
 			< 1 10               # Last, dynamic block
 			< D5:0 D5:29 D4:15   # HLit: 257, HDist: 30, HCLen: 19
@@ -228,7 +293,7 @@ func TestReader(t *testing.T) {
 		inIdx: 46,
 		err:   ErrCorrupt,
 	}, {
-		desc: "complete HCLenTree, complete HLitTree, empty HDistTree of excessive length 31",
+		desc: "HDistTree of excessive length 31",
 		input: db(`<<<
 			< 1 10             # Last, dynamic block
 			< D5:0 D5:30 D4:15 # HLit: 257, HDist: 31, HCLen: 19
@@ -237,7 +302,7 @@ func TestReader(t *testing.T) {
 		inIdx: 3,
 		err:   ErrCorrupt,
 	}, {
-		desc: "complete HCLenTree, over-subscribed HLitTree, empty HDistTree",
+		desc: "complete HCLenTree, over-subscribed HLitTree",
 		input: db(`<<<
 			< 1 10               # Last, dynamic block
 			< D5:0 D5:0 D4:15    # HLit: 257, HDist: 1, HCLen: 19
@@ -248,7 +313,7 @@ func TestReader(t *testing.T) {
 		inIdx: 42,
 		err:   ErrCorrupt,
 	}, {
-		desc: "complete HCLenTree, under-subscribed HLitTree, empty HDistTree",
+		desc: "complete HCLenTree, under-subscribed HLitTree",
 		input: db(`<<<
 			< 1 10               # Last, dynamic block
 			< D5:0 D5:0 D4:15    # HLit: 257, HDist: 1, HCLen: 19
@@ -272,7 +337,7 @@ func TestReader(t *testing.T) {
 		outIdx: 2,
 		err:    io.ErrUnexpectedEOF,
 	}, {
-		desc: "complete HCLenTree, complete HLitTree with multiple codes, empty HDistTree",
+		desc: "complete HCLenTree, complete HLitTree, empty HDistTree",
 		input: db(`<<<
 			< 1 10               # Last, dynamic block
 			< D5:0 D5:3 D4:15    # HLit: 257, HDist: 4, HCLen: 19
@@ -455,6 +520,7 @@ func TestReader(t *testing.T) {
 		outIdx: 1,
 		err:    ErrCorrupt,
 	}, {
+		desc: "longest distance match",
 		input: db(`<<<
 			< 0 00 0*5                              # Non-last, raw block, padding
 			< H16:8000 H16:7fff                     # RawSize: 32768
@@ -473,58 +539,70 @@ func TestReader(t *testing.T) {
 		inIdx:  32781,
 		outIdx: 33029,
 	}, {
-		desc: "shortest fixed block",
+		desc: "invalid long distance match with data",
 		input: db(`<<<
-			< 1 01    # Last, fixed block
-			> 0000000 # EOB marker
+			< 0 00 0*5                              # Non-last, raw block, padding
+			< H16:7fff H16:8000                     # RawSize: 32767
+			X:0f1e2d3c4b5a69788796a5b4c3d2e1f0*2047 # Raw data
+			X:0f1e2d3c4b5a69788796a5b4c3d2e1
+
+			< 1 01                     # Last, fixed block
+			> 0000001 D5:29 <H13:1fff  # Length: 3, Distance: 32768
+			> 0000000                  # EOB marker
+		`),
+		output: db(`<<<
+			X:0f1e2d3c4b5a69788796a5b4c3d2e1f0*2047
+			X:0f1e2d3c4b5a69788796a5b4c3d2e1
+		`),
+		inIdx:  32776,
+		outIdx: 32767,
+		err:    ErrCorrupt,
+	}, {
+		desc: "invalid short distance match with no data",
+		input: db(`<<<
+			< 1 01         # Last, fixed block
+			> 0000001 D5:0 # Length: 3, Distance: 1
+			> 0000000      # EOB marker
 		`),
 		inIdx: 2,
-	}, {
-		desc: "reserved block",
-		input: db(`<<<
-			< 1 11 0*5 # Last, reserved block, padding
-			X:deadcafe # ???
-		`),
-		inIdx: 1,
 		err:   ErrCorrupt,
 	}, {
-		desc: "raw block with non-zero padding",
+		desc: "invalid long distance match with no data",
 		input: db(`<<<
-			< 1 00 10101        # Last, raw block, padding
-			< H16:0001 H16:fffe # RawSize: 1
-			X:11                # Raw data
+			< 1 01                    # Last, fixed block
+			> 0000001 D5:29 <H13:1fff # Length: 3, Distance: 32768
+			> 0000000                 # EOB marker
 		`),
-		output: dh("11"),
-		inIdx:  6,
-		outIdx: 1,
-	}, {
-		desc: "shortest raw block",
-		input: db(`<<<
-			< 1 00 0*5          # Last, raw block, padding
-			< H16:0000 H16:ffff # RawSize: 0
-		`),
-		inIdx: 5,
-	}, {
-		desc: "longest raw block",
-		input: db(`<<<
-			< 1 00 0*5          # Last, raw block, padding
-			< H16:ffff H16:0000 # RawSize: 65535
-			X:7a*65535
-		`),
-		output: db("<<< X:7a*65535"),
-		inIdx:  65540,
-		outIdx: 65535,
-	}, {
-		desc: "raw block with bad size",
-		input: db(`<<<
-			< 1 00 0*5          # Last, raw block, padding
-			< H16:0001 H16:fffd # RawSize: 1
-			X:11                # Raw data
-		`),
-		inIdx: 5,
+		inIdx: 4,
 		err:   ErrCorrupt,
 	}, {
-		desc: "issue 3816 - large HLitTree caused a panic",
+		// Make sure the use of a dynamic block, following a fixed block does
+		// not alter the global Decoder tables.
+		desc: "fixed, dynamic, fixed, dynamic blocks",
+		input: db(`<<<
+			< 0 01               # Non-last, fixed block
+			> 00110000 0000000   # Compressed data
+
+			< 0 10               # Non-last, dynamic block
+			< D5:0 D5:3 D4:15    # HLit: 257, HDist: 4, HCLen: 19
+			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
+			> 0 1*256 0*4        # HLits: {*:8}, HDists: {}
+			> 00000000 11111111  # Compressed data
+
+			< 0 01               # Non-last, fixed block
+			> 00110000 0000000   # Compressed data
+
+			< 1 10               # Last, dynamic block
+			< D5:0 D5:3 D4:15    # HLit: 257, HDist: 4, HCLen: 19
+			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
+			> 0 1*256 0*4        # HLits: {*:8}, HDists: {}
+			> 00000000 11111111  # Compressed data
+		`),
+		output: dh("00010001"),
+		inIdx:  93,
+		outIdx: 4,
+	}, {
+		desc: "golang.org/issues/3815 - large HLitTree caused a panic",
 		input: db(`<<<
 			< 0 10             # Non-last, dynamic block
 			< D5:31 D5:30 D4:7 # HLit: 288, HDist: 31, HCLen: 11
@@ -537,7 +615,7 @@ func TestReader(t *testing.T) {
 		inIdx: 3,
 		err:   ErrCorrupt,
 	}, {
-		desc: "issue 10426 - over-subscribed HCLenTree caused a hang",
+		desc: "golang.org/issues/10426 - over-subscribed HCLenTree caused a hang",
 		input: db(`<<<
 			< 0 10                  # Non-last, dynamic block
 			< D5:6 D5:12 D4:2       # HLit: 263, HDist: 13, HCLen: 6
@@ -547,7 +625,7 @@ func TestReader(t *testing.T) {
 		inIdx: 5,
 		err:   ErrCorrupt,
 	}, {
-		desc: "issue 11030 - empty HDistTree unexpectedly led to error",
+		desc: "golang.org/issues/11030 - empty HDistTree unexpectedly led to error",
 		input: db(`<<<
 			< 1 10            # Last, dynamic block
 			< D5:0 D5:0 D4:14 # HLit: 257, HDist: 1, HCLen: 18
@@ -562,7 +640,7 @@ func TestReader(t *testing.T) {
 		`),
 		inIdx: 14,
 	}, {
-		desc: "issue 11033 - empty HDistTree unexpectedly led to error",
+		desc: "golang.org/issues/11033 - empty HDistTree unexpectedly led to error",
 		input: db(`<<<
 			< 1 10           # Last, dynamic block
 			< D5:0 D5:0 D4:8 # HLit: 257, HDist: 1, HCLen: 12
@@ -591,7 +669,10 @@ func TestReader(t *testing.T) {
 	}}
 
 	for i, v := range vectors {
-		rd := NewReader(bytes.NewReader(v.input))
+		rd, err := NewReader(bytes.NewReader(v.input), nil)
+		if err != nil {
+			t.Errorf("test %d, unexpected NewReader error: %v", i, err)
+		}
 		output, err := ioutil.ReadAll(rd)
 		if cerr := rd.Close(); cerr != nil {
 			err = cerr
@@ -608,6 +689,98 @@ func TestReader(t *testing.T) {
 		}
 		if rd.OutputOffset != v.outIdx {
 			t.Errorf("test %d, %s\noutput offset mismatch: got %d, want %d", i, v.desc, rd.OutputOffset, v.outIdx)
+		}
+
+		// If the zcheck flag is set, then we verify that the test vectors
+		// themselves are consistent with what the C zlib library outputs.
+		// To do that, we use the python wrapper around the library.
+		if *zcheck {
+			output, err := pyDecompress(v.input)
+			if got, want := bool(v.err == nil), bool(err == nil); got != want {
+				t.Errorf("test %d, %s\npass mismatch: got %v, want %v", i, v.desc, got, want)
+			}
+			if err == nil && !bytes.Equal(v.output, output) {
+				t.Errorf("test %d, %s\noutput mismatch:\ngot  %x\nwant %x", i, v.desc, v.output, output)
+			}
+		}
+	}
+}
+
+// TestReaderEarlyEOF tests that Reader returns io.EOF eagerly when possible.
+// There are two situations when it is unable to do so:
+//	* There is an non-last, empty, raw block at the end of the stream.
+//	Flushing semantics dictate that we must return at that point in the stream
+//	prior to knowing whether the end of the stream has been hit or not.
+//	* We previously returned from Read because the internal dictionary was full
+//	and it so happens that there is no more data to read. This is rare.
+func TestReaderEarlyEOF(t *testing.T) {
+	const maxSize = 1 << 18
+	const dampRatio = 32 // Higer value means more trials
+
+	data := make([]byte, maxSize)
+	for i := range data {
+		data[i] = byte(i)
+	}
+
+	// generateStream generates a DEFLATE stream that decompresses to n bytes
+	// of arbitrary data. If flush is set, then a final Flush is called at the
+	// very end of the stream.
+	var wrBuf bytes.Buffer
+	wr, _ := flate.NewWriter(nil, flate.BestSpeed)
+	generateStream := func(n int, flush bool) []byte {
+		wrBuf.Reset()
+		wr.Reset(&wrBuf)
+		wr.Write(data[:n])
+		if flush {
+			wr.Flush()
+		}
+		wr.Close()
+		return wrBuf.Bytes()
+	}
+
+	// readStream reads all the data and reports whether an early EOF occured.
+	var rd Reader
+	rdBuf := make([]byte, 2111)
+	readStream := func(data []byte) (bool, error) {
+		rd.Reset(bytes.NewReader(data))
+		for {
+			n, err := rd.Read(rdBuf)
+			if err != nil {
+				if err == io.EOF {
+					err = nil
+				}
+				return n > 0, err
+			}
+		}
+	}
+
+	// There is no gurantee that early io.EOF occurs for all DEFLATE streams,
+	// but it should occur for most cases.
+	var numEarly, numTotal int
+	for i := 0; i < maxSize; i += 1 + i/dampRatio {
+		earlyEOF, err := readStream(generateStream(i, false))
+		if err != nil {
+			t.Errorf("unexpected Read error: %v", err)
+		}
+		if earlyEOF {
+			numEarly++
+		}
+		numTotal++
+	}
+	got := 100 * float64(numEarly) / float64(numTotal)
+	if want := 95.0; got < want {
+		t.Errorf("too few early EOFs: %0.1f%% < %0.1f%%", got, want)
+	}
+
+	// If there is a flush block at the end of all the data, an early io.EOF
+	// is never possible. Check for this case.
+	for i := 0; i < maxSize; i += 1 + i/dampRatio {
+		earlyEOF, err := readStream(generateStream(i, true))
+		if err != nil {
+			t.Errorf("unexpected Read error: %v", err)
+		}
+		if earlyEOF {
+			t.Errorf("size: %d, unexpected early EOF with terminating flush", i)
 		}
 	}
 }
@@ -645,7 +818,11 @@ func benchmarkDecode(b *testing.B, testfile string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	output, err := ioutil.ReadAll(NewReader(bytes.NewReader(input)))
+	rd, err := NewReader(bytes.NewReader(input), nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+	output, err := ioutil.ReadAll(rd)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -657,7 +834,11 @@ func benchmarkDecode(b *testing.B, testfile string) {
 	b.SetBytes(nb)
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		cnt, err := io.Copy(ioutil.Discard, NewReader(bufio.NewReader(bytes.NewReader(input))))
+		rd, err := NewReader(bufio.NewReader(bytes.NewReader(input)), nil)
+		if err != nil {
+			b.Fatalf("unexpected NewReader error: %v", err)
+		}
+		cnt, err := io.Copy(ioutil.Discard, rd)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
 		}
