@@ -26,17 +26,19 @@ This library is in active development. As such, there are no guarantees about th
 
 However, in the meanwhile, this library does provide some basic API guarantees. For the types defined below, the method signatures are guaranteed to not change. Note that the author still reserves the right to change the fields within each ```Reader``` and ```Writer``` structs.
 ```go
+type ReaderConfig struct { ... }
 type Reader struct { ... }
-  func NewReader(io.Reader) Reader         { ... }
-  func (*Reader) Reset(io.Reader)          { ... }
-  func (*Reader) Read([]byte) (int, error) { ... }
-  func (*Reader) Close() error             { ... }
+  func NewReader(io.Reader, *ReaderConfig) (*Reader, error) { ... }
+  func (*Reader) Reset(io.Reader)                           { ... }
+  func (*Reader) Read([]byte) (int, error)                  { ... }
+  func (*Reader) Close() error                              { ... }
 
+type WriterConfig struct { ... }
 type Writer struct { ... }
-  func NewWriter(io.Writer) Writer          { ... }
-  func (*Writer) Reset(io.Writer)           { ... }
-  func (*Writer) Write([]byte) (int, error) { ... }
-  func (*Writer) Close() error              { ... }
+  func NewWriter(io.Writer, *WriterConfig) (*Writer, error) { ... }
+  func (*Writer) Reset(io.Writer)                           { ... }
+  func (*Writer) Write([]byte) (int, error)                 { ... }
+  func (*Writer) Close() error                              { ... }
 ```
 
 To see what work still remains, see the [Task List](https://github.com/dsnet/compress/wiki/Task-List).
