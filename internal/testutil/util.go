@@ -66,3 +66,41 @@ func MustDecodeBitGen(s string) []byte {
 	}
 	return b
 }
+
+// BuggyReader returns Err after N bytes have been read from R.
+type BuggyReader struct {
+	R   io.Reader
+	N   int64 // Number of valid bytes to read
+	Err error // Return this error after N bytes
+}
+
+func (br *BuggyReader) Read(buf []byte) (int, error) {
+	if int64(len(buf)) > br.N {
+		buf = buf[:br.N]
+	}
+	n, err := br.R.Read(buf)
+	br.N -= int64(n)
+	if err == nil && br.N <= 0 {
+		return n, br.Err
+	}
+	return n, err
+}
+
+// BuggyWriter returns Err after N bytes have been written to W.
+type BuggyWriter struct {
+	W   io.Writer
+	N   int64 // Number of valid bytes to write
+	Err error // Return this error after N bytes
+}
+
+func (bw *BuggyWriter) Write(buf []byte) (int, error) {
+	if int64(len(buf)) > bw.N {
+		buf = buf[:bw.N]
+	}
+	n, err := bw.W.Write(buf)
+	bw.N -= int64(n)
+	if err == nil && bw.N <= 0 {
+		return n, bw.Err
+	}
+	return n, err
+}

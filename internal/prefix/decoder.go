@@ -118,7 +118,7 @@ func (pd *Decoder) Init(codes PrefixCodes) {
 
 	// Fill out chunks and links tables with values.
 	for _, c := range codes {
-		chunk := c.Sym<<countBits | uint32(c.Len)
+		chunk := c.Sym<<countBits | c.Len
 		if c.Len <= pd.chunkBits {
 			skip := 1 << uint(c.Len)
 			for j := int(c.Val); j < len(pd.chunks); j += skip {

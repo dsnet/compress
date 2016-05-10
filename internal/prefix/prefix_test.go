@@ -122,17 +122,7 @@ func TestReader(t *testing.T) {
 
 			r := testutil.NewRand(0)
 		loop:
-			for j := 0; ; j++ {
-				// Stop if we read enough bits.
-				offset := 8*br.Offset - int64(br.numBits)
-				if br.bufRd != nil {
-					discardBits := br.discardBits + int(br.fedBits-br.numBits)
-					offset = 8*br.Offset + int64(discardBits)
-				}
-				if offset > 8*testSize {
-					break
-				}
-
+			for j := 0; br.BitsRead() < 8*testSize; j++ {
 				switch j % 4 {
 				case 0:
 					// Test unaligned Read.
@@ -241,7 +231,7 @@ func TestWriter(t *testing.T) {
 
 		r := testutil.NewRand(0)
 	loop:
-		for j := 0; 8*bw.Offset+int64(8*bw.cntBuf)+int64(bw.numBits) < 8*testSize; j++ {
+		for j := 0; bw.BitsWritten() < 8*testSize; j++ {
 			switch j % 4 {
 			case 0:
 				// Test unaligned Write.
@@ -415,7 +405,6 @@ func TestGenerate(t *testing.T) {
 		valid: false,
 	}, {
 		// Input symbols are not sorted in ascending order.
-		maxBits: 0,
 		input: []PrefixCode{
 			{Sym: 2, Len: 1},
 			{Sym: 1, Len: 2},
@@ -424,7 +413,6 @@ func TestGenerate(t *testing.T) {
 		valid: false,
 	}, {
 		// Input symbols are not unique.
-		maxBits: 0,
 		input: []PrefixCode{
 			{Sym: 5, Len: 1},
 			{Sym: 5, Len: 1},
@@ -432,14 +420,12 @@ func TestGenerate(t *testing.T) {
 		valid: false,
 	}, {
 		// Invalid small tree.
-		maxBits: 0,
 		input: []PrefixCode{
 			{Sym: 0, Len: 500},
 		},
 		valid: false,
 	}, {
 		// Some bit-length is too short.
-		maxBits: 0,
 		input: []PrefixCode{
 			{Sym: 0, Len: 1},
 			{Sym: 1, Len: 2},
@@ -448,7 +434,6 @@ func TestGenerate(t *testing.T) {
 		valid: false,
 	}, {
 		// Under-subscribed tree.
-		maxBits: 0,
 		input: []PrefixCode{
 			{Sym: 0, Len: 3},
 			{Sym: 1, Len: 4},
@@ -457,13 +442,66 @@ func TestGenerate(t *testing.T) {
 		valid: false,
 	}, {
 		// Over-subscribed tree.
-		maxBits: 0,
 		input: []PrefixCode{
 			{Sym: 0, Len: 1},
 			{Sym: 1, Len: 3},
 			{Sym: 2, Len: 4},
 			{Sym: 3, Len: 3},
 			{Sym: 4, Len: 2},
+		},
+		valid: false,
+	}, {
+		// Over-subscribed tree (golang.org/issues/5915).
+		input: []PrefixCode{
+			{Sym: 0, Len: 4},
+			{Sym: 3, Len: 6},
+			{Sym: 4, Len: 4},
+			{Sym: 5, Len: 3},
+			{Sym: 6, Len: 2},
+			{Sym: 7, Len: 3},
+			{Sym: 8, Len: 3},
+			{Sym: 9, Len: 4},
+			{Sym: 10, Len: 4},
+			{Sym: 11, Len: 5},
+			{Sym: 16, Len: 5},
+			{Sym: 17, Len: 5},
+			{Sym: 18, Len: 6},
+			{Sym: 29, Len: 11},
+			{Sym: 51, Len: 7},
+			{Sym: 52, Len: 8},
+			{Sym: 53, Len: 6},
+			{Sym: 55, Len: 11},
+			{Sym: 57, Len: 8},
+			{Sym: 59, Len: 6},
+			{Sym: 60, Len: 6},
+			{Sym: 61, Len: 10},
+			{Sym: 62, Len: 8},
+		},
+		valid: false,
+	}, {
+		// Over-subscribed tree (golang.org/issues/5962).
+		input: []PrefixCode{
+			{Sym: 0, Len: 4},
+			{Sym: 3, Len: 6},
+			{Sym: 4, Len: 4},
+			{Sym: 5, Len: 3},
+			{Sym: 6, Len: 2},
+			{Sym: 7, Len: 3},
+			{Sym: 8, Len: 3},
+			{Sym: 9, Len: 4},
+			{Sym: 10, Len: 4},
+			{Sym: 11, Len: 5},
+			{Sym: 16, Len: 5},
+			{Sym: 17, Len: 5},
+			{Sym: 18, Len: 6},
+			{Sym: 29, Len: 11},
+		},
+		valid: false,
+	}, {
+		// Under-subscribed tree (golang.org/issues/6255).
+		input: []PrefixCode{
+			{Sym: 0, Len: 11},
+			{Sym: 1, Len: 13},
 		},
 		valid: false,
 	}}
