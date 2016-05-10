@@ -39,9 +39,11 @@ func TestRoundTrip(t *testing.T) {
 
 	for i, v := range vectors {
 		var buf bytes.Buffer
-		rd := bytes.NewReader(v.input)
-		wr := NewWriter(&buf)
-		cnt, err := io.Copy(wr, rd)
+		wr, err := NewWriter(&buf, nil)
+		if err != nil {
+			t.Errorf("test %d, unexpected NewWriter error: %v", i, err)
+		}
+		cnt, err := io.Copy(wr, bytes.NewReader(v.input))
 		if err != nil {
 			t.Errorf("test %d, write error: got %v", i, err)
 		}
@@ -52,7 +54,11 @@ func TestRoundTrip(t *testing.T) {
 			t.Errorf("test %d, close error: got %v", i, err)
 		}
 
-		output, err := ioutil.ReadAll(NewReader(&buf))
+		rd, err := NewReader(&buf, nil)
+		if err != nil {
+			t.Errorf("test %d, unexpected NewReader error: %v", i, err)
+		}
+		output, err := ioutil.ReadAll(rd)
 		if err != nil {
 			t.Errorf("test %d, read error: got %v", i, err)
 		}

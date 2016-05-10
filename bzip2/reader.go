@@ -28,10 +28,12 @@ type Reader struct {
 	rle runLengthEncoding
 }
 
-func NewReader(r io.Reader) *Reader {
+type ReaderConfig struct{}
+
+func NewReader(r io.Reader, conf *ReaderConfig) (*Reader, error) {
 	zr := new(Reader)
 	zr.Reset(r)
-	return zr
+	return zr, nil
 }
 
 func (zr *Reader) Reset(r io.Reader) {
