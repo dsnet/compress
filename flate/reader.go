@@ -32,7 +32,9 @@ type Reader struct {
 	pd1, pd2 prefix.Decoder  // Local Decoder objects to reduce allocations
 }
 
-type ReaderConfig struct{}
+type ReaderConfig struct {
+	_ struct{} // Blank field to prevent unkeyed struct literals
+}
 
 func NewReader(r io.Reader, conf *ReaderConfig) (*Reader, error) {
 	zr := new(Reader)

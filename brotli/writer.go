@@ -16,7 +16,9 @@ type writer struct {
 	err error     // Persistent error
 }
 
-type writerConfig struct{}
+type writerConfig struct {
+	_ struct{} // Blank field to prevent unkeyed struct literals
+}
 
 func newWriter(w io.Writer, conf *writerConfig) (*writer, error) {
 	return nil, nil

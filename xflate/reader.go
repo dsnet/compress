@@ -89,7 +89,9 @@ type Reader struct {
 
 // ReaderConfig configures the Reader.
 // There are currently no configuration options for Reader.
-type ReaderConfig struct{}
+type ReaderConfig struct {
+	_ struct{} // Blank field to prevent unkeyed struct literals
+}
 
 // NewReader creates a new Reader reading the given reader rs. This reader can
 // only decompress files in the XFLATE format. If the underlying stream is

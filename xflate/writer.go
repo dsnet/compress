@@ -65,6 +65,8 @@ type WriterConfig struct {
 	// The multiplication of the IndexSize and the ChunkSize gives an
 	// approximation for how much uncompressed data each index represents.
 	IndexSize int64
+
+	_ struct{} // Blank field to prevent unkeyed struct literals
 }
 
 // NewWriter creates a new Writer writing to the given writer.

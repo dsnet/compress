@@ -28,7 +28,9 @@ type Reader struct {
 	rle runLengthEncoding
 }
 
-type ReaderConfig struct{}
+type ReaderConfig struct {
+	_ struct{} // Blank field to prevent unkeyed struct literals
+}
 
 func NewReader(r io.Reader, conf *ReaderConfig) (*Reader, error) {
 	zr := new(Reader)

@@ -32,6 +32,8 @@ type Writer struct {
 
 type WriterConfig struct {
 	Level int
+
+	_ struct{} // Blank field to prevent unkeyed struct literals
 }
 
 func NewWriter(w io.Writer, conf *WriterConfig) (*Writer, error) {

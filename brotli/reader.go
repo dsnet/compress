@@ -66,7 +66,9 @@ type blockDecoder struct {
 	prefixes []prefixDecoder // Prefix decoders for each block type
 }
 
-type ReaderConfig struct{}
+type ReaderConfig struct {
+	_ struct{} // Blank field to prevent unkeyed struct literals
+}
 
 func NewReader(r io.Reader, conf *ReaderConfig) (*Reader, error) {
 	br := new(Reader)
