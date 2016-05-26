@@ -29,7 +29,8 @@ func testRoundTrip(t *testing.T, enc Encoder, dec Decoder) {
 	}
 
 	for i, v := range vectors {
-		input := testutil.MustLoadFile("../../../testdata/"+v.file, v.size)
+		input := testutil.MustLoadFile("../../../testdata/" + v.file)
+		input = testutil.ResizeData(input, v.size)
 		buf := new(bytes.Buffer)
 		wr := enc(buf, v.level)
 		_, cpErr := io.Copy(wr, bytes.NewReader(input))

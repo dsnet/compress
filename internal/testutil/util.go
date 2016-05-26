@@ -11,21 +11,22 @@ import (
 	"io/ioutil"
 )
 
-// LoadFile loads the first n bytes of the input file. If n is less than zero,
-// then it will return the input file as is. If the file is smaller than n,
-// then it will replicate the input until it matches n. Each copy will be XORed
-// by some mask to avoid favoring algorithms with large LZ77 windows.
-func LoadFile(file string, n int) ([]byte, error) {
-	input, err := ioutil.ReadFile(file)
-	switch {
-	case err != nil:
-		return nil, err
-	case n < 0:
-		return input, nil
-	case len(input) >= n:
-		return input[:n], nil
-	case len(input) == 0:
-		return nil, io.ErrNoProgress // Can't replicate an empty string
+// ResizeData resizes the input. If n < 0, then the original input will be
+// returned as is. If n <= len(input), then the input slice will be truncated.
+// However, if n > len(input), then the input will be replicated to fill in
+// the missing bytes, but each replicated string will be XORed by some byte
+// mask to avoid favoring algorithms with large LZ77 windows.
+//
+// If n > len(input), then len(input) must be > 0.
+func ResizeData(input []byte, n int) []byte {
+	if n < 0 {
+		return input
+	}
+	if len(input) >= n {
+		return input[:n]
+	}
+	if len(input) == 0 {
+		panic("unable to replicate an empty string")
 	}
 
 	var mask byte
@@ -37,12 +38,12 @@ func LoadFile(file string, n int) ([]byte, error) {
 			mask++
 		}
 	}
-	return output, nil
+	return output
 }
 
-// MustLoadFile must load a files or else panics.
-func MustLoadFile(file string, n int) []byte {
-	b, err := LoadFile(file, n)
+// MustLoadFile must load a file or else panics.
+func MustLoadFile(file string) []byte {
+	b, err := ioutil.ReadFile(file)
 	if err != nil {
 		panic(err)
 	}

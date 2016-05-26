@@ -31,13 +31,13 @@ const (
 func TestRoundTrip(t *testing.T) {
 	var vectors = []struct{ input []byte }{
 		{nil},
-		{testutil.MustLoadFile(binary, -1)},
-		{testutil.MustLoadFile(digits, -1)},
-		{testutil.MustLoadFile(huffman, -1)},
-		{testutil.MustLoadFile(random, -1)},
-		{testutil.MustLoadFile(repeats, -1)},
-		{testutil.MustLoadFile(twain, -1)},
-		{testutil.MustLoadFile(zeros, -1)},
+		{testutil.MustLoadFile(binary)},
+		{testutil.MustLoadFile(digits)},
+		{testutil.MustLoadFile(huffman)},
+		{testutil.MustLoadFile(random)},
+		{testutil.MustLoadFile(repeats)},
+		{testutil.MustLoadFile(twain)},
+		{testutil.MustLoadFile(zeros)},
 	}
 
 	for i, v := range vectors {
@@ -108,7 +108,8 @@ func TestSync(t *testing.T) {
 		}
 	}
 	rdBuf := make([]byte, maxSize)
-	data := testutil.MustLoadFile(twain, totalSize)
+	data := testutil.MustLoadFile(twain)
+	data = testutil.ResizeData(data, totalSize)
 
 	var buf bytes.Buffer
 	wr, _ := flate.NewWriter(&buf, flate.DefaultCompression)

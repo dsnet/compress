@@ -28,13 +28,13 @@ func TestRoundTrip(t *testing.T) {
 		input []byte
 	}{
 		{input: nil},
-		{input: testutil.MustLoadFile(binary, -1)},
-		{input: testutil.MustLoadFile(digits, -1)},
-		{input: testutil.MustLoadFile(huffman, -1)},
-		{input: testutil.MustLoadFile(random, -1)},
-		{input: testutil.MustLoadFile(repeats, -1)},
-		{input: testutil.MustLoadFile(twain, -1)},
-		{input: testutil.MustLoadFile(zeros, -1)},
+		{input: testutil.MustLoadFile(binary)},
+		{input: testutil.MustLoadFile(digits)},
+		{input: testutil.MustLoadFile(huffman)},
+		{input: testutil.MustLoadFile(random)},
+		{input: testutil.MustLoadFile(repeats)},
+		{input: testutil.MustLoadFile(twain)},
+		{input: testutil.MustLoadFile(zeros)},
 	}
 
 	for i, v := range vectors {

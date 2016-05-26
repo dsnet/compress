@@ -363,7 +363,7 @@ func TestReaderReset(t *testing.T) {
 func TestReaderSeek(t *testing.T) {
 	rand := rand.New(rand.NewSource(0))
 
-	var twain = testutil.MustLoadFile("../testdata/twain.txt", -1)
+	var twain = testutil.MustLoadFile("../testdata/twain.txt")
 
 	// Generate compressed version of input file.
 	var buf bytes.Buffer
@@ -504,7 +504,7 @@ func TestReaderSeek(t *testing.T) {
 }
 
 func TestRecursiveReader(t *testing.T) {
-	twain := testutil.MustLoadFile("../testdata/twain.txt", -1)
+	twain := testutil.MustLoadFile("../testdata/twain.txt")
 
 	const numIters = 5
 	var bb bytes.Buffer
@@ -564,7 +564,7 @@ func TestRecursiveReader(t *testing.T) {
 // This benchmark reads the input file in reverse to excite poor behavior.
 func BenchmarkReader(b *testing.B) {
 	rand := rand.New(rand.NewSource(0))
-	twain := testutil.MustLoadFile("../testdata/twain.txt", -1)
+	twain := testutil.MustLoadFile("../testdata/twain.txt")
 	bb := bytes.NewBuffer(make([]byte, 0, 2*len(twain)))
 	xr := new(Reader)
 	lr := new(io.LimitedReader)

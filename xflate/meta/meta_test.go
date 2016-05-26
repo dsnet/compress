@@ -16,13 +16,13 @@ import (
 )
 
 var (
-	testBinary  = testutil.MustLoadFile("../../testdata/binary.bin", -1)
-	testDigits  = testutil.MustLoadFile("../../testdata/digits.txt", -1)
-	testHuffman = testutil.MustLoadFile("../../testdata/huffman.txt", -1)
-	testRandom  = testutil.MustLoadFile("../../testdata/random.bin", -1)
-	testRepeats = testutil.MustLoadFile("../../testdata/repeats.bin", -1)
-	testTwain   = testutil.MustLoadFile("../../testdata/twain.txt", -1)
-	testZeros   = testutil.MustLoadFile("../../testdata/zeros.bin", -1)
+	testBinary  = testutil.MustLoadFile("../../testdata/binary.bin")
+	testDigits  = testutil.MustLoadFile("../../testdata/digits.txt")
+	testHuffman = testutil.MustLoadFile("../../testdata/huffman.txt")
+	testRandom  = testutil.MustLoadFile("../../testdata/random.bin")
+	testRepeats = testutil.MustLoadFile("../../testdata/repeats.bin")
+	testTwain   = testutil.MustLoadFile("../../testdata/twain.txt")
+	testZeros   = testutil.MustLoadFile("../../testdata/zeros.bin")
 )
 
 func testBackwardCompatibility(t *testing.T, b []byte) {

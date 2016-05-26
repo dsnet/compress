@@ -27,9 +27,9 @@ import (
 func Example_zipFile() {
 	// Test files of non-trivial sizes.
 	var files = map[string][]byte{
-		"twain.txt":   testutil.MustLoadFile("../testdata/twain.txt", -1),
-		"digits.txt":  testutil.MustLoadFile("../testdata/digits.txt", -1),
-		"huffman.txt": testutil.MustLoadFile("../testdata/huffman.txt", -1),
+		"twain.txt":   testutil.MustLoadFile("../testdata/twain.txt"),
+		"digits.txt":  testutil.MustLoadFile("../testdata/digits.txt"),
+		"huffman.txt": testutil.MustLoadFile("../testdata/huffman.txt"),
 	}
 
 	// Write the Zip archive.
@@ -143,7 +143,7 @@ func Example_zipFile() {
 // seekable because they are not compressed in the XFLATE format.
 func Example_gzipFile() {
 	// Test file of non-trivial sizes.
-	var twain = testutil.MustLoadFile("../testdata/twain.txt", -1)
+	var twain = testutil.MustLoadFile("../testdata/twain.txt")
 
 	// The Gzip header without using any extra features is 10 bytes long.
 	const header = "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff"

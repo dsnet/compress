@@ -208,7 +208,10 @@ func benchmarkSuite(codecs, files []string, levels, sizes []int, tick func(), ru
 	for _, f := range files {
 		for _, l := range levels {
 			for _, n := range sizes {
-				b, err := testutil.LoadFile(getPath(f), n)
+				b, err := ioutil.ReadFile(getPath(f))
+				if err == nil {
+					b = testutil.ResizeData(b, n)
+				}
 				name := getName(f, l, len(b))
 				for j, c := range codecs {
 					if tick != nil {

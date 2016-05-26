@@ -194,7 +194,7 @@ func TestWriterReset(t *testing.T) {
 // BenchmarkWriter benchmarks the overhead of the XFLATE format over DEFLATE.
 // Thus, it intentionally uses a very small chunk size with no compression.
 func BenchmarkWriter(b *testing.B) {
-	twain := testutil.MustLoadFile("../testdata/twain.txt", -1)
+	twain := testutil.MustLoadFile("../testdata/twain.txt")
 	bb := bytes.NewBuffer(make([]byte, 0, 2*len(twain)))
 	xw, _ := NewWriter(nil, &WriterConfig{Level: NoCompression, ChunkSize: 1 << 10})
 

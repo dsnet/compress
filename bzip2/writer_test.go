@@ -17,7 +17,8 @@ import (
 func benchmarkEncode(b *testing.B, file string, level, n int) {
 	b.StopTimer()
 	b.SetBytes(int64(n))
-	buf := testutil.MustLoadFile(file, n)
+	buf := testutil.MustLoadFile(file)
+	buf = testutil.ResizeData(buf, n)
 	runtime.GC()
 	b.ReportAllocs()
 	b.StartTimer()
