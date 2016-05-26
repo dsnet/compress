@@ -260,26 +260,26 @@ func TestWriterReset(t *testing.T) {
 func BenchmarkWriter(b *testing.B) {
 	data := make([]byte, 1<<16)
 	rand.Read(data)
-	bb := bytes.NewBuffer(nil)
-	mw := NewWriter(nil)
+
+	rd := new(bytes.Reader)
+	bb := new(bytes.Buffer)
+	mw := new(Writer)
 
 	b.ReportAllocs()
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
+		rd.Reset(data)
 		bb.Reset()
 		mw.Reset(bb)
 
-		cnt, err := io.Copy(mw, bytes.NewReader(data))
-		if cnt != int64(len(data)) {
-			b.Fatalf("mismatching count, Copy(...) = %d, want %d", cnt, len(data))
-		}
-		if err != nil {
-			b.Fatalf("unexpected error, Copy(...) = %v", err)
+		cnt, err := io.Copy(mw, rd)
+		if cnt != int64(len(data)) || err != nil {
+			b.Fatalf("Copy() = (%d, %v), want (%d, nil)", cnt, err, len(data))
 		}
 		if err := mw.Close(); err != nil {
-			b.Fatalf("unexpected error, Close() = %v", err)
+			b.Fatalf("Close() = %v, want nil", err)
 		}
 	}
 }

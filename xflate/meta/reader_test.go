@@ -251,8 +251,8 @@ func TestReader(t *testing.T) {
 }
 
 func TestReaderReset(t *testing.T) {
-	mr := NewReader(nil)
 	buf := make([]byte, 512)
+	mr := NewReader(nil)
 
 	// Test Reader for idempotent Close.
 	if err := mr.Close(); err != nil {
@@ -334,8 +334,10 @@ func TestReaderReset(t *testing.T) {
 func BenchmarkReader(b *testing.B) {
 	data := make([]byte, 1<<16)
 	rand.Read(data)
-	bb := bytes.NewBuffer(nil)
-	mr := NewReader(nil)
+
+	rd := new(bytes.Reader)
+	bb := new(bytes.Buffer)
+	mr := new(Reader)
 
 	mw := NewWriter(bb)
 	mw.Write(data)
@@ -346,18 +348,15 @@ func BenchmarkReader(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		rd := bytes.NewReader(bb.Bytes())
+		rd.Reset(bb.Bytes())
 		mr.Reset(rd)
 
 		cnt, err := io.Copy(ioutil.Discard, mr)
-		if cnt != int64(len(data)) {
-			b.Fatalf("mismatching count: Copy() = %d, want %d", cnt, len(data))
-		}
-		if err != nil {
-			b.Fatalf("unexpected error: Copy() = %v", err)
+		if cnt != int64(len(data)) || err != nil {
+			b.Fatalf("Copy() = (%d, %v), want (%d, nil)", cnt, err, len(data))
 		}
 		if err := mr.Close(); err != nil {
-			b.Fatalf("unexpected error: Close() = %v", err)
+			b.Fatalf("Close() = %v, want nil", err)
 		}
 	}
 }
