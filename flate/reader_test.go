@@ -39,70 +39,17 @@ func TestReader(t *testing.T) {
 	}
 
 	var vectors = []struct {
-		desc   string // Description of the test
+		name   string // Sub-test name
 		input  []byte // Test input string
 		output []byte // Expected output string
 		inIdx  int64  // Expected input offset after reading
 		outIdx int64  // Expected output offset after reading
 		err    error  // Expected error
 	}{{
-		desc: "empty string",
+		name: "EmptyString",
 		err:  io.ErrUnexpectedEOF,
 	}, {
-		desc: "raw block, truncated after block header",
-		input: db(`<<<
-			< 0 00 0*5 # Non-last, raw block, padding
-		`),
-		inIdx: 1,
-		err:   io.ErrUnexpectedEOF,
-	}, {
-		desc: "raw block, truncated inside size field",
-		input: db(`<<<
-			< 0 00 0*5 # Non-last, raw block, padding
-			< H8:0c    # RawSize: 12
-		`),
-		inIdx: 1,
-		err:   io.ErrUnexpectedEOF,
-	}, {
-		desc: "raw block, truncated after size field",
-		input: db(`<<<
-			< 0 00 0*5 # Non-last, raw block, padding
-			< H16:000c # RawSize: 12
-		`),
-		inIdx: 3,
-		err:   io.ErrUnexpectedEOF,
-	}, {
-		desc: "raw block, truncated before raw data",
-		input: db(`<<<
-			< 0 00 0*5          # Non-last, raw block, padding
-			< H16:000c H16:fff3 # RawSize: 12
-		`),
-		inIdx: 5,
-		err:   io.ErrUnexpectedEOF,
-	}, {
-		desc: "raw block, truncated inside raw data",
-		input: db(`<<<
-			< 0 00 0*5          # Non-last, raw block, padding
-			< H16:000c H16:fff3 # RawSize: 12
-			X:68656c6c6f        # Raw data
-		`),
-		output: dh("68656c6c6f"),
-		inIdx:  10,
-		outIdx: 5,
-		err:    io.ErrUnexpectedEOF,
-	}, {
-		desc: "raw block, truncated before next block",
-		input: db(`<<<
-			< 0 00 0*5                 # Non-last, raw block, padding
-			< H16:000c H16:fff3        # RawSize: 12
-			X:68656c6c6f2c20776f726c64 # Raw data
-		`),
-		output: dh("68656c6c6f2c20776f726c64"),
-		inIdx:  17,
-		outIdx: 12,
-		err:    io.ErrUnexpectedEOF,
-	}, {
-		desc: "raw block",
+		name: "RawBlock",
 		input: db(`<<<
 			< 0 00 0*5                 # Non-last, raw block, padding
 			< H16:000c H16:fff3        # RawSize: 12
@@ -116,9 +63,9 @@ func TestReader(t *testing.T) {
 		outIdx: 12,
 		err:    io.ErrUnexpectedEOF,
 	}, {
-		desc: "raw block with non-zero padding",
+		name: "RawBlockNonZeroPadding",
 		input: db(`<<<
-			< 1 00 10101        # Last, raw block, padding
+			< 1 00 10101        # Last, raw block, non-zero padding
 			< H16:0001 H16:fffe # RawSize: 1
 			X:11                # Raw data
 		`),
@@ -126,14 +73,14 @@ func TestReader(t *testing.T) {
 		inIdx:  6,
 		outIdx: 1,
 	}, {
-		desc: "shortest raw block",
+		name: "RawBlockShortest",
 		input: db(`<<<
 			< 1 00 0*5          # Last, raw block, padding
 			< H16:0000 H16:ffff # RawSize: 0
 		`),
 		inIdx: 5,
 	}, {
-		desc: "longest raw block",
+		name: "RawBlockLongest",
 		input: db(`<<<
 			< 1 00 0*5          # Last, raw block, padding
 			< H16:ffff H16:0000 # RawSize: 65535
@@ -143,7 +90,7 @@ func TestReader(t *testing.T) {
 		inIdx:  65540,
 		outIdx: 65535,
 	}, {
-		desc: "raw block with bad size",
+		name: "RawBlockBadSize",
 		input: db(`<<<
 			< 1 00 0*5          # Last, raw block, padding
 			< H16:0001 H16:fffd # RawSize: 1
@@ -152,431 +99,87 @@ func TestReader(t *testing.T) {
 		inIdx: 5,
 		err:   ErrCorrupt,
 	}, {
-		desc: "shortest fixed block",
+		// Truncated after block header.
+		name: "RawBlockTruncated0",
+		input: db(`<<<
+			< 0 00 0*5 # Non-last, raw block, padding
+		`),
+		inIdx: 1,
+		err:   io.ErrUnexpectedEOF,
+	}, {
+		// Truncated inside size field.
+		name: "RawBlockTruncated1",
+		input: db(`<<<
+			< 0 00 0*5 # Non-last, raw block, padding
+			< H8:0c    # RawSize: 12
+		`),
+		inIdx: 1,
+		err:   io.ErrUnexpectedEOF,
+	}, {
+		// Truncated after size field.
+		name: "RawBlockTruncated2",
+		input: db(`<<<
+			< 0 00 0*5 # Non-last, raw block, padding
+			< H16:000c # RawSize: 12
+		`),
+		inIdx: 3,
+		err:   io.ErrUnexpectedEOF,
+	}, {
+		// Truncated before raw data.
+		name: "RawBlockTruncated3",
+		input: db(`<<<
+			< 0 00 0*5          # Non-last, raw block, padding
+			< H16:000c H16:fff3 # RawSize: 12
+		`),
+		inIdx: 5,
+		err:   io.ErrUnexpectedEOF,
+	}, {
+		// Truncated inside raw data.
+		name: "RawBlockTruncated4",
+		input: db(`<<<
+			< 0 00 0*5          # Non-last, raw block, padding
+			< H16:000c H16:fff3 # RawSize: 12
+			X:68656c6c6f        # Raw data
+		`),
+		output: dh("68656c6c6f"),
+		inIdx:  10,
+		outIdx: 5,
+		err:    io.ErrUnexpectedEOF,
+	}, {
+		// Truncated before next block.
+		name: "RawBlockTruncated5",
+		input: db(`<<<
+			< 0 00 0*5                 # Non-last, raw block, padding
+			< H16:000c H16:fff3        # RawSize: 12
+			X:68656c6c6f2c20776f726c64 # Raw data
+		`),
+		output: dh("68656c6c6f2c20776f726c64"),
+		inIdx:  17,
+		outIdx: 12,
+		err:    io.ErrUnexpectedEOF,
+	}, {
+		name: "FixedBlockShortest",
 		input: db(`<<<
 			< 1 01    # Last, fixed block
 			> 0000000 # EOB marker
 		`),
 		inIdx: 2,
 	}, {
-		desc: "reserved block",
+		name: "FixedBlockHelloWorld",
 		input: db(`<<<
-			< 1 11 0*5 # Last, reserved block, padding
-			X:deadcafe # ???
-		`),
-		inIdx: 1,
-		err:   ErrCorrupt,
-	}, {
-		desc: "degenerate HCLenTree",
-		input: db(`<<<
-			< 1 10            # Last, dynamic block
-			< D5:0 D5:0 D4:15 # HLit: 257, HDist: 1, HCLen: 19
-			< 000*17 001 000  # HCLens: {1:1}
-			> 0*256 1         # Use invalid HCLen code 1
-		`),
-		inIdx: 42,
-		err:   ErrCorrupt,
-	}, {
-		desc: "degenerate HCLenTree, empty HLitTree, empty HDistTree",
-		input: db(`<<<
-			< 1 10             # Last, dynamic block
-			< D5:0 D5:0 D4:15  # HLit: 257, HDist: 1, HCLen: 19
-			< 000*3 001 000*15 # HCLens: {0:1}
-			> 0*258            # HLits: {}, HDists: {}
-		`),
-		inIdx: 42,
-		err:   ErrCorrupt,
-	}, {
-		desc: "empty HCLenTree",
-		input: db(`<<<
-			< 1 10            # Last, dynamic block
-			< D5:0 D5:0 D4:15 # HLit: 257, HDist: 1, HCLen: 19
-			< 000*19          # HCLens: {}
-			> 0*258           # Use invalid HCLen code 0
-		`),
-		inIdx: 10,
-		err:   ErrCorrupt,
-	}, {
-		desc: "complete HCLenTree, complete HLitTree, empty HDistTree, use missing HDist symbol",
-		input: db(`<<<
-			< 0 00 0*5                 # Non-last, raw block, padding
-			< H16:0001 H16:fffe        # RawSize: 1
-			X:7a                       # Raw data
+			< 1 01    # Last, fixed block
 
-			< 1 10                     # Last, dynamic block
-			< D5:1 D5:0 D4:15          # HLit: 258, HDist: 1, HCLen: 19
-			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
-			> 0*256 1*2                # HLits: {256:1, 257:1}
-			> 0                        # HDists: {}
-			> 1 0                      # Use invalid HDist code 0
+			> 01111000 10010101 10011100 10011100 10011111 01011100 01010000
+			  10100111 10011111 10100010 10011100 10010100 01010001
+			> 0000000 # EOB marker
 		`),
-		output: dh("7a"),
-		inIdx:  48,
-		outIdx: 1,
-		err:    ErrCorrupt,
-	}, {
-		desc: "complete HCLenTree, degenerate HLitTree, empty HDistTree",
-		input: db(`<<<
-			< 1 10                     # Last, dynamic block
-			< D5:0 D5:0 D4:15          # HLit: 257, HDist: 1, HCLen: 19
-			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
-			> 1 0*257                  # HLits: {0:1}, HDists: {}
-			> 0*31 1                   # Use invalid HLit code 1
-		`),
-		output: db("<<< X:00*31"),
-		inIdx:  46,
-		outIdx: 31,
-		err:    ErrCorrupt,
-	}, {
-		desc: "complete HCLenTree, degenerate HLitTree, degenerate HDistTree",
-		input: db(`<<<
-			< 1 10                     # Last, dynamic block
-			< D5:0 D5:0 D4:15          # HLit: 257, HDist: 1, HCLen: 19
-			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
-			> 1 0*256 1                # HLits: {0:1}, HDists: {0:1}
-			> 0*31 1                   # Use invalid HLit code 1
-		`),
-		output: db("<<< X:00*31"),
-		inIdx:  46,
-		outIdx: 31,
-		err:    ErrCorrupt,
-	}, {
-		desc: "complete HCLenTree, degenerate HLitTree, degenerate HDistTree, use missing HLit symbol",
-		input: db(`<<<
-			< 1 10                     # Last, dynamic block
-			< D5:0 D5:0 D4:15          # HLit: 257, HDist: 1, HCLen: 19
-			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
-			> 0*256 1*2                # HLits: {256:1}, HDists: {0:1}
-			> 1                        # Use invalid HLit code 1
-		`),
-		inIdx: 42,
-		err:   ErrCorrupt,
-	}, {
-		desc: "complete HCLenTree, complete HLitTree, too large HDistTree",
-		input: db(`<<<
-			< 1 10              # Last, dynamic block
-			< D5:29 D5:31 D4:15 # HLit: 286, HDist: 32, HCLen: 19
-			<1000011 X:05000000002004 X:00*39 X:04 # ???
-		`),
-		inIdx: 3,
-		err:   ErrCorrupt,
-	}, {
-		desc: "complete HCLenTree, complete HLitTree, empty HDistTree, excessive repeater symbol",
-		input: db(`<<<
-			< 1 10                           # Last, dynamic block
-			< D5:29 D5:29 D4:15              # HLit: 286, HDist: 30, HCLen: 19
-			< 011 000 011 001 000*13 010 000 # HCLens: {0:0, 1:2, 16:3, 18:3}
-			> 10 0*255 10 111 <D7:49 1       # Excessive repeater symbol
-		`),
-		inIdx: 43,
-		err:   ErrCorrupt,
-	}, {
-		desc: "complete HCLenTree, complete HLitTree, empty HDistTree of length 30",
-		input: db(`<<<
-			< 1 10               # Last, dynamic block
-			< D5:0 D5:29 D4:15   # HLit: 257, HDist: 30, HCLen: 19
-			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
-			> 0 1*256 0*30       # HLits: {*:8}, HDists: {}
-			> 11111111           # Compressed data (has only EOB)
-		`),
-		inIdx: 47,
-	}, {
-		desc: "complete HCLenTree, complete HLitTree, under-subscribed HDistTree",
-		input: db(`<<<
-			< 1 10               # Last, dynamic block
-			< D5:0 D5:29 D4:15   # HLit: 257, HDist: 30, HCLen: 19
-			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
-			> 0 1*256 0*28 1*2   # HLits: {*:8}, HDists: {28:8, 29:8}
-		`),
-		inIdx: 46,
-		err:   ErrCorrupt,
-	}, {
-		desc: "HDistTree of excessive length 31",
-		input: db(`<<<
-			< 1 10             # Last, dynamic block
-			< D5:0 D5:30 D4:15 # HLit: 257, HDist: 31, HCLen: 19
-			<0*7 X:240000000000f8 X:ff*31 X:07000000fc03 # ???
-		`),
-		inIdx: 3,
-		err:   ErrCorrupt,
-	}, {
-		desc: "complete HCLenTree, over-subscribed HLitTree",
-		input: db(`<<<
-			< 1 10               # Last, dynamic block
-			< D5:0 D5:0 D4:15    # HLit: 257, HDist: 1, HCLen: 19
-			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
-			> 1*257 0            # HLits: {*:8}
-			<0*4 X:f00f          # ???
-		`),
-		inIdx: 42,
-		err:   ErrCorrupt,
-	}, {
-		desc: "complete HCLenTree, under-subscribed HLitTree",
-		input: db(`<<<
-			< 1 10               # Last, dynamic block
-			< D5:0 D5:0 D4:15    # HLit: 257, HDist: 1, HCLen: 19
-			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
-			> 1*214 0*2 1*41 0   # HLits: {*:8}
-			<0*4 X:f00f          # ???
-		`),
-		inIdx: 42,
-		err:   ErrCorrupt,
-	}, {
-		desc: "complete HCLenTree, complete HLitTree, empty HDistTree, no EOB symbol",
-		input: db(`<<<
-			< 1 10               # Last, dynamic block
-			< D5:0 D5:0 D4:15    # HLit: 257, HDist: 1, HCLen: 19
-			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
-			> 1*256 0*2          # HLits: {*:8}, HDists: {}
-			> 00000000 11111111  # Compressed data
-		`),
-		output: dh("00ff"),
-		inIdx:  44,
-		outIdx: 2,
-		err:    io.ErrUnexpectedEOF,
-	}, {
-		desc: "complete HCLenTree, complete HLitTree, empty HDistTree",
-		input: db(`<<<
-			< 1 10               # Last, dynamic block
-			< D5:0 D5:3 D4:15    # HLit: 257, HDist: 4, HCLen: 19
-			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
-			> 0 1*256 0*4        # HLits: {*:8}, HDists: {}
-			> 00000000 11111111  # Compressed data
-		`),
-		output: dh("01"),
-		inIdx:  44,
-		outIdx: 1,
-	}, {
-		desc: "complete HCLenTree, complete HLitTree, degenerate HDistTree, use valid HDist symbol",
-		input: db(`<<<
-			< 0 00 0*5                 # Non-last, raw block, padding
-			< H16:0001 H16:fffe        # RawSize: 1
-			X:7a                       # Raw data
-
-			< 1 10                     # Last, dynamic block
-			< D5:1 D5:0 D4:15          # HLit: 258, HDist: 1, HCLen: 19
-			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
-			> 0*256 1*3                # HLits: {256:1, 257:1}, HDists: {0:1}
-			> 1 0*2                    # Compressed data
-		`),
-		output: dh("7a7a7a7a"),
-		inIdx:  48,
-		outIdx: 4,
-	}, {
-		desc: "complete HCLenTree, degenerate HLitTree, degenerate HDistTree",
-		input: db(`<<<
-			< 1 10                     # Last, dynamic block
-			< D5:0 D5:0 D4:15          # HLit: 257, HDist: 1, HCLen: 19
-			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
-			> 0*256 1*2                # HLits: {256:1}, HDists: {0:1}
-			> 0                        # Compressed data
-		`),
-		inIdx: 42,
-	}, {
-		desc: "complete HCLenTree, degenerate HLitTree, empty HDistTree",
-		input: db(`<<<
-			< 1 10                     # Last, dynamic block
-			< D5:0 D5:0 D4:15          # HLit: 257, HDist: 1, HCLen: 19
-			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
-			> 0*256 1 0                # HLits: {256:1}, # HDists: {}
-			> 0                        # Compressed data
-		`),
-		inIdx: 42,
-	}, {
-		desc: "complete HCLenTree, complete HLitTree, empty HDistTree, spanning zero repeater symbol",
-		input: db(`<<<
-			< 1 10                           # Last, dynamic block
-			< D5:29 D5:29 D4:15              # HLit: 286, HDist: 30, HCLen: 19
-			< 011 000 011 001 000*13 010 000 # HCLens: {0:1, 1:2, 16:3, 18:3}
-			> 10 0*255 10 111 <D7:48         # HLits: {0:1, 256:1}, HDists: {}
-			> 1                              # Compressed data
-		`),
-		inIdx: 43,
-	}, {
-		desc: "complete HCLenTree, use last repeater on non-zero code",
-		input: db(`<<<
-			< 1 10           # Last, dynamic block
-			< D5:0 D5:0 D4:8 # HLit: 257, HDist: 1, HClen: 12
-			# HCLens: {0:2, 4:2, 16:2, 18:2}
-			< 010 000 010*2 000*7 010
-			# HLits: {0-14:4, 256:4}, HDists: {}
-			> 01*12 10 <D2:0 11 <D7:127 11 <D7:92 01 00
-			# Compressed data
-			> 0000 0001 0010 1111
-		`),
-		output: dh("000102"),
+		output: []byte("Hello, world!"),
 		inIdx:  15,
-		outIdx: 3,
-	}, {
-		desc: "complete HCLenTree, use last repeater on zero code",
-		input: db(`<<<
-			< 1 10           # Last, dynamic block
-			< D5:0 D5:0 D4:8 # HLit: 257, HDist: 1, HClen: 12
-			# HCLens: {0:2, 4:2, 16:2, 18:2}
-			< 010 000 010*2 000*7 010
-			# HLits: {241-256:4}, HDists: {}
-			> 00 10 <D2:3 11 <D7:127 11 <D7:85 01*16 00
-			# Compressed data
-			> 0000 0001 0010 1111
-		`),
-		output: dh("f1f2f3"),
-		inIdx:  16,
-		outIdx: 3,
-	}, {
-		desc: "complete HCLenTree, use last repeater without first code",
-		input: db(`<<<
-			< 1 10           # Last, dynamic block
-			< D5:0 D5:0 D4:8 # HLit: 257, HDist: 1, HClen: 12
-			# HCLens: {0:2, 4:2, 16:2, 18:2}
-			< 010 000 010*2 000*7 010
-			# HLits: {???}, HDists: {???}
-			> 10 <D2:3 11 <D7:127 11 <D7:86 01*16 00
-			# ???
-			> 0000 0001 0010 1111
-		`),
-		inIdx: 7,
-		err:   ErrCorrupt,
-	}, {
-		desc: "complete HCLenTree with length codes, complete HLitTree, empty HDistTree",
-		input: db(`<<<
-			< 1 10                     # Last, dynamic block
-			< D5:29 D5:0 D4:15         # HLit: 286, HDist: 1, HCLen: 19
-			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
-			> 0*256 1 0*27 1 0*2       # HLits: {256:1, 284:1}, HDists: {}
-			> 0                        # Compressed data
-		`),
-		inIdx: 46,
-	}, {
-		desc: "complete HCLenTree, complete HLitTree, degenerate HDistTree, use valid HLit symbol 284 with count 31",
-		input: db(`<<<
-			< 0 00 0*5                 # Non-last, raw block, padding
-			< H16:0001 H16:fffe        # RawSize: 1
-			X:00                       # Raw data
-
-			< 1 10                     # Last, dynamic block
-			< D5:29 D5:0 D4:15         # HLit: 286, HDist: 1, HCLen: 19
-			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
-			> 0*256 1 0*27 1 0 1       # HLits: {256:1, 284:1}, HDists: {0:1}
-			> 1 <D5:31 0*2             # Compressed data
-		`),
-		output: db("<<< X:00*259"),
-		inIdx:  53,
-		outIdx: 259,
-	}, {
-		desc: "complete HCLenTree, complete HLitTree, degenerate HDistTree, use valid HLit symbol 285",
-		input: db(`<<<
-			< 0 00 0*5                 # Non-last, raw block, padding
-			< H16:0001 H16:fffe        # RawSize: 1
-			X:00                       # Raw data
-
-			< 1 10                     # Last, dynamic block
-			< D5:29 D5:0 D4:15         # HLit: 286, HDist: 1, HCLen: 19
-			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
-			> 0*256 1 0*28 1*2         # HLits: {256:1, 285:1}, HDists: {0:1}
-			> 1 0*2                    # Compressed data
-		`),
-		output: db("<<< X:00*259"),
-		inIdx:  52,
-		outIdx: 259,
-	}, {
-		desc: "complete HCLenTree, complete HLitTree, degenerate HDistTree, use valid HLit and HDist symbols",
-		input: db(`<<<
-			< 0 10            # Non-last, dynamic block
-			< D5:1 D5:2 D4:14 # HLit: 258, HDist: 3, HCLen: 18
-			# HCLens: {0:3, 1:3, 2:2, 3:2, 18:2}
-			< 000*2 010 011 000*9 010 000 010 000 011
-			# HLits: {97:3, 98:3, 99:2, 256:2, 257:2}, HDists: {2:1}
-			> 10 <D7:86 01 01 00 10 <D7:127 10 <D7:7 00 00 110 110 111
-			# Compressed data
-			> 110 111 00 10 0 01
-
-			< 1 00 0*3          # Last, raw block, padding
-			< H16:0000 H16:ffff # RawSize: 0
-		`),
-		output: dh("616263616263"),
-		inIdx:  21,
-		outIdx: 6,
-	}, {
-		desc: "fixed block, use reserved HLit symbol 287",
-		input: db(`<<<
-			< 1 01              # Last, fixed block
-			> 01100000 11000111 # Use invalid symbol 287
-		`),
-		output: dh("30"),
-		inIdx:  3,
-		outIdx: 1,
-		err:    ErrCorrupt,
-	}, {
-		desc: "fixed block, use reserved HDist symbol 30",
-		input: db(`<<<
-			< 1 01                   # Last, fixed block
-			> 00110000 0000001 D5:30 # Use invalid HDist symbol 30
-			> 0000000                # EOB marker
-		`),
-		output: dh("00"),
-		inIdx:  3,
-		outIdx: 1,
-		err:    ErrCorrupt,
-	}, {
-		desc: "longest distance match",
-		input: db(`<<<
-			< 0 00 0*5                              # Non-last, raw block, padding
-			< H16:8000 H16:7fff                     # RawSize: 32768
-			X:0f1e2d3c4b5a69788796a5b4c3d2e1f0*2048 # Raw data
-
-			< 1 01                     # Last, fixed block
-			> 0000001 D5:29 <H13:1fff  # Length: 3, Distance: 32768
-			> 11000101 D5:29 <H13:1fff # Length: 258, Distance: 32768
-			> 0000000                  # EOB marker
-		`),
-		output: db(`<<<
-			X:0f1e2d3c4b5a69788796a5b4c3d2e1f0*2048
-			X:0f1e2d3c4b5a69788796a5b4c3d2e1f0*16
-			X:0f1e2d3c4b
-		`),
-		inIdx:  32781,
-		outIdx: 33029,
-	}, {
-		desc: "invalid long distance match with data",
-		input: db(`<<<
-			< 0 00 0*5                              # Non-last, raw block, padding
-			< H16:7fff H16:8000                     # RawSize: 32767
-			X:0f1e2d3c4b5a69788796a5b4c3d2e1f0*2047 # Raw data
-			X:0f1e2d3c4b5a69788796a5b4c3d2e1
-
-			< 1 01                     # Last, fixed block
-			> 0000001 D5:29 <H13:1fff  # Length: 3, Distance: 32768
-			> 0000000                  # EOB marker
-		`),
-		output: db(`<<<
-			X:0f1e2d3c4b5a69788796a5b4c3d2e1f0*2047
-			X:0f1e2d3c4b5a69788796a5b4c3d2e1
-		`),
-		inIdx:  32776,
-		outIdx: 32767,
-		err:    ErrCorrupt,
-	}, {
-		desc: "invalid short distance match with no data",
-		input: db(`<<<
-			< 1 01         # Last, fixed block
-			> 0000001 D5:0 # Length: 3, Distance: 1
-			> 0000000      # EOB marker
-		`),
-		inIdx: 2,
-		err:   ErrCorrupt,
-	}, {
-		desc: "invalid long distance match with no data",
-		input: db(`<<<
-			< 1 01                    # Last, fixed block
-			> 0000001 D5:29 <H13:1fff # Length: 3, Distance: 32768
-			> 0000000                 # EOB marker
-		`),
-		inIdx: 4,
-		err:   ErrCorrupt,
+		outIdx: 13,
 	}, {
 		// Make sure the use of a dynamic block, following a fixed block does
 		// not alter the global Decoder tables.
-		desc: "fixed, dynamic, fixed, dynamic blocks",
+		name: "FixedDynamicFixedDynamicBlocks",
 		input: db(`<<<
 			< 0 01               # Non-last, fixed block
 			> 00110000 0000000   # Compressed data
@@ -600,7 +203,481 @@ func TestReader(t *testing.T) {
 		inIdx:  93,
 		outIdx: 4,
 	}, {
-		desc: "golang.org/issues/3815 - large HLitTree caused a panic",
+		name: "ReservedBlock",
+		input: db(`<<<
+			< 1 11 0*5 # Last, reserved block, padding
+			X:deadcafe # ???
+		`),
+		inIdx: 1,
+		err:   ErrCorrupt,
+	}, {
+		// Use reserved HLit symbol 287 in fixed block.
+		name: "ReservedHLitSymbol",
+		input: db(`<<<
+			< 1 01              # Last, fixed block
+			> 01100000 11000111 # Use invalid symbol 287
+		`),
+		output: dh("30"),
+		inIdx:  3,
+		outIdx: 1,
+		err:    ErrCorrupt,
+	}, {
+		// Use reserved HDist symbol 30 in fixed block.
+		name: "ReservedHDistSymbol",
+		input: db(`<<<
+			< 1 01                   # Last, fixed block
+			> 00110000 0000001 D5:30 # Use invalid HDist symbol 30
+			> 0000000                # EOB marker
+		`),
+		output: dh("00"),
+		inIdx:  3,
+		outIdx: 1,
+		err:    ErrCorrupt,
+	}, {
+		// Degenerate HCLenTree.
+		name: "HuffmanTree00",
+		input: db(`<<<
+			< 1 10            # Last, dynamic block
+			< D5:0 D5:0 D4:15 # HLit: 257, HDist: 1, HCLen: 19
+			< 000*17 001 000  # HCLens: {1:1}
+			> 0*256 1         # Use invalid HCLen code 1
+		`),
+		inIdx: 42,
+		err:   ErrCorrupt,
+	}, {
+		// Degenerate HCLenTree, empty HLitTree, empty HDistTree.
+		name: "HuffmanTree01",
+		input: db(`<<<
+			< 1 10             # Last, dynamic block
+			< D5:0 D5:0 D4:15  # HLit: 257, HDist: 1, HCLen: 19
+			< 000*3 001 000*15 # HCLens: {0:1}
+			> 0*258            # HLits: {}, HDists: {}
+		`),
+		inIdx: 42,
+		err:   ErrCorrupt,
+	}, {
+		// Empty HCLenTree.
+		name: "HuffmanTree02",
+		input: db(`<<<
+			< 1 10            # Last, dynamic block
+			< D5:0 D5:0 D4:15 # HLit: 257, HDist: 1, HCLen: 19
+			< 000*19          # HCLens: {}
+			> 0*258           # Use invalid HCLen code 0
+		`),
+		inIdx: 10,
+		err:   ErrCorrupt,
+	}, {
+		// Complete HCLenTree, complete HLitTree, empty HDistTree,
+		// use missing HDist symbol.
+		name: "HuffmanTree03",
+		input: db(`<<<
+			< 0 00 0*5                 # Non-last, raw block, padding
+			< H16:0001 H16:fffe        # RawSize: 1
+			X:7a                       # Raw data
+
+			< 1 10                     # Last, dynamic block
+			< D5:1 D5:0 D4:15          # HLit: 258, HDist: 1, HCLen: 19
+			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
+			> 0*256 1*2                # HLits: {256:1, 257:1}
+			> 0                        # HDists: {}
+			> 1 0                      # Use invalid HDist code 0
+		`),
+		output: dh("7a"),
+		inIdx:  48,
+		outIdx: 1,
+		err:    ErrCorrupt,
+	}, {
+		// Complete HCLenTree, degenerate HLitTree, empty HDistTree.
+		name: "HuffmanTree04",
+		input: db(`<<<
+			< 1 10                     # Last, dynamic block
+			< D5:0 D5:0 D4:15          # HLit: 257, HDist: 1, HCLen: 19
+			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
+			> 1 0*257                  # HLits: {0:1}, HDists: {}
+			> 0*31 1                   # Use invalid HLit code 1
+		`),
+		output: db("<<< X:00*31"),
+		inIdx:  46,
+		outIdx: 31,
+		err:    ErrCorrupt,
+	}, {
+		// Complete HCLenTree, degenerate HLitTree, degenerate HDistTree.
+		name: "HuffmanTree05",
+		input: db(`<<<
+			< 1 10                     # Last, dynamic block
+			< D5:0 D5:0 D4:15          # HLit: 257, HDist: 1, HCLen: 19
+			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
+			> 1 0*256 1                # HLits: {0:1}, HDists: {0:1}
+			> 0*31 1                   # Use invalid HLit code 1
+		`),
+		output: db("<<< X:00*31"),
+		inIdx:  46,
+		outIdx: 31,
+		err:    ErrCorrupt,
+	}, {
+		// Complete HCLenTree, degenerate HLitTree, degenerate HDistTree,
+		// use missing HLit symbol.
+		name: "HuffmanTree06",
+		input: db(`<<<
+			< 1 10                     # Last, dynamic block
+			< D5:0 D5:0 D4:15          # HLit: 257, HDist: 1, HCLen: 19
+			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
+			> 0*256 1*2                # HLits: {256:1}, HDists: {0:1}
+			> 1                        # Use invalid HLit code 1
+		`),
+		inIdx: 42,
+		err:   ErrCorrupt,
+	}, {
+		// Complete HCLenTree, complete HLitTree, too large HDistTree.
+		name: "HuffmanTree07",
+		input: db(`<<<
+			< 1 10              # Last, dynamic block
+			< D5:29 D5:31 D4:15 # HLit: 286, HDist: 32, HCLen: 19
+			<1000011 X:05000000002004 X:00*39 X:04 # ???
+		`),
+		inIdx: 3,
+		err:   ErrCorrupt,
+	}, {
+		// Complete HCLenTree, complete HLitTree, empty HDistTree,
+		// excessive repeater symbol.
+		name: "HuffmanTree08",
+		input: db(`<<<
+			< 1 10                           # Last, dynamic block
+			< D5:29 D5:29 D4:15              # HLit: 286, HDist: 30, HCLen: 19
+			< 011 000 011 001 000*13 010 000 # HCLens: {0:0, 1:2, 16:3, 18:3}
+			> 10 0*255 10 111 <D7:49 1       # Excessive repeater symbol
+		`),
+		inIdx: 43,
+		err:   ErrCorrupt,
+	}, {
+		// Complete HCLenTree, complete HLitTree, empty HDistTree of length 30.
+		name: "HuffmanTree09",
+		input: db(`<<<
+			< 1 10               # Last, dynamic block
+			< D5:0 D5:29 D4:15   # HLit: 257, HDist: 30, HCLen: 19
+			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
+			> 0 1*256 0*30       # HLits: {*:8}, HDists: {}
+			> 11111111           # Compressed data (has only EOB)
+		`),
+		inIdx: 47,
+	}, {
+		// Complete HCLenTree, complete HLitTree, under-subscribed HDistTree.
+		name: "HuffmanTree10",
+		input: db(`<<<
+			< 1 10               # Last, dynamic block
+			< D5:0 D5:29 D4:15   # HLit: 257, HDist: 30, HCLen: 19
+			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
+			> 0 1*256 0*28 1*2   # HLits: {*:8}, HDists: {28:8, 29:8}
+		`),
+		inIdx: 46,
+		err:   ErrCorrupt,
+	}, {
+		// HDistTree of excessive length 31.
+		name: "HuffmanTree11",
+		input: db(`<<<
+			< 1 10             # Last, dynamic block
+			< D5:0 D5:30 D4:15 # HLit: 257, HDist: 31, HCLen: 19
+			<0*7 X:240000000000f8 X:ff*31 X:07000000fc03 # ???
+		`),
+		inIdx: 3,
+		err:   ErrCorrupt,
+	}, {
+		// Complete HCLenTree, over-subscribed HLitTree.
+		name: "HuffmanTree12",
+		input: db(`<<<
+			< 1 10               # Last, dynamic block
+			< D5:0 D5:0 D4:15    # HLit: 257, HDist: 1, HCLen: 19
+			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
+			> 1*257 0            # HLits: {*:8}
+			<0*4 X:f00f          # ???
+		`),
+		inIdx: 42,
+		err:   ErrCorrupt,
+	}, {
+		// Complete HCLenTree, under-subscribed HLitTree.
+		name: "HuffmanTree13",
+		input: db(`<<<
+			< 1 10               # Last, dynamic block
+			< D5:0 D5:0 D4:15    # HLit: 257, HDist: 1, HCLen: 19
+			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
+			> 1*214 0*2 1*41 0   # HLits: {*:8}
+			<0*4 X:f00f          # ???
+		`),
+		inIdx: 42,
+		err:   ErrCorrupt,
+	}, {
+		// Complete HCLenTree, complete HLitTree, empty HDistTree,
+		// no EOB symbol.
+		name: "HuffmanTree14",
+		input: db(`<<<
+			< 1 10               # Last, dynamic block
+			< D5:0 D5:0 D4:15    # HLit: 257, HDist: 1, HCLen: 19
+			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
+			> 1*256 0*2          # HLits: {*:8}, HDists: {}
+			> 00000000 11111111  # Compressed data
+		`),
+		output: dh("00ff"),
+		inIdx:  44,
+		outIdx: 2,
+		err:    io.ErrUnexpectedEOF,
+	}, {
+		// Complete HCLenTree, complete HLitTree, empty HDistTree.
+		name: "HuffmanTree15",
+		input: db(`<<<
+			< 1 10               # Last, dynamic block
+			< D5:0 D5:3 D4:15    # HLit: 257, HDist: 4, HCLen: 19
+			< 000*3 001*2 000*14 # HCLens: {0:1, 8:1}
+			> 0 1*256 0*4        # HLits: {*:8}, HDists: {}
+			> 00000000 11111111  # Compressed data
+		`),
+		output: dh("01"),
+		inIdx:  44,
+		outIdx: 1,
+	}, {
+		// Complete HCLenTree, complete HLitTree, degenerate HDistTree,
+		// use valid HDist symbol.
+		name: "HuffmanTree16",
+		input: db(`<<<
+			< 0 00 0*5                 # Non-last, raw block, padding
+			< H16:0001 H16:fffe        # RawSize: 1
+			X:7a                       # Raw data
+
+			< 1 10                     # Last, dynamic block
+			< D5:1 D5:0 D4:15          # HLit: 258, HDist: 1, HCLen: 19
+			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
+			> 0*256 1*3                # HLits: {256:1, 257:1}, HDists: {0:1}
+			> 1 0*2                    # Compressed data
+		`),
+		output: dh("7a7a7a7a"),
+		inIdx:  48,
+		outIdx: 4,
+	}, {
+		// Complete HCLenTree, degenerate HLitTree, degenerate HDistTree.
+		name: "HuffmanTree17",
+		input: db(`<<<
+			< 1 10                     # Last, dynamic block
+			< D5:0 D5:0 D4:15          # HLit: 257, HDist: 1, HCLen: 19
+			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
+			> 0*256 1*2                # HLits: {256:1}, HDists: {0:1}
+			> 0                        # Compressed data
+		`),
+		inIdx: 42,
+	}, {
+		// Complete HCLenTree, degenerate HLitTree, empty HDistTree.
+		name: "HuffmanTree18",
+		input: db(`<<<
+			< 1 10                     # Last, dynamic block
+			< D5:0 D5:0 D4:15          # HLit: 257, HDist: 1, HCLen: 19
+			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
+			> 0*256 1 0                # HLits: {256:1}, # HDists: {}
+			> 0                        # Compressed data
+		`),
+		inIdx: 42,
+	}, {
+		// Complete HCLenTree, complete HLitTree, empty HDistTree,
+		// spanning zero repeater symbol.
+		name: "HuffmanTree19",
+		input: db(`<<<
+			< 1 10                           # Last, dynamic block
+			< D5:29 D5:29 D4:15              # HLit: 286, HDist: 30, HCLen: 19
+			< 011 000 011 001 000*13 010 000 # HCLens: {0:1, 1:2, 16:3, 18:3}
+			> 10 0*255 10 111 <D7:48         # HLits: {0:1, 256:1}, HDists: {}
+			> 1                              # Compressed data
+		`),
+		inIdx: 43,
+	}, {
+		// Complete HCLenTree, use last repeater on non-zero code.
+		name: "HuffmanTree20",
+		input: db(`<<<
+			< 1 10           # Last, dynamic block
+			< D5:0 D5:0 D4:8 # HLit: 257, HDist: 1, HClen: 12
+			# HCLens: {0:2, 4:2, 16:2, 18:2}
+			< 010 000 010*2 000*7 010
+			# HLits: {0-14:4, 256:4}, HDists: {}
+			> 01*12 10 <D2:0 11 <D7:127 11 <D7:92 01 00
+			# Compressed data
+			> 0000 0001 0010 1111
+		`),
+		output: dh("000102"),
+		inIdx:  15,
+		outIdx: 3,
+	}, {
+		// Complete HCLenTree, use last repeater on zero code.
+		name: "HuffmanTree21",
+		input: db(`<<<
+			< 1 10           # Last, dynamic block
+			< D5:0 D5:0 D4:8 # HLit: 257, HDist: 1, HClen: 12
+			# HCLens: {0:2, 4:2, 16:2, 18:2}
+			< 010 000 010*2 000*7 010
+			# HLits: {241-256:4}, HDists: {}
+			> 00 10 <D2:3 11 <D7:127 11 <D7:85 01*16 00
+			# Compressed data
+			> 0000 0001 0010 1111
+		`),
+		output: dh("f1f2f3"),
+		inIdx:  16,
+		outIdx: 3,
+	}, {
+		// Complete HCLenTree, use last repeater without first code.
+		name: "HuffmanTree22",
+		input: db(`<<<
+			< 1 10           # Last, dynamic block
+			< D5:0 D5:0 D4:8 # HLit: 257, HDist: 1, HClen: 12
+			# HCLens: {0:2, 4:2, 16:2, 18:2}
+			< 010 000 010*2 000*7 010
+			# HLits: {???}, HDists: {???}
+			> 10 <D2:3 11 <D7:127 11 <D7:86 01*16 00
+			# ???
+			> 0000 0001 0010 1111
+		`),
+		inIdx: 7,
+		err:   ErrCorrupt,
+	}, {
+		// Complete HCLenTree with length codes, complete HLitTree,
+		// empty HDistTree.
+		name: "HuffmanTree23",
+		input: db(`<<<
+			< 1 10                     # Last, dynamic block
+			< D5:29 D5:0 D4:15         # HLit: 286, HDist: 1, HCLen: 19
+			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
+			> 0*256 1 0*27 1 0*2       # HLits: {256:1, 284:1}, HDists: {}
+			> 0                        # Compressed data
+		`),
+		inIdx: 46,
+	}, {
+		// Complete HCLenTree, complete HLitTree, degenerate HDistTree,
+		// use valid HLit symbol 284 with count 31.
+		name: "HuffmanTree24",
+		input: db(`<<<
+			< 0 00 0*5                 # Non-last, raw block, padding
+			< H16:0001 H16:fffe        # RawSize: 1
+			X:00                       # Raw data
+
+			< 1 10                     # Last, dynamic block
+			< D5:29 D5:0 D4:15         # HLit: 286, HDist: 1, HCLen: 19
+			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
+			> 0*256 1 0*27 1 0 1       # HLits: {256:1, 284:1}, HDists: {0:1}
+			> 1 <D5:31 0*2             # Compressed data
+		`),
+		output: db("<<< X:00*259"),
+		inIdx:  53,
+		outIdx: 259,
+	}, {
+		// Complete HCLenTree, complete HLitTree, degenerate HDistTree,
+		// use valid HLit symbol 285.
+		name: "HuffmanTree25",
+		input: db(`<<<
+			< 0 00 0*5                 # Non-last, raw block, padding
+			< H16:0001 H16:fffe        # RawSize: 1
+			X:00                       # Raw data
+
+			< 1 10                     # Last, dynamic block
+			< D5:29 D5:0 D4:15         # HLit: 286, HDist: 1, HCLen: 19
+			< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
+			> 0*256 1 0*28 1*2         # HLits: {256:1, 285:1}, HDists: {0:1}
+			> 1 0*2                    # Compressed data
+		`),
+		output: db("<<< X:00*259"),
+		inIdx:  52,
+		outIdx: 259,
+	}, {
+		// Complete HCLenTree, complete HLitTree, degenerate HDistTree,
+		// use valid HLit and HDist symbols.
+		name: "HuffmanTree26",
+		input: db(`<<<
+			< 0 10            # Non-last, dynamic block
+			< D5:1 D5:2 D4:14 # HLit: 258, HDist: 3, HCLen: 18
+			# HCLens: {0:3, 1:3, 2:2, 3:2, 18:2}
+			< 000*2 010 011 000*9 010 000 010 000 011
+			# HLits: {97:3, 98:3, 99:2, 256:2, 257:2}, HDists: {2:1}
+			> 10 <D7:86 01 01 00 10 <D7:127 10 <D7:7 00 00 110 110 111
+			# Compressed data
+			> 110 111 00 10 0 01
+
+			< 1 00 0*3          # Last, raw block, padding
+			< H16:0000 H16:ffff # RawSize: 0
+		`),
+		output: dh("616263616263"),
+		inIdx:  21,
+		outIdx: 6,
+	}, {
+		// Valid short distance match.
+		name: "DistanceMatch0",
+		input: db(`<<<
+			< 0 00 0*5          # Non-last, raw block, padding
+			< H16:0001 H16:fffe # RawSize: 1
+			X:0f                # Raw data
+
+			< 1 01         # Last, fixed block
+			> 0000001 D5:0 # Length: 3, Distance: 1
+			> 0000000      # EOB marker
+		`),
+		output: db("<<< X:0f0f0f0f"),
+		inIdx:  9,
+		outIdx: 4,
+	}, {
+		// Valid long distance match.
+		name: "DistanceMatch1",
+		input: db(`<<<
+			< 0 00 0*5                              # Non-last, raw block, padding
+			< H16:8000 H16:7fff                     # RawSize: 32768
+			X:0f1e2d3c4b5a69788796a5b4c3d2e1f0*2048 # Raw data
+
+			< 1 01                     # Last, fixed block
+			> 0000001 D5:29 <H13:1fff  # Length: 3, Distance: 32768
+			> 11000101 D5:29 <H13:1fff # Length: 258, Distance: 32768
+			> 0000000                  # EOB marker
+		`),
+		output: db(`<<<
+			X:0f1e2d3c4b5a69788796a5b4c3d2e1f0*2048
+			X:0f1e2d3c4b5a69788796a5b4c3d2e1f0*16
+			X:0f1e2d3c4b
+		`),
+		inIdx:  32781,
+		outIdx: 33029,
+	}, {
+		// Invalid long distance match with not enough data.
+		name: "DistanceMatch2",
+		input: db(`<<<
+			< 0 00 0*5                              # Non-last, raw block, padding
+			< H16:7fff H16:8000                     # RawSize: 32767
+			X:0f1e2d3c4b5a69788796a5b4c3d2e1f0*2047 # Raw data
+			X:0f1e2d3c4b5a69788796a5b4c3d2e1
+
+			< 1 01                     # Last, fixed block
+			> 0000001 D5:29 <H13:1fff  # Length: 3, Distance: 32768
+			> 0000000                  # EOB marker
+		`),
+		output: db(`<<<
+			X:0f1e2d3c4b5a69788796a5b4c3d2e1f0*2047
+			X:0f1e2d3c4b5a69788796a5b4c3d2e1
+		`),
+		inIdx:  32776,
+		outIdx: 32767,
+		err:    ErrCorrupt,
+	}, {
+		// Invalid short distance match with no data.
+		name: "DistanceMatch3",
+		input: db(`<<<
+			< 1 01         # Last, fixed block
+			> 0000001 D5:0 # Length: 3, Distance: 1
+			> 0000000      # EOB marker
+		`),
+		inIdx: 2,
+		err:   ErrCorrupt,
+	}, {
+		// Invalid long distance match with no data.
+		name: "DistanceMatch4",
+		input: db(`<<<
+			< 1 01                    # Last, fixed block
+			> 0000001 D5:29 <H13:1fff # Length: 3, Distance: 32768
+			> 0000000                 # EOB marker
+		`),
+		inIdx: 4,
+		err:   ErrCorrupt,
+	}, {
+		// Large HLitTree caused a panic.
+		name: "Issue3815",
 		input: db(`<<<
 			< 0 10             # Non-last, dynamic block
 			< D5:31 D5:30 D4:7 # HLit: 288, HDist: 31, HCLen: 11
@@ -613,7 +690,8 @@ func TestReader(t *testing.T) {
 		inIdx: 3,
 		err:   ErrCorrupt,
 	}, {
-		desc: "golang.org/issues/10426 - over-subscribed HCLenTree caused a hang",
+		// Over-subscribed HCLenTree caused a hang.
+		name: "Issue10426",
 		input: db(`<<<
 			< 0 10                  # Non-last, dynamic block
 			< D5:6 D5:12 D4:2       # HLit: 263, HDist: 13, HCLen: 6
@@ -623,7 +701,8 @@ func TestReader(t *testing.T) {
 		inIdx: 5,
 		err:   ErrCorrupt,
 	}, {
-		desc: "golang.org/issues/11030 - empty HDistTree unexpectedly led to error",
+		// Empty HDistTree unexpectedly led to an error.
+		name: "Issue11030",
 		input: db(`<<<
 			< 1 10            # Last, dynamic block
 			< D5:0 D5:0 D4:14 # HLit: 257, HDist: 1, HCLen: 18
@@ -638,7 +717,8 @@ func TestReader(t *testing.T) {
 		`),
 		inIdx: 14,
 	}, {
-		desc: "golang.org/issues/11033 - empty HDistTree unexpectedly led to error",
+		// Empty HDistTree unexpectedly led to an error.
+		name: "Issue11033",
 		input: db(`<<<
 			< 1 10           # Last, dynamic block
 			< D5:0 D5:0 D4:8 # HLit: 257, HDist: 1, HCLen: 12
@@ -666,41 +746,43 @@ func TestReader(t *testing.T) {
 		outIdx: 34,
 	}}
 
-	for i, v := range vectors {
-		rd, err := NewReader(bytes.NewReader(v.input), nil)
-		if err != nil {
-			t.Errorf("test %d, unexpected NewReader error: %v", i, err)
-		}
-		output, err := ioutil.ReadAll(rd)
-		if cerr := rd.Close(); cerr != nil {
-			err = cerr
-		}
-
-		if err != v.err {
-			t.Errorf("test %d, %s\nerror mismatch: got %v, want %v", i, v.desc, err, v.err)
-		}
-		if !bytes.Equal(output, v.output) {
-			t.Errorf("test %d, %s\noutput mismatch:\ngot  %x\nwant %x", i, v.desc, output, v.output)
-		}
-		if rd.InputOffset != v.inIdx {
-			t.Errorf("test %d, %s\ninput offset mismatch: got %d, want %d", i, v.desc, rd.InputOffset, v.inIdx)
-		}
-		if rd.OutputOffset != v.outIdx {
-			t.Errorf("test %d, %s\noutput offset mismatch: got %d, want %d", i, v.desc, rd.OutputOffset, v.outIdx)
-		}
-
-		// If the zcheck flag is set, then we verify that the test vectors
-		// themselves are consistent with what the C zlib library outputs.
-		// To do that, we use the python wrapper around the library.
-		if *zcheck {
-			output, err := pyDecompress(v.input)
-			if got, want := bool(v.err == nil), bool(err == nil); got != want {
-				t.Errorf("test %d, %s\npass mismatch: got %v, want %v", i, v.desc, got, want)
+	for _, v := range vectors {
+		t.Run(v.name, func(t *testing.T) {
+			rd, err := NewReader(bytes.NewReader(v.input), nil)
+			if err != nil {
+				t.Fatalf("unexpected NewReader error: %v", err)
 			}
-			if err == nil && !bytes.Equal(v.output, output) {
-				t.Errorf("test %d, %s\noutput mismatch:\ngot  %x\nwant %x", i, v.desc, v.output, output)
+			output, err := ioutil.ReadAll(rd)
+			if cerr := rd.Close(); cerr != nil {
+				err = cerr
 			}
-		}
+
+			if err != v.err {
+				t.Errorf("error mismatch: got %v, want %v", err, v.err)
+			}
+			if !bytes.Equal(output, v.output) {
+				t.Errorf("output mismatch:\ngot  %x\nwant %x", output, v.output)
+			}
+			if rd.InputOffset != v.inIdx {
+				t.Errorf("input offset mismatch: got %d, want %d", rd.InputOffset, v.inIdx)
+			}
+			if rd.OutputOffset != v.outIdx {
+				t.Errorf("output offset mismatch: got %d, want %d", rd.OutputOffset, v.outIdx)
+			}
+
+			// If the zcheck flag is set, then we verify that the test vectors
+			// themselves are consistent with what the C zlib library outputs.
+			// To do that, we use the python wrapper around the library.
+			if *zcheck {
+				output, err := pyDecompress(v.input)
+				if got, want := bool(v.err == nil), bool(err == nil); got != want {
+					t.Errorf("pass mismatch: got %v, want %v", got, want)
+				}
+				if err == nil && !bytes.Equal(v.output, output) {
+					t.Errorf("output mismatch:\ngot  %x\nwant %x", output, v.output)
+				}
+			}
+		})
 	}
 }
 
@@ -713,7 +795,7 @@ func TestReader(t *testing.T) {
 //	and it so happens that there is no more data to read. This is rare.
 func TestReaderEarlyEOF(t *testing.T) {
 	const maxSize = 1 << 18
-	const dampRatio = 32 // Higer value means more trials
+	const dampRatio = 32 // Higher value means more trials
 
 	data := make([]byte, maxSize)
 	for i := range data {
@@ -736,7 +818,7 @@ func TestReaderEarlyEOF(t *testing.T) {
 		return wrBuf.Bytes()
 	}
 
-	// readStream reads all the data and reports whether an early EOF occured.
+	// readStream reads all the data and reports whether an early EOF occurred.
 	var rd Reader
 	rdBuf := make([]byte, 2111)
 	readStream := func(data []byte) (bool, error) {
@@ -752,7 +834,7 @@ func TestReaderEarlyEOF(t *testing.T) {
 		}
 	}
 
-	// There is no gurantee that early io.EOF occurs for all DEFLATE streams,
+	// There is no guarantee that early io.EOF occurs for all DEFLATE streams,
 	// but it should occur for most cases.
 	var numEarly, numTotal int
 	for i := 0; i < maxSize; i += 1 + i/dampRatio {
