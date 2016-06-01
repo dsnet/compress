@@ -112,6 +112,8 @@ func (zr *Reader) decodeBlock() []byte {
 		if magic == endMagic {
 			// TODO(dsnet): Handle multiple bzip2 files back-to-back.
 			// TODO(dsnet): Check for block and stream CRC errors.
+			zr.rd.ReadBitsBE64(32)
+			zr.rd.ReadPads()
 			panic(io.EOF)
 		}
 		panic(ErrCorrupt)

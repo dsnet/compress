@@ -7,64 +7,101 @@ package bzip2
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"testing"
 
 	"github.com/dsnet/compress/internal/testutil"
 )
 
-const (
-	binary  = "../testdata/binary.bin"
-	digits  = "../testdata/digits.txt"
-	huffman = "../testdata/huffman.txt"
-	random  = "../testdata/random.bin"
-	repeats = "../testdata/repeats.bin"
-	twain   = "../testdata/twain.txt"
-	zeros   = "../testdata/zeros.bin"
-)
+var testdata = []struct {
+	name string
+	data []byte
+}{
+	{"Nil", nil},
+	{"Binary", testutil.MustLoadFile("../testdata/binary.bin")},
+	{"Digits", testutil.MustLoadFile("../testdata/digits.txt")},
+	{"Huffman", testutil.MustLoadFile("../testdata/huffman.txt")},
+	{"Random", testutil.MustLoadFile("../testdata/random.bin")},
+	{"Repeats", testutil.MustLoadFile("../testdata/repeats.bin")},
+	{"Twain", testutil.MustLoadFile("../testdata/twain.txt")},
+	{"Zeros", testutil.MustLoadFile("../testdata/zeros.bin")},
+}
+
+var levels = []struct {
+	name  string
+	level int
+}{
+	{"Speed", BestSpeed},
+	{"Default", DefaultCompression},
+	{"Compression", BestCompression},
+}
+
+var sizes = []struct {
+	name string
+	size int
+}{
+	{"1e4", 1e4},
+	{"1e5", 1e5},
+	{"1e6", 1e6},
+}
 
 func TestRoundTrip(t *testing.T) {
-	var vectors = []struct {
-		input []byte
-	}{
-		{input: nil},
-		{input: testutil.MustLoadFile(binary)},
-		{input: testutil.MustLoadFile(digits)},
-		{input: testutil.MustLoadFile(huffman)},
-		{input: testutil.MustLoadFile(random)},
-		{input: testutil.MustLoadFile(repeats)},
-		{input: testutil.MustLoadFile(twain)},
-		{input: testutil.MustLoadFile(zeros)},
-	}
+	for i, v := range testdata {
+		var buf1, buf2 bytes.Buffer
 
-	for i, v := range vectors {
-		var buf bytes.Buffer
-		wr, err := NewWriter(&buf, nil)
+		// Compress the input.
+		wr, err := NewWriter(&buf1, nil)
 		if err != nil {
-			t.Errorf("test %d, unexpected NewWriter error: %v", i, err)
+			t.Errorf("test %d, NewWriter() = (_, %v), want (_, nil)", i, err)
 		}
-		cnt, err := io.Copy(wr, bytes.NewReader(v.input))
-		if err != nil {
-			t.Errorf("test %d, write error: got %v", i, err)
-		}
-		if cnt != int64(len(v.input)) {
-			t.Errorf("test %d, write count mismatch: got %d, want %d", i, cnt, len(v.input))
+		n, err := io.Copy(wr, bytes.NewReader(v.data))
+		if n != int64(len(v.data)) || err != nil {
+			t.Errorf("test %d, Copy() = (%d, %v), want (%d, nil)", i, n, err, len(v.data))
 		}
 		if err := wr.Close(); err != nil {
-			t.Errorf("test %d, close error: got %v", i, err)
+			t.Errorf("test %d, Close() = %v, want nil", i, err)
 		}
 
-		rd, err := NewReader(&buf, nil)
-		if err != nil {
-			t.Errorf("test %d, unexpected NewReader error: %v", i, err)
-		}
-		output, err := ioutil.ReadAll(rd)
-		if err != nil {
-			t.Errorf("test %d, read error: got %v", i, err)
-		}
+		// Write a canary byte to ensure this does not get read.
+		buf1.WriteByte(0x7a)
 
-		if !bytes.Equal(output, v.input) {
+		// Decompress the output.
+		rd, err := NewReader(&buf1, nil)
+		if err != nil {
+			t.Errorf("test %d, NewReader() = (_, %v), want (_, nil)", i, err)
+		}
+		n, err = io.Copy(&buf2, rd)
+		if n != int64(len(v.data)) || err != nil {
+			t.Errorf("test %d, Copy() = (%d, %v), want (%d, nil)", i, n, err, len(v.data))
+		}
+		if err := rd.Close(); err != nil {
+			t.Errorf("test %d, Close() = %v, want nil", i, err)
+		}
+		if !bytes.Equal(buf2.Bytes(), v.data) {
 			t.Errorf("test %d, output data mismatch", i)
+		}
+
+		// Read back the canary byte.
+		if v, _ := buf1.ReadByte(); v != 0x7a {
+			t.Errorf("Read consumed more data than necessary")
+		}
+	}
+}
+
+func runBenchmarks(b *testing.B, f func(b *testing.B, buf []byte, lvl int)) {
+	for _, td := range testdata {
+		if len(td.data) == 0 {
+			continue
+		}
+		if testing.Short() && !(td.name == "Twain" || td.name == "Digits") {
+			continue
+		}
+		for _, tl := range levels {
+			for _, ts := range sizes {
+				buf := testutil.ResizeData(td.data, ts.size)
+				b.Run(td.name+"/"+tl.name+"/"+ts.name, func(b *testing.B) {
+					f(b, buf, tl.level)
+				})
+			}
 		}
 	}
 }
