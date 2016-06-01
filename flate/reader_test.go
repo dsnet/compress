@@ -5,14 +5,12 @@
 package flate
 
 import (
-	"bufio"
 	"bytes"
 	"compress/flate"
 	"flag"
 	"io"
 	"io/ioutil"
 	"os/exec"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -810,59 +808,32 @@ func TestReaderReset(t *testing.T) {
 	}
 }
 
-func benchmarkDecode(b *testing.B, testfile string) {
-	b.StopTimer()
-	b.ReportAllocs()
+func BenchmarkDecode(b *testing.B) {
+	runBenchmarks(b, func(b *testing.B, data []byte, lvl int) {
+		b.StopTimer()
+		b.ReportAllocs()
 
-	input, err := ioutil.ReadFile("testdata/" + testfile)
-	if err != nil {
-		b.Fatal(err)
-	}
-	rd, err := NewReader(bytes.NewReader(input), nil)
-	if err != nil {
-		b.Fatal(err)
-	}
-	output, err := ioutil.ReadAll(rd)
-	if err != nil {
-		b.Fatal(err)
-	}
+		buf := new(bytes.Buffer)
+		wr, _ := flate.NewWriter(buf, lvl)
+		wr.Write(data)
+		wr.Close()
 
-	nb := int64(len(output))
-	output = nil
-	runtime.GC()
+		br := new(bytes.Reader)
+		rd := new(Reader)
 
-	b.SetBytes(nb)
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		rd, err := NewReader(bufio.NewReader(bytes.NewReader(input)), nil)
-		if err != nil {
-			b.Fatalf("unexpected NewReader error: %v", err)
+		b.SetBytes(int64(len(data)))
+		b.StartTimer()
+		for i := 0; i < b.N; i++ {
+			br.Reset(buf.Bytes())
+			rd.Reset(br)
+
+			n, err := io.Copy(ioutil.Discard, rd)
+			if n != int64(len(data)) || err != nil {
+				b.Fatalf("Copy() = (%d, %v), want (%d, nil)", n, err, len(data))
+			}
+			if err := rd.Close(); err != nil {
+				b.Fatalf("Close() = %v, want nil", err)
+			}
 		}
-		cnt, err := io.Copy(ioutil.Discard, rd)
-		if err != nil {
-			b.Fatalf("unexpected error: %v", err)
-		}
-		if cnt != nb {
-			b.Fatalf("unexpected count: got %d, want %d", cnt, nb)
-		}
-	}
+	})
 }
-
-func BenchmarkDecodeDigitsSpeed1e4(b *testing.B)    { benchmarkDecode(b, "digits-speed-1e4.fl") }
-func BenchmarkDecodeDigitsSpeed1e5(b *testing.B)    { benchmarkDecode(b, "digits-speed-1e5.fl") }
-func BenchmarkDecodeDigitsSpeed1e6(b *testing.B)    { benchmarkDecode(b, "digits-speed-1e6.fl") }
-func BenchmarkDecodeDigitsDefault1e4(b *testing.B)  { benchmarkDecode(b, "digits-default-1e4.fl") }
-func BenchmarkDecodeDigitsDefault1e5(b *testing.B)  { benchmarkDecode(b, "digits-default-1e5.fl") }
-func BenchmarkDecodeDigitsDefault1e6(b *testing.B)  { benchmarkDecode(b, "digits-default-1e6.fl") }
-func BenchmarkDecodeDigitsCompress1e4(b *testing.B) { benchmarkDecode(b, "digits-best-1e4.fl") }
-func BenchmarkDecodeDigitsCompress1e5(b *testing.B) { benchmarkDecode(b, "digits-best-1e5.fl") }
-func BenchmarkDecodeDigitsCompress1e6(b *testing.B) { benchmarkDecode(b, "digits-best-1e6.fl") }
-func BenchmarkDecodeTwainSpeed1e4(b *testing.B)     { benchmarkDecode(b, "twain-speed-1e4.fl") }
-func BenchmarkDecodeTwainSpeed1e5(b *testing.B)     { benchmarkDecode(b, "twain-speed-1e5.fl") }
-func BenchmarkDecodeTwainSpeed1e6(b *testing.B)     { benchmarkDecode(b, "twain-speed-1e6.fl") }
-func BenchmarkDecodeTwainDefault1e4(b *testing.B)   { benchmarkDecode(b, "twain-default-1e4.fl") }
-func BenchmarkDecodeTwainDefault1e5(b *testing.B)   { benchmarkDecode(b, "twain-default-1e5.fl") }
-func BenchmarkDecodeTwainDefault1e6(b *testing.B)   { benchmarkDecode(b, "twain-default-1e6.fl") }
-func BenchmarkDecodeTwainCompress1e4(b *testing.B)  { benchmarkDecode(b, "twain-best-1e4.fl") }
-func BenchmarkDecodeTwainCompress1e5(b *testing.B)  { benchmarkDecode(b, "twain-best-1e5.fl") }
-func BenchmarkDecodeTwainCompress1e6(b *testing.B)  { benchmarkDecode(b, "twain-best-1e6.fl") }

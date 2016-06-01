@@ -7,76 +7,86 @@ package flate
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"testing"
 
 	// TODO(dsnet): We should not be relying on the standard library for the
 	// round-trip test.
 	"compress/flate"
 
-	"github.com/dsnet/compress"
 	"github.com/dsnet/compress/internal/testutil"
 )
 
-const (
-	binary  = "../testdata/binary.bin"
-	digits  = "../testdata/digits.txt"
-	huffman = "../testdata/huffman.txt"
-	random  = "../testdata/random.bin"
-	repeats = "../testdata/repeats.bin"
-	twain   = "../testdata/twain.txt"
-	zeros   = "../testdata/zeros.bin"
-)
+var testdata = []struct {
+	name string
+	data []byte
+}{
+	{"Nil", nil},
+	{"Binary", testutil.MustLoadFile("../testdata/binary.bin")},
+	{"Digits", testutil.MustLoadFile("../testdata/digits.txt")},
+	{"Huffman", testutil.MustLoadFile("../testdata/huffman.txt")},
+	{"Random", testutil.MustLoadFile("../testdata/random.bin")},
+	{"Repeats", testutil.MustLoadFile("../testdata/repeats.bin")},
+	{"Twain", testutil.MustLoadFile("../testdata/twain.txt")},
+	{"Zeros", testutil.MustLoadFile("../testdata/zeros.bin")},
+}
+
+var levels = []struct {
+	name  string
+	level int
+}{
+	{"Huffman", flate.HuffmanOnly},
+	{"Speed", flate.BestSpeed},
+	{"Default", flate.DefaultCompression},
+	{"Compression", flate.BestCompression},
+}
+
+var sizes = []struct {
+	name string
+	size int
+}{
+	{"1e4", 1e4},
+	{"1e5", 1e5},
+	{"1e6", 1e6},
+}
 
 func TestRoundTrip(t *testing.T) {
-	var vectors = []struct{ input []byte }{
-		{nil},
-		{testutil.MustLoadFile(binary)},
-		{testutil.MustLoadFile(digits)},
-		{testutil.MustLoadFile(huffman)},
-		{testutil.MustLoadFile(random)},
-		{testutil.MustLoadFile(repeats)},
-		{testutil.MustLoadFile(twain)},
-		{testutil.MustLoadFile(zeros)},
-	}
-
-	for i, v := range vectors {
-		var buf bytes.Buffer
+	for i, v := range testdata {
+		var buf1, buf2 bytes.Buffer
 
 		// Compress the input.
-		wr, _ := flate.NewWriter(&buf, flate.DefaultCompression)
-		cnt, err := io.Copy(wr, bytes.NewReader(v.input))
+		wr, err := flate.NewWriter(&buf1, flate.DefaultCompression)
 		if err != nil {
-			t.Errorf("test %d, write error: got %v", i, err)
+			t.Errorf("test %d, NewWriter() = (_, %v), want (_, nil)", i, err)
 		}
-		if cnt != int64(len(v.input)) {
-			t.Errorf("test %d, write count mismatch: got %d, want %d", i, cnt, len(v.input))
+		n, err := io.Copy(wr, bytes.NewReader(v.data))
+		if n != int64(len(v.data)) || err != nil {
+			t.Errorf("test %d, Copy() = (%d, %v), want (%d, nil)", i, n, err, len(v.data))
 		}
 		if err := wr.Close(); err != nil {
-			t.Errorf("test %d, close error: got %v", i, err)
+			t.Errorf("test %d, Close() = %v, want nil", i, err)
 		}
 
 		// Write a canary byte to ensure this does not get read.
-		buf.WriteByte(0x7a)
+		buf1.WriteByte(0x7a)
 
 		// Decompress the output.
-		rd, err := NewReader(&struct{ compress.ByteReader }{&buf}, nil)
+		rd, err := NewReader(&buf1, nil)
 		if err != nil {
-			t.Errorf("test %d, NewReader error: got %v", i, err)
+			t.Errorf("test %d, NewReader() = (_, %v), want (_, nil)", i, err)
 		}
-		output, err := ioutil.ReadAll(rd)
-		if err != nil {
-			t.Errorf("test %d, read error: got %v", i, err)
+		n, err = io.Copy(&buf2, rd)
+		if n != int64(len(v.data)) || err != nil {
+			t.Errorf("test %d, Copy() = (%d, %v), want (%d, nil)", i, n, err, len(v.data))
 		}
-		if !bytes.Equal(output, v.input) {
+		if err := rd.Close(); err != nil {
+			t.Errorf("test %d, Close() = %v, want nil", i, err)
+		}
+		if !bytes.Equal(buf2.Bytes(), v.data) {
 			t.Errorf("test %d, output data mismatch", i)
-		}
-		if err := wr.Close(); err != nil {
-			t.Errorf("test %d, close error: got %v", i, err)
 		}
 
 		// Read back the canary byte.
-		if v, _ := buf.ReadByte(); v != 0x7a {
+		if v, _ := buf1.ReadByte(); v != 0x7a {
 			t.Errorf("Read consumed more data than necessary")
 		}
 	}
@@ -108,7 +118,7 @@ func TestSync(t *testing.T) {
 		}
 	}
 	rdBuf := make([]byte, maxSize)
-	data := testutil.MustLoadFile(twain)
+	data := testutil.MustLoadFile("../testdata/twain.txt")
 	data = testutil.ResizeData(data, totalSize)
 
 	var buf bytes.Buffer
@@ -139,6 +149,25 @@ func TestSync(t *testing.T) {
 		}
 		if buf.Len() != 0 {
 			t.Errorf("test %d, flushSize: %d, unconsumed buffer data: %d bytes", i, n, buf.Len())
+		}
+	}
+}
+
+func runBenchmarks(b *testing.B, f func(b *testing.B, buf []byte, lvl int)) {
+	for _, td := range testdata {
+		if len(td.data) == 0 {
+			continue
+		}
+		if testing.Short() && !(td.name == "Twain" || td.name == "Digits") {
+			continue
+		}
+		for _, tl := range levels {
+			for _, ts := range sizes {
+				buf := testutil.ResizeData(td.data, ts.size)
+				b.Run(td.name+"/"+tl.name+"/"+ts.name, func(b *testing.B) {
+					f(b, buf, tl.level)
+				})
+			}
 		}
 	}
 }
