@@ -13,7 +13,6 @@ import (
 	"hash/crc32"
 	"io"
 	"io/ioutil"
-	"os"
 
 	"github.com/dsnet/compress/internal/testutil"
 	"github.com/dsnet/compress/xflate"
@@ -103,7 +102,7 @@ func Example_zipFile() {
 		// Read from the middle of the file.
 		buf := make([]byte, 80)
 		pos := int64(f.UncompressedSize64 / 2)
-		if _, err := xr.Seek(pos, os.SEEK_SET); err != nil {
+		if _, err := xr.Seek(pos, io.SeekStart); err != nil {
 			panic(err)
 		}
 		if _, err := io.ReadFull(xr, buf); err != nil {
@@ -142,7 +141,7 @@ func Example_zipFile() {
 // standard implementations of Gzip. Note that regular Gzip files are not
 // seekable because they are not compressed in the XFLATE format.
 func Example_gzipFile() {
-	// Test file of non-trivial sizes.
+	// Test file of non-trivial size.
 	var twain = testutil.MustLoadFile("../testdata/twain.txt")
 
 	// The Gzip header without using any extra features is 10 bytes long.
@@ -223,7 +222,7 @@ func Example_gzipFile() {
 		// Read from the middle of the stream.
 		buf := make([]byte, 80)
 		pos := int64(len(twain) / 2)
-		if _, err := xr.Seek(pos, os.SEEK_SET); err != nil {
+		if _, err := xr.Seek(pos, io.SeekStart); err != nil {
 			panic(err)
 		}
 		if _, err := io.ReadFull(xr, buf); err != nil {

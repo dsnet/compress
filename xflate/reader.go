@@ -11,7 +11,6 @@ import (
 	"io"
 	"io/ioutil"
 	"math"
-	"os"
 
 	"github.com/dsnet/compress/xflate/meta"
 )
@@ -145,7 +144,7 @@ func (xr *Reader) Reset(rs io.ReadSeeker) error {
 	}
 
 	// Setup initial chunk reader.
-	_, xr.err = xr.Seek(0, os.SEEK_SET)
+	_, xr.err = xr.Seek(0, io.SeekStart)
 	return xr.err
 }
 
@@ -195,7 +194,7 @@ func (xr *Reader) Read(buf []byte) (int, error) {
 			}
 
 			// Seek to next chunk.
-			if _, xr.err = xr.Seek(xr.offset, os.SEEK_SET); xr.err != nil {
+			if _, xr.err = xr.Seek(xr.offset, io.SeekStart); xr.err != nil {
 				break
 			}
 			if xr.chk.typ == unknownType {
@@ -220,11 +219,11 @@ func (xr *Reader) Seek(offset int64, whence int) (int64, error) {
 	var pos int64
 	end := xr.idx.LastRecord().RawOffset
 	switch whence {
-	case os.SEEK_SET:
+	case io.SeekStart:
 		pos = offset
-	case os.SEEK_CUR:
+	case io.SeekCurrent:
 		pos = xr.offset + offset
-	case os.SEEK_END:
+	case io.SeekEnd:
 		pos = end + offset
 	default:
 		return 0, Error("invalid whence")
@@ -265,7 +264,7 @@ func (xr *Reader) Seek(offset int64, whence int) (int64, error) {
 		// In case pos is really large, only discard data that actually exists.
 		xr.discard = end - prev.RawOffset
 	}
-	_, xr.err = xr.rd.Seek(prev.CompOffset, os.SEEK_SET)
+	_, xr.err = xr.rd.Seek(prev.CompOffset, io.SeekStart)
 	xr.cr.Reset(xr.rd, xr.chk.csize)
 	xr.zr.Reset(&xr.cr)
 	return pos, xr.err
@@ -287,7 +286,7 @@ func (xr *Reader) Close() error {
 // Even if the index is fragmented in the source stream, this method will merge
 // all of the index fragments into a single index table.
 func (xr *Reader) decodeIndexes(backSize int64) error {
-	pos, err := xr.rd.Seek(0, os.SEEK_CUR)
+	pos, err := xr.rd.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return err
 	}
@@ -301,7 +300,7 @@ func (xr *Reader) decodeIndexes(backSize int64) error {
 		if newPos < 0 || newPos > pos {
 			return ErrCorrupt // Integer overflow for new seek position
 		}
-		if pos, err = xr.rd.Seek(newPos, os.SEEK_SET); err != nil {
+		if pos, err = xr.rd.Seek(newPos, io.SeekStart); err != nil {
 			return err
 		}
 		if backSize == 0 {
@@ -364,7 +363,7 @@ func (xr *Reader) decodeIndex(idx *index) error {
 	if err != nil {
 		return err
 	}
-	if _, err := xr.rd.Seek(-n, os.SEEK_CUR); err != nil {
+	if _, err := xr.rd.Seek(-n, io.SeekCurrent); err != nil {
 		return err
 	}
 
@@ -422,14 +421,14 @@ func (xr *Reader) decodeIndex(idx *index) error {
 // the read offset to the start of the footer.
 func (xr *Reader) decodeFooter() (backSize, footSize int64, err error) {
 	// Read the last few bytes of the stream.
-	end, err := xr.rd.Seek(0, os.SEEK_END)
+	end, err := xr.rd.Seek(0, io.SeekEnd)
 	if err != nil {
 		return 0, 0, err
 	}
 	if end > meta.MaxEncBytes {
 		end = meta.MaxEncBytes
 	}
-	if _, err := xr.rd.Seek(-end, os.SEEK_END); err != nil {
+	if _, err := xr.rd.Seek(-end, io.SeekEnd); err != nil {
 		return 0, 0, err
 	}
 
@@ -456,7 +455,7 @@ func (xr *Reader) decodeFooter() (backSize, footSize int64, err error) {
 	if xr.mr.FinalMode != meta.FinalStream {
 		return 0, 0, ErrCorrupt
 	}
-	if _, err := xr.rd.Seek(-xr.mr.InputOffset, os.SEEK_CUR); err != nil {
+	if _, err := xr.rd.Seek(-xr.mr.InputOffset, io.SeekCurrent); err != nil {
 		return 0, 0, err
 	}
 

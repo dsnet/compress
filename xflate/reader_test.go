@@ -10,7 +10,6 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
-	"os"
 	"testing"
 
 	"github.com/dsnet/compress/internal/testutil"
@@ -338,7 +337,7 @@ func TestReaderReset(t *testing.T) {
 	if err := xr.Reset(rd); err != ErrCorrupt {
 		t.Fatalf("mismatching error: Reset() = %v, want %v", err, ErrCorrupt)
 	}
-	if _, err := xr.Seek(0, os.SEEK_SET); err != ErrCorrupt {
+	if _, err := xr.Seek(0, io.SeekStart); err != ErrCorrupt {
 		t.Fatalf("mismatching error: Seek() = %v, want %v", err, ErrCorrupt)
 	}
 	if err := xr.Close(); err != ErrCorrupt {
@@ -350,7 +349,7 @@ func TestReaderReset(t *testing.T) {
 		if err := xr.Reset(bytes.NewReader(v)); err != nil {
 			t.Fatalf("test %d, unexpected error: Reset() = %v", i, err)
 		}
-		if _, err := xr.Seek(-1, os.SEEK_END); err != nil {
+		if _, err := xr.Seek(-1, io.SeekEnd); err != nil {
 			t.Fatalf("test %d, unexpected error: Seek() = %v", i, err)
 		}
 		_, err = ioutil.ReadAll(xr)
@@ -398,30 +397,30 @@ func TestReaderSeek(t *testing.T) {
 		whence int   // Whence value to use
 	}
 	var vectors = []seekCommand{
-		{length: 40, offset: int64(len(twain)) - 1, whence: os.SEEK_SET},
-		{length: 40, offset: int64(len(twain)), whence: os.SEEK_SET},
-		{length: 40, offset: int64(len(twain)) + 1, whence: os.SEEK_SET},
-		{length: 40, offset: math.MaxInt64, whence: os.SEEK_SET},
-		{length: 0, offset: 0, whence: os.SEEK_CUR},
-		{length: 13, offset: 15, whence: os.SEEK_SET},
-		{length: 32, offset: 23, whence: os.SEEK_CUR},
-		{length: 32, offset: -23, whence: os.SEEK_CUR},
-		{length: 13, offset: -15, whence: os.SEEK_SET},
-		{length: 100, offset: -15, whence: os.SEEK_END},
-		{length: 0, offset: 0, whence: os.SEEK_CUR},
-		{length: 0, offset: 0, whence: os.SEEK_CUR},
-		{length: 32, offset: -34, whence: os.SEEK_CUR},
-		{length: 32, offset: -34, whence: os.SEEK_CUR},
-		{length: 2000, offset: 53, whence: os.SEEK_SET},
-		{length: 2000, offset: int64(len(twain)) - 1000, whence: os.SEEK_SET},
-		{length: 0, offset: 0, whence: os.SEEK_CUR},
-		{length: 100, offset: -int64(len(twain)), whence: os.SEEK_END},
-		{length: 100, offset: -int64(len(twain)) - 1, whence: os.SEEK_END},
-		{length: 0, offset: 0, whence: os.SEEK_SET},
-		{length: 10, offset: 10, whence: os.SEEK_CUR},
-		{length: 10, offset: 10, whence: os.SEEK_CUR},
-		{length: 10, offset: 10, whence: os.SEEK_CUR},
-		{length: 10, offset: 10, whence: os.SEEK_CUR},
+		{length: 40, offset: int64(len(twain)) - 1, whence: io.SeekStart},
+		{length: 40, offset: int64(len(twain)), whence: io.SeekStart},
+		{length: 40, offset: int64(len(twain)) + 1, whence: io.SeekStart},
+		{length: 40, offset: math.MaxInt64, whence: io.SeekStart},
+		{length: 0, offset: 0, whence: io.SeekCurrent},
+		{length: 13, offset: 15, whence: io.SeekStart},
+		{length: 32, offset: 23, whence: io.SeekCurrent},
+		{length: 32, offset: -23, whence: io.SeekCurrent},
+		{length: 13, offset: -15, whence: io.SeekStart},
+		{length: 100, offset: -15, whence: io.SeekEnd},
+		{length: 0, offset: 0, whence: io.SeekCurrent},
+		{length: 0, offset: 0, whence: io.SeekCurrent},
+		{length: 32, offset: -34, whence: io.SeekCurrent},
+		{length: 32, offset: -34, whence: io.SeekCurrent},
+		{length: 2000, offset: 53, whence: io.SeekStart},
+		{length: 2000, offset: int64(len(twain)) - 1000, whence: io.SeekStart},
+		{length: 0, offset: 0, whence: io.SeekCurrent},
+		{length: 100, offset: -int64(len(twain)), whence: io.SeekEnd},
+		{length: 100, offset: -int64(len(twain)) - 1, whence: io.SeekEnd},
+		{length: 0, offset: 0, whence: io.SeekStart},
+		{length: 10, offset: 10, whence: io.SeekCurrent},
+		{length: 10, offset: 10, whence: io.SeekCurrent},
+		{length: 10, offset: 10, whence: io.SeekCurrent},
+		{length: 10, offset: 10, whence: io.SeekCurrent},
 		{length: 0, offset: 0, whence: -1},
 	}
 
@@ -429,19 +428,19 @@ func TestReaderSeek(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		length, offset := rand.Intn(1<<11), rand.Int63n(int64(len(twain)))
 		if length+int(offset) <= len(twain) {
-			vectors = append(vectors, seekCommand{length, offset, os.SEEK_SET})
+			vectors = append(vectors, seekCommand{length, offset, io.SeekStart})
 		}
 	}
 
 	// Read in reverse.
-	vectors = append(vectors, seekCommand{0, 0, os.SEEK_END})
+	vectors = append(vectors, seekCommand{0, 0, io.SeekEnd})
 	for pos := int64(len(twain)); pos > 0; {
 		n := int64(rand.Intn(1 << 11))
 		if n > pos {
 			n = pos
 		}
 		pos -= n
-		vectors = append(vectors, seekCommand{int(n), pos, os.SEEK_SET})
+		vectors = append(vectors, seekCommand{int(n), pos, io.SeekStart})
 	}
 
 	// Execute all seek commands.
@@ -450,11 +449,11 @@ func TestReaderSeek(t *testing.T) {
 		// Emulate Seek logic.
 		var wantPos int64
 		switch v.whence {
-		case os.SEEK_SET:
+		case io.SeekStart:
 			wantPos = v.offset
-		case os.SEEK_CUR:
+		case io.SeekCurrent:
 			wantPos = v.offset + pos
-		case os.SEEK_END:
+		case io.SeekEnd:
 			wantPos = v.offset + int64(len(twain))
 		default:
 			wantPos = -1
@@ -547,7 +546,7 @@ func TestRecursiveReader(t *testing.T) {
 		}
 
 		buf := make([]byte, 321)
-		if _, err := rlast.Seek(int64(len(twain))/2, os.SEEK_SET); err != nil {
+		if _, err := rlast.Seek(int64(len(twain))/2, io.SeekStart); err != nil {
 			t.Fatalf("unexpected error: Seek() = %v", err)
 		}
 		if _, err := io.ReadFull(rlast, buf); err != nil {
@@ -594,7 +593,7 @@ func BenchmarkReader(b *testing.B) {
 			pos -= n
 
 			// Read the given section.
-			if _, err := xr.Seek(pos, os.SEEK_SET); err != nil {
+			if _, err := xr.Seek(pos, io.SeekStart); err != nil {
 				b.Fatalf("unexpected error: Seek() = %v", err)
 			}
 			*lr = io.LimitedReader{R: xr, N: n}
