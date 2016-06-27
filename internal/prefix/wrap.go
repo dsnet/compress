@@ -7,7 +7,6 @@ package prefix
 import (
 	"bytes"
 	"io"
-	"os"
 	"strings"
 )
 
@@ -85,13 +84,13 @@ func (r *bytesReader) Discard(n int) (int, error) {
 	if n > r.Len() {
 		n, err = r.Len(), io.EOF
 	}
-	r.Seek(int64(n), os.SEEK_CUR)
+	r.Seek(int64(n), io.SeekCurrent)
 	return n, err
 }
 
 // update reslices the internal buffer to be consistent with the read offset.
 func (r *bytesReader) update() {
-	pos, _ := r.Seek(0, os.SEEK_CUR)
+	pos, _ := r.Seek(0, io.SeekCurrent)
 	if off := pos - r.pos; off >= 0 && off < int64(len(r.buf)) {
 		r.buf, r.pos = r.buf[off:], pos
 	} else {
@@ -132,13 +131,13 @@ func (r *stringReader) Discard(n int) (int, error) {
 	if n > r.Len() {
 		n, err = r.Len(), io.EOF
 	}
-	r.Seek(int64(n), os.SEEK_CUR)
+	r.Seek(int64(n), io.SeekCurrent)
 	return n, err
 }
 
 // update reslices the internal buffer to be consistent with the read offset.
 func (r *stringReader) update() {
-	pos, _ := r.Seek(0, os.SEEK_CUR)
+	pos, _ := r.Seek(0, io.SeekCurrent)
 	if off := pos - r.pos; off >= 0 && off < int64(len(r.buf)) {
 		r.buf, r.pos = r.buf[off:], pos
 	} else {
