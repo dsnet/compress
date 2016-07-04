@@ -31,7 +31,7 @@ import (
 const (
 	BestSpeed          = 1
 	BestCompression    = 9
-	DefaultCompression = -1
+	DefaultCompression = 6
 )
 
 const (

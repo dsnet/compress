@@ -14,8 +14,12 @@ type writer struct {
 	err error     // Persistent error
 }
 
-func newWriter(w io.Writer) *writer {
-	return nil
+type writerConfig struct {
+	_ struct{} // Blank field to prevent unkeyed struct literals
+}
+
+func newWriter(w io.Writer, conf *writerConfig) (*writer, error) {
+	return nil, nil
 }
 
 func (bw *writer) Write(buf []byte) (int, error) {

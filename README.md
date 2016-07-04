@@ -2,7 +2,7 @@
 
 ## Introduction ##
 
-**NOTE: This library is in active development. As such, there are no guarantees about the stability of the API. The author reserves the right to arbitrarily break the API for any reason.** 
+**NOTE: This library is in active development. As such, there are no guarantees about the stability of the API. The author reserves the right to arbitrarily break the API for any reason.**
 
 This repository hosts a collection of compression related libraries. The goal of this project is to provide pure Go implementations for popular compression algorithms beyond what the Go standard library provides. The goals for these packages are as follows:
 * Maintainable: That the code remains well documented, well tested, readable, easy to maintain, and easy to verify that it conforms to the specification for the format being implemented.
@@ -26,17 +26,17 @@ This library is in active development. As such, there are no guarantees about th
 
 However, in the meanwhile, this library does provide some basic API guarantees. For the types defined below, the method signatures are guaranteed to not change. Note that the author still reserves the right to change the fields within each ```Reader``` and ```Writer``` structs.
 ```go
+type ReaderConfig struct { ... }
 type Reader struct { ... }
-  func NewReader(io.Reader) Reader         { ... }
-  func (*Reader) Reset(io.Reader)          { ... }
-  func (*Reader) Read([]byte) (int, error) { ... }
-  func (*Reader) Close() error             { ... }
+  func NewReader(io.Reader, *ReaderConfig) (*Reader, error) { ... }
+  func (*Reader) Read([]byte) (int, error)                  { ... }
+  func (*Reader) Close() error                              { ... }
 
+type WriterConfig struct { ... }
 type Writer struct { ... }
-  func NewWriter(io.Writer) Writer          { ... }
-  func (*Writer) Reset(io.Writer)           { ... }
-  func (*Writer) Write([]byte) (int, error) { ... }
-  func (*Writer) Close() error              { ... }
+  func NewWriter(io.Writer, *WriterConfig) (*Writer, error) { ... }
+  func (*Writer) Write([]byte) (int, error)                 { ... }
+  func (*Writer) Close() error                              { ... }
 ```
 
 To see what work still remains, see the [Task List](https://github.com/dsnet/compress/wiki/Task-List).

@@ -22,7 +22,7 @@ func benchmarkEncode(b *testing.B, file string, level, n int) {
 	b.ReportAllocs()
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		w, err := NewWriterLevel(ioutil.Discard, level)
+		w, err := NewWriter(ioutil.Discard, &WriterConfig{Level: level})
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
 		}

@@ -19,7 +19,7 @@ func benchmarkDecode(b *testing.B, file string, level, n int) {
 	b.SetBytes(int64(n))
 	buf := testutil.MustLoadFile(file, n)
 	w := new(bytes.Buffer)
-	wr, err := NewWriterLevel(w, level)
+	wr, err := NewWriter(w, &WriterConfig{Level: level})
 	if err != nil {
 		b.Fatalf("unexpected error: %v", err)
 	}
@@ -33,7 +33,10 @@ func benchmarkDecode(b *testing.B, file string, level, n int) {
 	b.ReportAllocs()
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		r := NewReader(bytes.NewBuffer(w.Bytes()))
+		r, err := NewReader(bytes.NewBuffer(w.Bytes()), nil)
+		if err != nil {
+			b.Fatalf("unexpected error: %v", err)
+		}
 		if _, err := io.Copy(ioutil.Discard, r); err != nil {
 			b.Fatalf("unexpected error: %v", err)
 		}

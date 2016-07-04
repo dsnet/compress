@@ -58,7 +58,10 @@ func TestRoundTrip(t *testing.T) {
 		// Write a canary byte to ensure this does not get read.
 		buf.WriteByte(0x7a)
 
-		rd := NewReader(&struct{ compress.ByteReader }{&buf})
+		rd, err := NewReader(&struct{ compress.ByteReader }{&buf}, nil)
+		if err != nil {
+			t.Errorf("test %d, NewReader error: got %v", i, err)
+		}
 		output, err := ioutil.ReadAll(rd)
 		if err != nil {
 			t.Errorf("test %d, read error: got %v", i, err)

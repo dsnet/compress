@@ -29,17 +29,19 @@ type Writer struct {
 	buf []byte
 }
 
-func NewWriter(w io.Writer) *Writer {
-	zw, err := NewWriterLevel(w, DefaultCompression)
-	if err != nil {
-		panic(err) // Should never happen; here for sanity
-	}
-	return zw
+type WriterConfig struct {
+	Level int
+
+	_ struct{} // Blank field to prevent unkeyed struct literals
 }
 
-func NewWriterLevel(w io.Writer, lvl int) (*Writer, error) {
-	if lvl == DefaultCompression {
-		lvl = 6
+func NewWriter(w io.Writer, conf *WriterConfig) (*Writer, error) {
+	var lvl int
+	if conf != nil {
+		lvl = conf.Level
+	}
+	if lvl == 0 {
+		lvl = DefaultCompression
 	}
 	if lvl < BestSpeed || lvl > BestCompression {
 		return nil, Error{"invalid compression level"}
