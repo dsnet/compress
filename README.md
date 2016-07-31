@@ -73,13 +73,13 @@ Run the command:
 
 ```go get -u github.com/dsnet/compress```
 
-This library requires ```Go1.5``` or higher in order to build.
+This library requires ```Go1.7``` or higher in order to build.
 
 
 ## Packages ##
 
 | Package | Description |
 | :------ | :---------- |
-| [brotli](http://godoc.org/github.com/dsnet/compress/brotli) | Package brotli implements the Brotli format, described in RFC XXXX. |
+| [brotli](http://godoc.org/github.com/dsnet/compress/brotli) | Package brotli implements the Brotli format, described in RFC 7932. |
 | [flate](http://godoc.org/github.com/dsnet/compress/flate) | Package flate implements the DEFLATE format, described in RFC 1951. |
 | [bzip2](http://godoc.org/github.com/dsnet/compress/bzip2) | Package bzip2 implements the BZip2 compressed data format. |

@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE.md file.
 
-// Package brotli implements the Brotli compressed data format.
+// Package brotli implements the Brotli compressed data format,
+// described in RFC 7932.
 package brotli
 
 import (
