@@ -7,16 +7,21 @@ package xflate_test
 import (
 	"archive/zip"
 	"bytes"
+	"compress/flate"
 	"compress/gzip"
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
 	"io"
 	"io/ioutil"
+	"log"
+	"math/rand"
 
 	"github.com/dsnet/compress/internal/testutil"
 	"github.com/dsnet/compress/xflate"
 )
+
+func init() { log.SetFlags(log.Lshortfile) }
 
 // Zip archives allow for efficient random access between files, however,
 // they do not easily allow for efficient random access within a given file,
@@ -25,7 +30,7 @@ import (
 // file in a Zip archive.
 func Example_zipFile() {
 	// Test files of non-trivial sizes.
-	var files = map[string][]byte{
+	files := map[string][]byte{
 		"twain.txt":   testutil.MustLoadFile("../testdata/twain.txt"),
 		"digits.txt":  testutil.MustLoadFile("../testdata/digits.txt"),
 		"huffman.txt": testutil.MustLoadFile("../testdata/huffman.txt"),
@@ -47,38 +52,38 @@ func Example_zipFile() {
 		body := files[name]
 		f, err := zw.Create(name)
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		if _, err = f.Write(body); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 	}
 	if err := zw.Close(); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	// Read the Zip archive.
 	rd := bytes.NewReader(buffer.Bytes())
 	zr, err := zip.NewReader(rd, rd.Size())
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	for _, f := range zr.File {
 		// Verify that the new compression format is backwards compatible with
 		// a standard DEFLATE decompressor.
 		rc, err := f.Open()
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		buf, err := ioutil.ReadAll(rc)
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		if err := rc.Close(); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		if !bytes.Equal(buf, files[f.Name]) {
-			panic("file content does not match")
+			log.Fatal("file content does not match")
 		}
 	}
 	for _, f := range zr.File {
@@ -87,7 +92,7 @@ func Example_zipFile() {
 		// the compressed file data in archive.
 		off, err := f.DataOffset()
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		rds := io.NewSectionReader(rd, off, int64(f.CompressedSize64))
 
@@ -96,22 +101,22 @@ func Example_zipFile() {
 		// with regular DEFLATE, then this will return ErrCorrupt.
 		xr, err := xflate.NewReader(rds, nil)
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 
 		// Read from the middle of the file.
 		buf := make([]byte, 80)
 		pos := int64(f.UncompressedSize64 / 2)
 		if _, err := xr.Seek(pos, io.SeekStart); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		if _, err := io.ReadFull(xr, buf); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 
 		// Close the Reader.
 		if err := xr.Close(); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 
 		got := string(buf)
@@ -142,7 +147,7 @@ func Example_zipFile() {
 // seekable because they are not compressed in the XFLATE format.
 func Example_gzipFile() {
 	// Test file of non-trivial size.
-	var twain = testutil.MustLoadFile("../testdata/twain.txt")
+	twain := testutil.MustLoadFile("../testdata/twain.txt")
 
 	// The Gzip header without using any extra features is 10 bytes long.
 	const header = "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff"
@@ -161,17 +166,17 @@ func Example_gzipFile() {
 			ChunkSize: 1 << 16,
 		})
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 
 		// Write the test data.
 		crc := crc32.NewIEEE()
 		mw := io.MultiWriter(xw, crc) // Write to both compressor and hasher
 		if _, err := io.Copy(mw, bytes.NewReader(twain)); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		if err := xw.Close(); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 
 		// Write Gzip footer.
@@ -183,14 +188,14 @@ func Example_gzipFile() {
 	{
 		gz, err := gzip.NewReader(bytes.NewReader(buffer.Bytes()))
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		buf, err := ioutil.ReadAll(gz)
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		if !bytes.Equal(buf, twain) {
-			panic("gzip content does not match")
+			log.Fatal("gzip content does not match")
 		}
 	}
 
@@ -201,13 +206,13 @@ func Example_gzipFile() {
 		var hdr [10]byte
 		rd := bytes.NewReader(buffer.Bytes())
 		if _, err := rd.ReadAt(hdr[:], 0); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		if string(hdr[:3]) != header[:3] || rd.Size() < 18 {
-			panic("not a gzip file")
+			log.Fatal("not a gzip file")
 		}
 		if hdr[3]&0xfe > 0 {
-			panic("no support for extra gzip features")
+			log.Fatal("no support for extra gzip features")
 		}
 		rds := io.NewSectionReader(rd, 10, rd.Size()-18) // Strip Gzip header/footer
 
@@ -216,22 +221,22 @@ func Example_gzipFile() {
 		// with regular DEFLATE, then this will return ErrCorrupt.
 		xr, err := xflate.NewReader(rds, nil)
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 
 		// Read from the middle of the stream.
 		buf := make([]byte, 80)
 		pos := int64(len(twain) / 2)
 		if _, err := xr.Seek(pos, io.SeekStart); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		if _, err := io.ReadFull(xr, buf); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 
 		// Close the Reader.
 		if err := xr.Close(); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 
 		got := string(buf)
