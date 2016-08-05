@@ -40,6 +40,9 @@ func TestDecodeBitGen(t *testing.T) {
 		output: []byte{0xb3, 0x88}, // 0b10110011 0b10001000
 		valid:  true,
 	}, {
+		input: `>>> > 1011001110001 <<<`,
+		valid: false,
+	}, {
 		input: `<<< < 0111 X:`,
 		valid: false,
 	}, {
@@ -195,6 +198,10 @@ func TestDecodeBitGen(t *testing.T) {
 	}, {
 		input: `<<< < D12:1337*9999999999999999999999999999999999999999999999`,
 		valid: false,
+	}, {
+		input:  `<<< X:abcd <"The " "quick "*5 "brown \"fox\"\n\n \\njumped" >"" # HA`,
+		output: []byte("\xab\xcdThe quick quick quick quick quick brown \"fox\"\n\n \\njumped"),
+		valid:  true,
 	}}
 
 	for i, v := range vectors {
