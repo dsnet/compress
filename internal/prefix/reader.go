@@ -7,6 +7,7 @@ package prefix
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"io"
 	"strings"
 
@@ -30,9 +31,9 @@ type Reader struct {
 	byteRd compress.ByteReader     // Set if rd is a ByteReader
 	bufRd  compress.BufferedReader // Set if rd is a BufferedReader
 
-	bufBits   uint64    // Buffer to hold some bits
-	numBits   uint      // Number of valid bits in bufBits
-	transform [256]byte // LUT to transform bit-ordering
+	bufBits   uint64 // Buffer to hold some bits
+	numBits   uint   // Number of valid bits in bufBits
+	bigEndian bool   // Do we treat input bytes as big endian?
 
 	// These fields are only used if rd is a compress.BufferedReader.
 	bufPeek     []byte // Buffer for the Peek data
@@ -52,7 +53,8 @@ type Reader struct {
 // least-significant bits of a byte (such as for deflate and brotli).
 func (pr *Reader) Init(r io.Reader, bigEndian bool) {
 	*pr = Reader{
-		rd: r,
+		rd:        r,
+		bigEndian: bigEndian,
 
 		bb: pr.bb,
 		br: pr.br,
@@ -89,12 +91,6 @@ func (pr *Reader) Init(r io.Reader, bigEndian bool) {
 		pr.bu.Reset(r)
 		pr.rd, pr.bufRd = pr.bu, pr.bu
 	}
-
-	if bigEndian {
-		copy(pr.transform[:], internal.ReverseLUT[:])
-	} else {
-		copy(pr.transform[:], internal.IdentityLUT[:])
-	}
 }
 
 // BitsRead reports the total number of bits emitted from any Read method.
@@ -130,7 +126,11 @@ func (pr *Reader) Read(buf []byte) (cnt int, err error) {
 			return 0, errUnaligned
 		}
 		for cnt = 0; len(buf) > cnt && pr.numBits > 0; cnt++ {
-			buf[cnt] = pr.transform[byte(pr.bufBits)]
+			if pr.bigEndian {
+				buf[cnt] = internal.ReverseLUT[byte(pr.bufBits)]
+			} else {
+				buf[cnt] = byte(pr.bufBits)
+			}
 			pr.bufBits >>= 8
 			pr.numBits -= 8
 		}
@@ -259,9 +259,12 @@ func (pr *Reader) PullBits(nb uint) error {
 					return err
 				}
 
+				// Peek no more bytes than necessary.
+				// The computation for cntPeek computes the minimum number of
+				// bytes to Peek to fill nb bits.
 				var err error
-				cntPeek := 8 // Minimum Peek amount to make progress
-				if pr.bufRd.Buffered() > cntPeek {
+				cntPeek := int(nb+(-nb&7)) / 8
+				if cntPeek < pr.bufRd.Buffered() {
 					cntPeek = pr.bufRd.Buffered()
 				}
 				pr.bufPeek, err = pr.bufRd.Peek(cntPeek)
@@ -276,17 +279,38 @@ func (pr *Reader) PullBits(nb uint) error {
 					return err
 				}
 			}
-			cnt := int(64-pr.numBits) / 8
-			if cnt > len(pr.bufPeek) {
-				cnt = len(pr.bufPeek)
-			}
-			for _, c := range pr.bufPeek[:cnt] {
-				pr.bufBits |= uint64(pr.transform[c]) << pr.numBits
-				pr.numBits += 8
-			}
-			pr.bufPeek = pr.bufPeek[cnt:]
-			if pr.numBits > 56 {
+
+			n := int(64-pr.numBits) / 8 // Number of bytes to copy to bit buffer
+			if len(pr.bufPeek) >= 8 {
+				// Starting with Go 1.7, the compiler should use a wide integer
+				// load here if the architecture supports it.
+				u := binary.LittleEndian.Uint64(pr.bufPeek)
+				if pr.bigEndian {
+					// Swap all the bits within each byte.
+					u = (u&0xaaaaaaaaaaaaaaaa)>>1 | (u&0x5555555555555555)<<1
+					u = (u&0xcccccccccccccccc)>>2 | (u&0x3333333333333333)<<2
+					u = (u&0xf0f0f0f0f0f0f0f0)>>4 | (u&0x0f0f0f0f0f0f0f0f)<<4
+				}
+
+				pr.bufBits |= u << pr.numBits
+				pr.numBits += uint(n * 8)
+				pr.bufPeek = pr.bufPeek[n:]
 				break
+			} else {
+				if n > len(pr.bufPeek) {
+					n = len(pr.bufPeek)
+				}
+				for _, c := range pr.bufPeek[:n] {
+					if pr.bigEndian {
+						c = internal.ReverseLUT[c]
+					}
+					pr.bufBits |= uint64(c) << pr.numBits
+					pr.numBits += 8
+				}
+				pr.bufPeek = pr.bufPeek[n:]
+				if pr.numBits > 56 {
+					break
+				}
 			}
 		}
 		pr.fedBits = pr.numBits
@@ -299,7 +323,10 @@ func (pr *Reader) PullBits(nb uint) error {
 				}
 				return err
 			}
-			pr.bufBits |= uint64(pr.transform[c]) << pr.numBits
+			if pr.bigEndian {
+				c = internal.ReverseLUT[c]
+			}
+			pr.bufBits |= uint64(c) << pr.numBits
 			pr.numBits += 8
 			pr.Offset++
 		}
