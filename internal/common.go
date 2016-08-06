@@ -10,24 +10,25 @@ package internal
 
 var (
 	// IdentityLUT returns the input key itself.
-	IdentityLUT [256]byte
+	IdentityLUT = func() (lut [256]byte) {
+		for i := range lut {
+			lut[i] = uint8(i)
+		}
+		return lut
+	}()
 
 	// ReverseLUT returns the input key with its bits reversed.
-	ReverseLUT [256]byte
+	ReverseLUT = func() (lut [256]byte) {
+		for i := range lut {
+			b := uint8(i)
+			b = (b&0xaa)>>1 | (b&0x55)<<1
+			b = (b&0xcc)>>2 | (b&0x33)<<2
+			b = (b&0xf0)>>4 | (b&0x0f)<<4
+			lut[i] = b
+		}
+		return lut
+	}()
 )
-
-func init() {
-	for i := range IdentityLUT {
-		IdentityLUT[i] = uint8(i)
-	}
-	for i := range ReverseLUT {
-		b := uint8(i)
-		b = (b&0xaa)>>1 | (b&0x55)<<1
-		b = (b&0xcc)>>2 | (b&0x33)<<2
-		b = (b&0xf0)>>4 | (b&0x0f)<<4
-		ReverseLUT[i] = b
-	}
-}
 
 // ReverseUint32 reverses all bits of v.
 func ReverseUint32(v uint32) (x uint32) {
