@@ -30,12 +30,15 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math"
 	"math/big"
 	"math/rand"
 
 	"github.com/dsnet/compress/xflate/meta"
 )
+
+func init() { log.SetFlags(log.Lshortfile) }
 
 func main() {
 	// It would be impractical to try all possible input strings.
@@ -113,13 +116,13 @@ func main() {
 				// Encode the string and compute the output length.
 				mw.Reset(ioutil.Discard)
 				if _, err := mw.Write(buf); err != nil {
-					panic(err)
+					log.Fatal(err)
 				}
 				if err := mw.Close(); err != nil {
-					panic(err)
+					log.Fatal(err)
 				}
 				if mw.NumBlocks != 1 {
-					panic("unexpected extra blocks")
+					log.Fatal("unexpected extra blocks")
 				}
 
 				cnt := int(mw.OutputOffset)

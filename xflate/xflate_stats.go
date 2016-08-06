@@ -83,10 +83,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 
 	"github.com/dsnet/compress/xflate/meta"
 )
+
+func init() { log.SetFlags(log.Lshortfile) }
 
 func main() {
 	inputFile := flag.String("f", "-", "path to input file")
@@ -100,7 +103,7 @@ func main() {
 	if *inputFile != "-" {
 		f, err := os.Open(*inputFile)
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		defer f.Close()
 		r = f
@@ -245,15 +248,15 @@ func computeRecords(r io.Reader, lvl, chnkSize int) (strmRec indexRecord, chnkRe
 
 		// Write chunk to both compressors.
 		if _, err := zw1.Write(buf[:cnt]); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		if _, err := zw2.Write(buf[:cnt]); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 
 		// Flush the chunked compressor, append the record, and reset.
 		if err := zw2.Flush(); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		chnkRecs = append(chnkRecs, indexRecord{rawSize: int64(cnt), compSize: int64(cw2)})
 		cw2 = 0
@@ -263,13 +266,13 @@ func computeRecords(r io.Reader, lvl, chnkSize int) (strmRec indexRecord, chnkRe
 			break
 		}
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 	}
 
 	// Flush the streamed compressor and record the compressed size.
 	if err := zw1.Flush(); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	strmRec.compSize = int64(cw1)
 	return strmRec, chnkRecs
@@ -280,13 +283,13 @@ func compress(b []byte, lvl int) []byte {
 	var buf bytes.Buffer
 	w, err := flate.NewWriter(&buf, lvl)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	if _, err := io.Copy(w, bytes.NewReader(b)); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	if err := w.Close(); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	return buf.Bytes()
 }
@@ -297,10 +300,10 @@ func encode(b []byte) []byte {
 	mw := meta.NewWriter(&buf)
 	mw.FinalMode = meta.FinalMeta
 	if _, err := io.Copy(mw, bytes.NewReader(b)); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	if err := mw.Close(); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	return buf.Bytes()
 }
