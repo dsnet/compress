@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/internal/testutil"
 )
 
@@ -27,16 +28,19 @@ func (rs *countReadSeeker) Read(buf []byte) (int, error) {
 }
 
 func TestReader(t *testing.T) {
-	var dh = testutil.MustDecodeHex
+	dh := testutil.MustDecodeHex
 
-	var vectors = []struct {
+	errFuncs := map[string]func(error) bool{
+		"IsCorrupted": errors.IsCorrupted,
+	}
+	vectors := []struct {
 		desc   string // Description of the test
 		input  []byte // Input test string
 		output []byte // Expected output string
-		err    error  // Expected error
+		errf   string // Name of error checking callback
 	}{{
 		desc: "empty string",
-		err:  ErrCorrupt,
+		errf: "IsCorrupted",
 	}, {
 		desc: "empty stream",
 		input: dh("" +
@@ -66,7 +70,7 @@ func TestReader(t *testing.T) {
 			"000000ffff010000ffff000000ffff148086058044655366e3817441ba205d50" +
 			"4a83348c445ddcde7b6ffc15c08605002021ab44a103aaff2f6bef5df8",
 		),
-		err: ErrCorrupt,
+		errf: "IsCorrupted",
 	}, {
 		desc: "empty stream with multiple empty indexes",
 		input: dh("" +
@@ -125,101 +129,101 @@ func TestReader(t *testing.T) {
 	}, {
 		desc:  "garbage footer",
 		input: dh("5174453181b67484bf6de23a608876f8b7f44c77"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "corrupt meta footer",
 		input: dh("1d008705000048ca2c50e8ff3bdbf0"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "trailing meta data in footer",
 		input: dh("0d008705000048c82a51e8ff37dbf1deadcafe"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "trailing raw data in footer",
 		input: dh("25c086050020a9ac12856ec8284229d4ff0fb527f8"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "footer using LastMeta",
 		input: dh("0c008705000048c82a51e8ff37dbf1"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "footer without magic",
 		input: dh("1d00870500004864a644eaff3bdbf0"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "footer with VLI overflow",
 		input: dh("2d80860580944a458a4abb6e6c9fdbde7bef01fc"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc: "index using LastStream",
 		input: dh("" +
 			"05c086050020191d53a1a508c9e8ff5bda7bf815c08605002021ab44219ba2ff" +
 			"2f6bef5df8",
 		),
-		err: ErrCorrupt,
+		errf: "IsCorrupted",
 	}, {
 		desc: "index with wrong CRC",
 		input: dh("" +
 			"2cc086050020191d132551320a51ff9fd2de0bf825008705000048c82a51e880" +
 			"f4ff834df0",
 		),
-		err: ErrCorrupt,
+		errf: "IsCorrupted",
 	}, {
 		desc: "corrupt meta index",
 		input: dh("" +
 			"04c086050020191d53a1a518c9e8ff5bda7bf815c08605002021ab44219ba2ff" +
 			"2f6bef5df8",
 		),
-		err: ErrCorrupt,
+		errf: "IsCorrupted",
 	}, {
 		desc: "index with VLI overflow",
 		input: dh("" +
 			"048086058094e8c6f6de7b531215458a840e6deffc15c08605002021ab44219b" +
 			"a4ff2f6bef5df8",
 		),
-		err: ErrCorrupt,
+		errf: "IsCorrupted",
 	}, {
 		desc: "trailing meta data in index",
 		input: dh("" +
 			"34c086050020291d53a1a508c908a16414a2fe3fa205f81dc08605002021ab44" +
 			"219b4aff7fd6de3bf8",
 		),
-		err: ErrCorrupt,
+		errf: "IsCorrupted",
 	}, {
 		desc: "trailing raw data in index",
 		input: dh("" +
 			"04c086050020191d53a1a508c9e8ff5bda7bf862616405c08605002021ab4421" +
 			"7b94febfacbd77f9",
 		),
-		err: ErrCorrupt,
+		errf: "IsCorrupted",
 	}, {
 		desc: "index total size is wrong",
 		input: dh("" +
 			"000000ffff14c086050020916cb2d505e983840aa12592faff8c76f81dc08605" +
 			"002021ab44219b4aff7fd6de3bf8",
 		),
-		err: ErrCorrupt,
+		errf: "IsCorrupted",
 	}, {
 		desc: "index with compressed chunk size of zero",
 		input: dh("" +
 			"000000ffff04c086050020916cb2e9848e8894a2a441fd7f457bf905c0860500" +
 			"2021ab44217b94febfacbd77f9",
 		),
-		err: ErrCorrupt,
+		errf: "IsCorrupted",
 	}, {
 		desc: "index with numeric overflow on sizes",
 		input: dh("" +
 			"000000ffff000000ffff0c40860552a43db4a53dcf6b97b47724641589a84e69" +
 			"efbdf7de7b4ffe1dc08605002021ab44219b54ff7fd6de3bf8",
 		),
-		err: ErrCorrupt,
+		errf: "IsCorrupted",
 	}, {
 		desc: "empty chunk without sync marker",
 		input: dh("" +
 			"000000ffff020820800004c086050020a1ec919d1e4817a40b421269a3a8ff1f" +
 			"68fa2d008705000048c82a51e881faffc126f0",
 		),
-		err: ErrCorrupt,
+		errf: "IsCorrupted",
 	}, {
 		desc: "chunk without sync marker",
 		input: dh("" +
@@ -227,7 +231,7 @@ func TestReader(t *testing.T) {
 			"652b2b221125f5ff1eedf805c08605002021ab44217ba4febfacbd77f9",
 		),
 		output: []byte("Hi"),
-		err:    ErrCorrupt,
+		errf:   "IsCorrupted",
 	}, {
 		desc: "chunk with wrong sizes",
 		input: dh("" +
@@ -235,7 +239,7 @@ func TestReader(t *testing.T) {
 			"15252a958a92eaeef6de7b07fc15c08605002021ab44a103aaff2f6bef5df8",
 		),
 		output: []byte("Hi"),
-		err:    ErrCorrupt,
+		errf:   "IsCorrupted",
 	}, {
 		desc: "size overflow across multiple indexes",
 		input: dh("" +
@@ -243,7 +247,7 @@ func TestReader(t *testing.T) {
 			"ffff000000ffff24808605808432cac84e4676ba2059d9914a4a29259a8fb7f7" +
 			"de0bfc15c08605002021ab44a103aaff2f6bef5df8",
 		),
-		err: ErrCorrupt,
+		errf: "IsCorrupted",
 	}, {
 		desc: "index back size causes integer overflow",
 		input: dh("" +
@@ -252,7 +256,7 @@ func TestReader(t *testing.T) {
 			"cfc8cccacec9cdcb2f282c2a2e292d2bafa8ac02000000ffff2c8086058094e8" +
 			"bcb4a74ab4538986529284cc3e6def05fc2d008705000048c82a51e881faffc1" +
 			"26f0"),
-		err: ErrCorrupt,
+		errf: "IsCorrupted",
 	}, {
 		desc: "raw chunk with final bit and bad size",
 		input: dh("" +
@@ -267,7 +271,7 @@ func TestReader(t *testing.T) {
 		// satisfied by the fact that the chunkReader appends the endBlock
 		// sequence (010000ffff) to every chunk. This really difficult to fix
 		// without low-level details about the DEFLATE stream.
-		err: nil, // ErrCorrupt,
+		errf: "", // "IsCorrupted",
 	}}
 
 	for i, v := range vectors {
@@ -286,8 +290,10 @@ func TestReader(t *testing.T) {
 		}
 
 	done:
-		if err != v.err {
-			t.Errorf("test %d (%s), mismatching error: got %v, want %v", i, v.desc, err, v.err)
+		if v.errf != "" && !errFuncs[v.errf](err) {
+			t.Errorf("test %d (%s), mismatching error:\ngot %v\nwant %s(err) == true", i, v.desc, err, v.errf)
+		} else if v.errf == "" && err != nil {
+			t.Errorf("test %d (%s), unexpected error: got %v", i, v.desc, err)
 		}
 		if !bytes.Equal(buf, v.output) && err == nil {
 			t.Errorf("test %d (%s), mismatching output:\ngot  %q\nwant %q", i, v.desc, buf, v.output)
@@ -334,14 +340,14 @@ func TestReaderReset(t *testing.T) {
 
 	// Test Reset on garbage data.
 	rd := bytes.NewReader(append([]byte("garbage"), empty...))
-	if err := xr.Reset(rd); err != ErrCorrupt {
-		t.Fatalf("mismatching error: Reset() = %v, want %v", err, ErrCorrupt)
+	if err := xr.Reset(rd); !errors.IsCorrupted(err) {
+		t.Fatalf("mismatching error: Reset() = %v, want IsCorrupted(err) == true", err)
 	}
-	if _, err := xr.Seek(0, io.SeekStart); err != ErrCorrupt {
-		t.Fatalf("mismatching error: Seek() = %v, want %v", err, ErrCorrupt)
+	if _, err := xr.Seek(0, io.SeekStart); !errors.IsCorrupted(err) {
+		t.Fatalf("mismatching error: Seek() = %v, want IsCorrupted(err) == true", err)
 	}
-	if err := xr.Close(); err != ErrCorrupt {
-		t.Fatalf("mismatching error: Close() = %v, want %v", err, ErrCorrupt)
+	if err := xr.Close(); !errors.IsCorrupted(err) {
+		t.Fatalf("mismatching error: Close() = %v, want IsCorrupted(err) == true", err)
 	}
 
 	// Test Reset on corrupt data in discard section.
@@ -352,9 +358,8 @@ func TestReaderReset(t *testing.T) {
 		if _, err := xr.Seek(-1, io.SeekEnd); err != nil {
 			t.Fatalf("test %d, unexpected error: Seek() = %v", i, err)
 		}
-		_, err = ioutil.ReadAll(xr)
-		if err != ErrCorrupt {
-			t.Fatalf("test %d, mismatching error: ReadAll() = %v, want %v", i, err, ErrCorrupt)
+		if _, err = ioutil.ReadAll(xr); !errors.IsCorrupted(err) {
+			t.Fatalf("test %d, mismatching error: ReadAll() = %v, want IsCorrupted(err) == true", i, err)
 		}
 	}
 }

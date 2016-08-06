@@ -7,6 +7,7 @@ package flate
 import (
 	"io"
 
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/internal/prefix"
 )
 
@@ -90,7 +91,7 @@ func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
 	numDistSyms := pr.ReadBits(5) + 1
 	numCLenSyms := pr.ReadBits(4) + 4
 	if numLitSyms > maxNumLitSyms || numDistSyms > maxNumDistSyms {
-		panic(ErrCorrupt)
+		errors.Panic(errCorrupted)
 	}
 
 	// Read the code-lengths prefix table.
@@ -109,7 +110,7 @@ func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
 	}
 	codeCLens = handleDegenerateCodes(codeCLens, maxNumCLenSyms)
 	if err := prefix.GeneratePrefixes(codeCLens); err != nil {
-		panic(err)
+		errors.Panic(err)
 	}
 	pr.clenTree.Init(codeCLens)
 
@@ -142,7 +143,7 @@ func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
 			switch repSym := clen; repSym {
 			case 16:
 				if sym == 0 {
-					panic(ErrCorrupt)
+					errors.Panic(errCorrupted)
 				}
 				clen = clenLast
 				repCnt = 3 + pr.ReadBits(2)
@@ -153,7 +154,7 @@ func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
 				clen = 0
 				repCnt = 11 + pr.ReadBits(7)
 			default:
-				panic(ErrCorrupt)
+				errors.Panic(errCorrupted)
 			}
 
 			if clen > 0 {
@@ -164,20 +165,20 @@ func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
 				sym += repCnt
 			}
 			if sym > maxSyms {
-				panic(ErrCorrupt)
+				errors.Panic(errCorrupted)
 			}
 		}
 	}
 
 	codeLits = handleDegenerateCodes(codeLits, maxNumLitSyms)
 	if err := prefix.GeneratePrefixes(codeLits); err != nil {
-		panic(err)
+		errors.Panic(err)
 	}
 	hl.Init(codeLits)
 
 	codeDists = handleDegenerateCodes(codeDists, maxNumDistSyms)
 	if err := prefix.GeneratePrefixes(codeDists); err != nil {
-		panic(err)
+		errors.Panic(err)
 	}
 	hd.Init(codeDists)
 

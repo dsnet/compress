@@ -18,8 +18,9 @@
 package meta
 
 import (
-	"runtime"
+	"fmt"
 
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/internal/prefix"
 )
 
@@ -123,7 +124,7 @@ func init() {
 	}
 
 	// Dynamically generate the Huffman codes.
-	var codes = [4]prefix.PrefixCode{
+	codes := [4]prefix.PrefixCode{
 		{Sym: symZero, Len: 1},
 		{Sym: symOne, Len: 2},
 		{Sym: symRepLast, Len: 3},
@@ -134,32 +135,14 @@ func init() {
 	encHuff.Init(codes[:])
 }
 
-// Error is the wrapper type for all errors specific to this package.
-type Error string
-
-func (e Error) Error() string  { return "meta: " + string(e) }
-func (e Error) CompressError() {}
-
-// Errors specific to this package.
-var (
-	errClosed  error = Error("stream is closed")
-	ErrInvalid error = Error("cannot encode block")
-	ErrCorrupt error = Error("block is corrupted")
-)
-
-// errRecover recovers panicing errors into err.
-func errRecover(err *error) {
-	switch ex := recover().(type) {
-	case nil:
-		// Do nothing.
-	case runtime.Error:
-		panic(ex)
-	case error:
-		*err = ex
-	default:
-		panic(ex)
-	}
+func errorf(c int, f string, a ...interface{}) error {
+	return errors.Error{c, "meta", fmt.Sprintf(f, a...)}
 }
+
+var (
+	errCorrupted = errorf(errors.Corrupted, "")
+	errClosed    = errorf(errors.Closed, "")
+)
 
 // ReverseSearch searches for a meta header in reverse. This returns the last
 // index where the header was found. If not found, it returns -1.

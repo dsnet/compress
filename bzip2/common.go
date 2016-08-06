@@ -6,10 +6,11 @@
 package bzip2
 
 import (
+	"fmt"
 	"hash/crc32"
-	"runtime"
 
 	"github.com/dsnet/compress/internal"
+	"github.com/dsnet/compress/internal/errors"
 )
 
 // There does not exist a formal specification of the BZip2 format. As such,
@@ -42,30 +43,30 @@ const (
 	blockSize = 100000
 )
 
-// Error is the wrapper type for errors specific to this library.
-type Error struct{ ErrorString string }
+func errorf(c int, f string, a ...interface{}) error {
+	return errors.Error{c, "bzip2", fmt.Sprintf(f, a...)}
+}
 
-func (e Error) Error() string { return "bzip2: " + e.ErrorString }
+// errWrap converts a lower-level errors.Error to be one from this package.
+// The replaceCode passed in will be used to replace the code for any errors
+// with the errors.Invalid code.
+//
+// For the Reader, set this to errors.Corrupted.
+// For the Writer, set this to errors.Internal.
+func errWrap(err error, replaceCode int) error {
+	if cerr, ok := err.(errors.Error); ok {
+		if errors.IsInvalid(cerr) {
+			cerr.Code = replaceCode
+		}
+		err = errorf(cerr.Code, "%s", cerr.Msg)
+	}
+	return err
+}
 
 var (
-	ErrCorrupt    error = Error{"stream is corrupted"}
-	ErrDeprecated error = Error{"deprecated stream format"}
-	ErrClosed     error = Error{"stream is closed"}
-	errInvalid    error = Error{"stream is invalid"}
+	errCorrupted = errorf(errors.Corrupted, "")
+	errClosed    = errorf(errors.Closed, "")
 )
-
-func errRecover(err *error) {
-	switch ex := recover().(type) {
-	case nil:
-		// Do nothing.
-	case runtime.Error:
-		panic(ex)
-	case error:
-		*err = ex
-	default:
-		panic(ex)
-	}
-}
 
 // crc computes the CRC-32 used by BZip2.
 // The byte array is used as an intermediate buffer to swap the bits of every

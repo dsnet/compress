@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/internal/testutil"
 )
 
@@ -20,24 +21,29 @@ import (
 // strings. A third-party decoder should verify that it has the same behavior
 // when processing these input vectors.
 func TestReader(t *testing.T) {
-	var dh = testutil.MustDecodeHex
+	dh := testutil.MustDecodeHex
 
-	var vectors = []struct {
+	errFuncs := map[string]func(error) bool{
+		"IsEOF":              func(err error) bool { return err == io.EOF },
+		"IsErrUnexpectedEOF": func(err error) bool { return err == io.ErrUnexpectedEOF },
+		"IsCorrupted":        errors.IsCorrupted,
+	}
+	vectors := []struct {
 		desc   string    // Description of the test
 		input  []byte    // Test input string
 		output []byte    // Expected output string
 		final  FinalMode // Expected FinalMode value
-		err    error     // Expected error
+		errf   string    // Name of error checking callback
 	}{{
 		desc:   "empty string",
 		input:  dh(""),
 		output: dh(""),
-		err:    io.EOF,
+		errf:   "IsEOF",
 	}, {
 		desc:   "bad empty meta block (FinalNil, first symbol not symZero)",
 		input:  dh("24408705000000faffe476e0"),
 		output: dh(""),
-		err:    ErrCorrupt,
+		errf:   "IsCorrupted",
 	}, {
 		desc:   "empty meta block (FinalNil)",
 		input:  dh("1c408705000000f2ffc7ede0"),
@@ -52,7 +58,7 @@ func TestReader(t *testing.T) {
 		desc:   "bad empty meta block, contains the magic value mid way",
 		input:  dh("0580870500000080040004008605ff7f07ca"),
 		output: dh(""),
-		err:    ErrCorrupt,
+		errf:   "IsCorrupted",
 	}, {
 		desc:   "meta block containing the string 'a'",
 		input:  dh("1400870500004882a0febfb4bdf0"),
@@ -159,75 +165,75 @@ func TestReader(t *testing.T) {
 	}, {
 		desc:  "meta block truncated short",
 		input: dh("1c8086"),
-		err:   io.ErrUnexpectedEOF,
+		errf:  "IsErrUnexpectedEOF",
 	}, {
 		desc:  "meta block truncated medium-short",
 		input: dh("1c808605"),
-		err:   io.ErrUnexpectedEOF,
+		errf:  "IsErrUnexpectedEOF",
 	}, {
 		desc:  "meta block truncated medium-long",
 		input: dh("1c808605800409d10451418520"),
-		err:   io.ErrUnexpectedEOF,
+		errf:  "IsErrUnexpectedEOF",
 	}, {
 		desc:  "meta block truncated long",
 		input: dh("1c808605800409d1045141852022294a09fd7f417befbd07"),
-		err:   io.ErrUnexpectedEOF,
+		errf:  "IsErrUnexpectedEOF",
 	}, {
 		desc:  "random junk",
 		input: dh("911fe47084a4668b"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "meta block with invalid number of HCLen codes of 6",
 		input: dh("340086050000000020fdff7480"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "meta block with invalid HCLen code in the middle",
 		input: dh("34c087051000000020fdff7480"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "meta block with invalid HCLen code at the end",
 		input: dh("34c087050000000060fdff7480"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "meta block first symbol being a last repeater",
 		input: dh("34c0870500000000a0d1ff4f0708"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "meta block with too many symbols",
 		input: dh("34c087050000000020fdff7f80"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "meta block with too few symbols",
 		input: dh("34c087050000000020fe7f3a40"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "meta block with first symbol not a zero",
 		input: dh("34c0870500000000a0fcff7480"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "meta block with no EOM symbol",
 		input: dh("34c087050000000020fd7f740001"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "meta block with FinalStream set, but not FinalMeta",
 		input: dh("35c087050000000020faffe80001"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "meta block with some padding bits not zero",
 		input: dh("34c087050000000020fdff742001"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "meta block with the HDist tree not empty",
 		input: dh("34c087050000000020fdff744001"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "meta block with extra symbols before EOM",
 		input: dh("34c087050000000020fdff740002"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		desc:  "meta block with wrong number of padding bits",
 		input: dh("2cc087050000000020fdff7440"),
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}}
 
 	for i, v := range vectors {
@@ -244,8 +250,10 @@ func TestReader(t *testing.T) {
 		if mr.final != v.final {
 			t.Errorf("test %d (%s), mismatching final mode: got %d, want %d", i, v.desc, mr.final, v.final)
 		}
-		if err != v.err {
-			t.Errorf("test %d (%s), unexpected error: got %v, want %v", i, v.desc, err, v.err)
+		if v.errf != "" && !errFuncs[v.errf](err) {
+			t.Errorf("test %d (%s), mismatching error:\ngot %v\nwant %s(err) == true", i, v.desc, err, v.errf)
+		} else if v.errf == "" && err != nil {
+			t.Errorf("test %d (%s), unexpected error: got %v", i, v.desc, err)
 		}
 	}
 }
@@ -267,15 +275,15 @@ func TestReaderReset(t *testing.T) {
 
 	// Test Reader with corrupt data.
 	mr.Reset(strings.NewReader("corrupt"))
-	if _, err := mr.Read(buf); err != ErrCorrupt {
-		t.Errorf("unexpected error: Read() = %v, want %v", err, ErrCorrupt)
+	if _, err := mr.Read(buf); !errors.IsCorrupted(err) {
+		t.Errorf("unexpected error: Read() = %v, want IsCorrupted(err) == true", err)
 	}
-	if err := mr.Close(); err != ErrCorrupt {
-		t.Errorf("unexpected error: Close() = %v, want %v", err, ErrCorrupt)
+	if err := mr.Close(); !errors.IsCorrupted(err) {
+		t.Errorf("unexpected error: Close() = %v, want IsCorrupted(err) == true", err)
 	}
 
 	// Test Reader on multiple back-to-back streams.
-	var data = testutil.MustDecodeHex("" +
+	data := testutil.MustDecodeHex("" +
 		"3c408605b22a928c944499112a4925520aa5a4cc108aa834944a45a5cc509486" +
 		"321a66484a524929ab92284499d150667bef00fe2c4086059290524914519919" +
 		"a98c94449919a564146988869911a5a15414959e6aefbdf7de7bef02fe3c4086" +
@@ -288,7 +296,7 @@ func TestReaderReset(t *testing.T) {
 		"255166a4944449290d4554667b02fe34408605a2226534552a52465351911189" +
 		"4844120a91125191069590128508452175527befbdf7de01fe",
 	)
-	var vectors = []struct {
+	vectors := []struct {
 		data                   string
 		inOff, outOff, numBlks int64
 		final                  FinalMode

@@ -14,40 +14,47 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/internal/testutil"
 )
 
 var zcheck = flag.Bool("zcheck", false, "verify reader test vectors with C zlib library")
 
+// pyDecompress decompresses the input by using the Python wrapper library
+// over the C zlib library:
+//
+//	>>> hex_string = "010100feff11"
+//	>>> import zlib
+//	>>> zlib.decompress(hex_string.decode("hex"), -15) # Negative means raw DEFLATE
+//	'\x11'
+//
+func pyDecompress(input []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	cmd := exec.Command("python", "-c", "import sys, zlib; sys.stdout.write(zlib.decompress(sys.stdin.read(), -15))")
+	cmd.Stdin = bytes.NewReader(input)
+	cmd.Stdout = &buf
+	err := cmd.Run()
+	return buf.Bytes(), err
+}
+
 func TestReader(t *testing.T) {
 	db := testutil.MustDecodeBitGen
 	dh := testutil.MustDecodeHex
 
-	// To verify any of these inputs as valid or invalid DEFLATE streams
-	// according to the C zlib library, you can use the Python wrapper library:
-	//	>>> hex_string = "010100feff11"
-	//	>>> import zlib
-	//	>>> zlib.decompress(hex_string.decode("hex"), -15) # Negative means raw DEFLATE
-	//	'\x11'
-	var pyDecompress = func(input []byte) ([]byte, error) {
-		var buf bytes.Buffer
-		cmd := exec.Command("python", "-c", "import sys, zlib; sys.stdout.write(zlib.decompress(sys.stdin.read(), -15))")
-		cmd.Stdin = bytes.NewReader(input)
-		cmd.Stdout = &buf
-		err := cmd.Run()
-		return buf.Bytes(), err
+	errFuncs := map[string]func(error) bool{
+		"IsErrUnexpectedEOF": func(err error) bool { return err == io.ErrUnexpectedEOF },
+		"IsCorrupted":        errors.IsCorrupted,
 	}
-
-	var vectors = []struct {
+	vectors := []struct {
 		name   string // Sub-test name
 		input  []byte // Test input string
 		output []byte // Expected output string
 		inIdx  int64  // Expected input offset after reading
 		outIdx int64  // Expected output offset after reading
-		err    error  // Expected error
+		errf   string // Name of error checking callback
 	}{{
 		name: "EmptyString",
-		err:  io.ErrUnexpectedEOF,
+		errf: "IsErrUnexpectedEOF",
 	}, {
 		name: "RawBlock",
 		input: db(`<<<
@@ -61,7 +68,7 @@ func TestReader(t *testing.T) {
 		output: dh("68656c6c6f2c20776f726c64"),
 		inIdx:  19,
 		outIdx: 12,
-		err:    io.ErrUnexpectedEOF,
+		errf:   "IsErrUnexpectedEOF",
 	}, {
 		name: "RawBlockNonZeroPadding",
 		input: db(`<<<
@@ -97,7 +104,7 @@ func TestReader(t *testing.T) {
 			X:11                # Raw data
 		`),
 		inIdx: 5,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Truncated after block header.
 		name: "RawBlockTruncated0",
@@ -105,7 +112,7 @@ func TestReader(t *testing.T) {
 			< 0 00 0*5 # Non-last, raw block, padding
 		`),
 		inIdx: 1,
-		err:   io.ErrUnexpectedEOF,
+		errf:  "IsErrUnexpectedEOF",
 	}, {
 		// Truncated inside size field.
 		name: "RawBlockTruncated1",
@@ -114,7 +121,7 @@ func TestReader(t *testing.T) {
 			< H8:0c    # RawSize: 12
 		`),
 		inIdx: 1,
-		err:   io.ErrUnexpectedEOF,
+		errf:  "IsErrUnexpectedEOF",
 	}, {
 		// Truncated after size field.
 		name: "RawBlockTruncated2",
@@ -123,7 +130,7 @@ func TestReader(t *testing.T) {
 			< H16:000c # RawSize: 12
 		`),
 		inIdx: 3,
-		err:   io.ErrUnexpectedEOF,
+		errf:  "IsErrUnexpectedEOF",
 	}, {
 		// Truncated before raw data.
 		name: "RawBlockTruncated3",
@@ -132,7 +139,7 @@ func TestReader(t *testing.T) {
 			< H16:000c H16:fff3 # RawSize: 12
 		`),
 		inIdx: 5,
-		err:   io.ErrUnexpectedEOF,
+		errf:  "IsErrUnexpectedEOF",
 	}, {
 		// Truncated inside raw data.
 		name: "RawBlockTruncated4",
@@ -144,7 +151,7 @@ func TestReader(t *testing.T) {
 		output: dh("68656c6c6f"),
 		inIdx:  10,
 		outIdx: 5,
-		err:    io.ErrUnexpectedEOF,
+		errf:   "IsErrUnexpectedEOF",
 	}, {
 		// Truncated before next block.
 		name: "RawBlockTruncated5",
@@ -156,7 +163,7 @@ func TestReader(t *testing.T) {
 		output: dh("68656c6c6f2c20776f726c64"),
 		inIdx:  17,
 		outIdx: 12,
-		err:    io.ErrUnexpectedEOF,
+		errf:   "IsErrUnexpectedEOF",
 	}, {
 		name: "FixedBlockShortest",
 		input: db(`<<<
@@ -209,7 +216,7 @@ func TestReader(t *testing.T) {
 			X:deadcafe # ???
 		`),
 		inIdx: 1,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Use reserved HLit symbol 287 in fixed block.
 		name: "ReservedHLitSymbol",
@@ -220,7 +227,7 @@ func TestReader(t *testing.T) {
 		output: dh("30"),
 		inIdx:  3,
 		outIdx: 1,
-		err:    ErrCorrupt,
+		errf:   "IsCorrupted",
 	}, {
 		// Use reserved HDist symbol 30 in fixed block.
 		name: "ReservedHDistSymbol",
@@ -232,7 +239,7 @@ func TestReader(t *testing.T) {
 		output: dh("00"),
 		inIdx:  3,
 		outIdx: 1,
-		err:    ErrCorrupt,
+		errf:   "IsCorrupted",
 	}, {
 		// Degenerate HCLenTree.
 		name: "HuffmanTree00",
@@ -243,7 +250,7 @@ func TestReader(t *testing.T) {
 			> 0*256 1         # Use invalid HCLen code 1
 		`),
 		inIdx: 42,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Degenerate HCLenTree, empty HLitTree, empty HDistTree.
 		name: "HuffmanTree01",
@@ -254,7 +261,7 @@ func TestReader(t *testing.T) {
 			> 0*258            # HLits: {}, HDists: {}
 		`),
 		inIdx: 42,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Empty HCLenTree.
 		name: "HuffmanTree02",
@@ -265,7 +272,7 @@ func TestReader(t *testing.T) {
 			> 0*258           # Use invalid HCLen code 0
 		`),
 		inIdx: 10,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Complete HCLenTree, complete HLitTree, empty HDistTree,
 		// use missing HDist symbol.
@@ -285,7 +292,7 @@ func TestReader(t *testing.T) {
 		output: dh("7a"),
 		inIdx:  48,
 		outIdx: 1,
-		err:    ErrCorrupt,
+		errf:   "IsCorrupted",
 	}, {
 		// Complete HCLenTree, degenerate HLitTree, empty HDistTree.
 		name: "HuffmanTree04",
@@ -299,7 +306,7 @@ func TestReader(t *testing.T) {
 		output: db("<<< X:00*31"),
 		inIdx:  46,
 		outIdx: 31,
-		err:    ErrCorrupt,
+		errf:   "IsCorrupted",
 	}, {
 		// Complete HCLenTree, degenerate HLitTree, degenerate HDistTree.
 		name: "HuffmanTree05",
@@ -313,7 +320,7 @@ func TestReader(t *testing.T) {
 		output: db("<<< X:00*31"),
 		inIdx:  46,
 		outIdx: 31,
-		err:    ErrCorrupt,
+		errf:   "IsCorrupted",
 	}, {
 		// Complete HCLenTree, degenerate HLitTree, degenerate HDistTree,
 		// use missing HLit symbol.
@@ -326,7 +333,7 @@ func TestReader(t *testing.T) {
 			> 1                        # Use invalid HLit code 1
 		`),
 		inIdx: 42,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Complete HCLenTree, complete HLitTree, too large HDistTree.
 		name: "HuffmanTree07",
@@ -336,7 +343,7 @@ func TestReader(t *testing.T) {
 			<1000011 X:05000000002004 X:00*39 X:04 # ???
 		`),
 		inIdx: 3,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Complete HCLenTree, complete HLitTree, empty HDistTree,
 		// excessive repeater symbol.
@@ -348,7 +355,7 @@ func TestReader(t *testing.T) {
 			> 10 0*255 10 111 <D7:49 1       # Excessive repeater symbol
 		`),
 		inIdx: 43,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Complete HCLenTree, complete HLitTree, empty HDistTree of length 30.
 		name: "HuffmanTree09",
@@ -370,7 +377,7 @@ func TestReader(t *testing.T) {
 			> 0 1*256 0*28 1*2   # HLits: {*:8}, HDists: {28:8, 29:8}
 		`),
 		inIdx: 46,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// HDistTree of excessive length 31.
 		name: "HuffmanTree11",
@@ -380,7 +387,7 @@ func TestReader(t *testing.T) {
 			<0*7 X:240000000000f8 X:ff*31 X:07000000fc03 # ???
 		`),
 		inIdx: 3,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Complete HCLenTree, over-subscribed HLitTree.
 		name: "HuffmanTree12",
@@ -392,7 +399,7 @@ func TestReader(t *testing.T) {
 			<0*4 X:f00f          # ???
 		`),
 		inIdx: 42,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Complete HCLenTree, under-subscribed HLitTree.
 		name: "HuffmanTree13",
@@ -404,7 +411,7 @@ func TestReader(t *testing.T) {
 			<0*4 X:f00f          # ???
 		`),
 		inIdx: 42,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Complete HCLenTree, complete HLitTree, empty HDistTree,
 		// no EOB symbol.
@@ -419,7 +426,7 @@ func TestReader(t *testing.T) {
 		output: dh("00ff"),
 		inIdx:  44,
 		outIdx: 2,
-		err:    io.ErrUnexpectedEOF,
+		errf:   "IsErrUnexpectedEOF",
 	}, {
 		// Complete HCLenTree, complete HLitTree, empty HDistTree.
 		name: "HuffmanTree15",
@@ -531,7 +538,7 @@ func TestReader(t *testing.T) {
 			> 0000 0001 0010 1111
 		`),
 		inIdx: 7,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Complete HCLenTree with length codes, complete HLitTree,
 		// empty HDistTree.
@@ -654,7 +661,7 @@ func TestReader(t *testing.T) {
 		`),
 		inIdx:  32776,
 		outIdx: 32767,
-		err:    ErrCorrupt,
+		errf:   "IsCorrupted",
 	}, {
 		// Invalid short distance match with no data.
 		name: "DistanceMatch3",
@@ -664,7 +671,7 @@ func TestReader(t *testing.T) {
 			> 0000000      # EOB marker
 		`),
 		inIdx: 2,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Invalid long distance match with no data.
 		name: "DistanceMatch4",
@@ -674,7 +681,7 @@ func TestReader(t *testing.T) {
 			> 0000000                 # EOB marker
 		`),
 		inIdx: 4,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Large HLitTree caused a panic.
 		name: "Issue3815",
@@ -688,7 +695,7 @@ func TestReader(t *testing.T) {
 			X:0f1211b9b44b09a0be8b914c
 		`),
 		inIdx: 3,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Over-subscribed HCLenTree caused a hang.
 		name: "Issue10426",
@@ -699,7 +706,7 @@ func TestReader(t *testing.T) {
 			<01001 X:4d4b070000ff2e2eff2e2e2e2e2eff # ???
 		`),
 		inIdx: 5,
-		err:   ErrCorrupt,
+		errf:  "IsCorrupted",
 	}, {
 		// Empty HDistTree unexpectedly led to an error.
 		name: "Issue11030",
@@ -757,9 +764,6 @@ func TestReader(t *testing.T) {
 				err = cerr
 			}
 
-			if err != v.err {
-				t.Errorf("error mismatch: got %v, want %v", err, v.err)
-			}
 			if !bytes.Equal(output, v.output) {
 				t.Errorf("output mismatch:\ngot  %x\nwant %x", output, v.output)
 			}
@@ -769,13 +773,18 @@ func TestReader(t *testing.T) {
 			if rd.OutputOffset != v.outIdx {
 				t.Errorf("output offset mismatch: got %d, want %d", rd.OutputOffset, v.outIdx)
 			}
+			if v.errf != "" && !errFuncs[v.errf](err) {
+				t.Errorf("mismatching error:\ngot %v\nwant %s(err) == true", err, v.errf)
+			} else if v.errf == "" && err != nil {
+				t.Errorf("unexpected error: got %v", err)
+			}
 
 			// If the zcheck flag is set, then we verify that the test vectors
 			// themselves are consistent with what the C zlib library outputs.
 			// To do that, we use the python wrapper around the library.
 			if *zcheck {
 				output, err := pyDecompress(v.input)
-				if got, want := bool(v.err == nil), bool(err == nil); got != want {
+				if got, want := bool(v.errf == ""), bool(err == nil); got != want {
 					t.Errorf("pass mismatch: got %v, want %v", got, want)
 				}
 				if err == nil && !bytes.Equal(v.output, output) {
@@ -874,11 +883,11 @@ func TestReaderReset(t *testing.T) {
 	}
 
 	rd.Reset(strings.NewReader("garbage"))
-	if _, err := ioutil.ReadAll(&rd); err != ErrCorrupt {
-		t.Errorf("mismatching Read error: got %v, want %v", err, ErrCorrupt)
+	if _, err := ioutil.ReadAll(&rd); !errors.IsCorrupted(err) {
+		t.Errorf("mismatching Read error: got %v, want IsCorrupted(err) == true", err)
 	}
-	if err := rd.Close(); err != ErrCorrupt {
-		t.Errorf("mismatching Close error: got %v, want %v", err, ErrCorrupt)
+	if err := rd.Close(); !errors.IsCorrupted(err) {
+		t.Errorf("mismatching Close error: got %v, want IsCorrupted(err) == true", err)
 	}
 
 	rd.Reset(strings.NewReader(data))

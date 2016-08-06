@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/dsnet/compress/internal"
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/internal/prefix"
 )
 
@@ -60,7 +61,7 @@ func (pr *prefixReader) ReadPrefixCodes(codes []prefix.PrefixCodes, trees []pref
 		for sym := 0; sym < len(pc); sym++ {
 			for {
 				if clen < 1 || clen > maxPrefixBits {
-					panic(ErrCorrupt)
+					errors.Panic(errCorrupted)
 				}
 
 				b, ok := pr.TryReadBits(1)
@@ -84,7 +85,7 @@ func (pr *prefixReader) ReadPrefixCodes(codes []prefix.PrefixCodes, trees []pref
 		if sum == 0 {
 			// Fast path, but only handles complete trees.
 			if err := prefix.GeneratePrefixes(pc); err != nil {
-				panic(err)
+				errors.Panic(err)
 			}
 		} else {
 			// Slow path, but handles anything.
@@ -118,7 +119,7 @@ func (pw *prefixWriter) WriteBitsBE64(v uint64, nb uint) {
 func (pw *prefixWriter) WritePrefixCodes(codes []prefix.PrefixCodes, trees []prefix.Encoder) {
 	for i, pc := range codes {
 		if err := prefix.GeneratePrefixes(pc); err != nil {
-			panic(err)
+			errors.Panic(err)
 		}
 		trees[i].Init(pc)
 

@@ -4,6 +4,10 @@
 
 package bzip2
 
+import (
+	"github.com/dsnet/compress/internal/errors"
+)
+
 // moveToFront implements both the MTF and RLE stages of bzip2 at the same time.
 // Any runs of zeros in the encoded output will be replaced by a sequence of
 // RUNA and RUNB symbols are encode the length of the run.
@@ -31,7 +35,7 @@ type moveToFront struct {
 
 func (mtf *moveToFront) Init(dict []uint8, blkSize int) {
 	if len(dict) > len(mtf.dictBuf) {
-		panic("alphabet too large")
+		errors.Panic(errorf(errors.Internal, "alphabet too large"))
 	}
 	copy(mtf.dictBuf[:], dict)
 	mtf.dictLen = len(dict)
@@ -43,7 +47,7 @@ func (mtf *moveToFront) Encode(vals []byte) (syms []uint16) {
 	syms = mtf.syms[:0]
 
 	if len(vals) > mtf.blkSize {
-		panic(errInvalid)
+		errors.Panic(errorf(errors.Internal, "exceeded block size"))
 	}
 
 	var lastNum uint32
@@ -97,7 +101,7 @@ func (mtf *moveToFront) Decode(syms []uint16) (vals []byte) {
 		if lastCnt > 0 {
 			cnt := int((1<<lastCnt)|lastRun) - 1
 			if len(vals)+cnt > mtf.blkSize || lastCnt > 24 {
-				panic(ErrCorrupt)
+				errors.Panic(errCorrupted)
 			}
 			for i := cnt; i > 0; i-- {
 				vals = append(vals, dict[0])
@@ -111,14 +115,14 @@ func (mtf *moveToFront) Decode(syms []uint16) (vals []byte) {
 		dict[0] = val
 
 		if len(vals) >= mtf.blkSize {
-			panic(ErrCorrupt)
+			errors.Panic(errCorrupted)
 		}
 		vals = append(vals, val)
 	}
 	if lastCnt > 0 {
 		cnt := int((1<<lastCnt)|lastRun) - 1
 		if len(vals)+cnt > mtf.blkSize || lastCnt > 24 {
-			panic(ErrCorrupt)
+			errors.Panic(errCorrupted)
 		}
 		for i := cnt; i > 0; i-- {
 			vals = append(vals, dict[0])

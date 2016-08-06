@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"io"
 
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/internal/prefix"
 )
 
@@ -184,7 +185,7 @@ func (mw *Writer) computeCounts(buf []byte, maxOnes int, final, invert bool) []i
 // what is in buf. If successful, it will clear bufCnt, buf0s, and buf1s.
 // It also manages the statistic variables: OutputOffset and NumBlocks.
 func (mw *Writer) encodeBlock(final FinalMode) (err error) {
-	defer errRecover(&err)
+	defer errors.Recover(&err)
 
 	mw.bb.Reset()
 	mw.bw.Init(&mw.bb, false)
@@ -192,7 +193,7 @@ func (mw *Writer) encodeBlock(final FinalMode) (err error) {
 	buf := mw.buf[:mw.bufCnt]
 	huffLen, inv := mw.computeHuffLen(mw.buf0s, mw.buf1s)
 	if huffLen == 0 {
-		panic(ErrInvalid)
+		return errorf(errors.Invalid, "block too large to encode")
 	}
 
 	// Encode header.
@@ -265,7 +266,7 @@ func (mw *Writer) encodeBlock(final FinalMode) (err error) {
 	cnt, err := mw.wr.Write(mw.bb.Bytes())
 	mw.OutputOffset += int64(cnt)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	mw.bufCnt, mw.buf0s, mw.buf1s = 0, 0, 0
 	mw.NumBlocks++

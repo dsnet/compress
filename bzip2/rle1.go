@@ -4,8 +4,12 @@
 
 package bzip2
 
+import (
+	"github.com/dsnet/compress/internal/errors"
+)
+
 // rleDone is a special "error" to indicate that the RLE buffer is depleted.
-var rleDone error = Error{"done with RLE stage"}
+var rleDone = errorf(errors.Unknown, "RLE1 buffer is full")
 
 // runLengthEncoding implements the first RLE stage of bzip2. Every sequence
 // of 4..255 duplicated bytes is replaced by only the first 4 bytes, and a

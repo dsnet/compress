@@ -7,7 +7,7 @@ package flate
 import (
 	"io"
 
-	"github.com/dsnet/compress/internal"
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/internal/prefix"
 )
 
@@ -72,16 +72,14 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 		// Perform next step in decompression process.
 		zr.rd.Offset = zr.InputOffset
 		func() {
-			defer errRecover(&zr.err)
+			defer errors.Recover(&zr.err)
 			zr.step(zr)
 		}()
 		var err error
 		if zr.InputOffset, err = zr.rd.Flush(); err != nil {
 			zr.err = err
 		}
-		if zr.err == internal.ErrInvalid {
-			zr.err = ErrCorrupt
-		}
+		zr.err = errWrap(zr.err, errors.Corrupted)
 		if zr.err != nil && len(zr.toRead) == 0 {
 			zr.toRead = zr.dict.ReadFlush() // Flush what's left in case of error
 		}
@@ -90,8 +88,8 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 
 func (zr *Reader) Close() error {
 	zr.toRead = nil // Make sure future reads fail
-	if zr.err == io.EOF || zr.err == ErrClosed {
-		zr.err = ErrClosed
+	if zr.err == io.EOF || zr.err == errClosed {
+		zr.err = errClosed
 		return nil
 	}
 	return zr.err // Return the persistent error
@@ -108,7 +106,7 @@ func (zr *Reader) readBlockHeader() {
 		n := uint16(zr.rd.ReadBits(16))
 		nn := uint16(zr.rd.ReadBits(16))
 		if n^nn != 0xffff {
-			panic(ErrCorrupt)
+			errors.Panic(errCorrupted)
 		}
 		zr.blkLen = int(n)
 
@@ -130,7 +128,7 @@ func (zr *Reader) readBlockHeader() {
 		zr.step = (*Reader).readBlock
 	default:
 		// Reserved block (RFC section 3.2.3).
-		panic(ErrCorrupt)
+		errors.Panic(errCorrupted)
 	}
 }
 
@@ -148,7 +146,7 @@ func (zr *Reader) readRawData() {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
-		panic(err)
+		errors.Panic(err)
 	}
 
 	if zr.blkLen > 0 {
@@ -211,7 +209,7 @@ readLiteral:
 				distSym = zr.rd.ReadSymbol(zr.distTree)
 			}
 			if distSym >= maxNumDistSyms {
-				panic(ErrCorrupt)
+				errors.Panic(errCorrupted)
 			}
 
 			// Decode the copy distance.
@@ -222,12 +220,12 @@ readLiteral:
 			}
 			zr.dist = int(rec.Base) + int(extra)
 			if zr.dist > zr.dict.HistSize() {
-				panic(ErrCorrupt)
+				errors.Panic(errCorrupted)
 			}
 
 			goto copyDistance
 		default:
-			panic(ErrCorrupt)
+			errors.Panic(errCorrupted)
 		}
 	}
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/dsnet/compress"
 	"github.com/dsnet/compress/internal"
+	"github.com/dsnet/compress/internal/errors"
 )
 
 // Reader implements a prefix decoder. If the input io.Reader satisfies the
@@ -126,7 +127,7 @@ func (pr *Reader) ReadPads() uint {
 func (pr *Reader) Read(buf []byte) (cnt int, err error) {
 	if pr.numBits > 0 {
 		if pr.numBits%8 != 0 {
-			return 0, internal.Error{"non-aligned bit buffer"}
+			return 0, errUnaligned
 		}
 		for cnt = 0; len(buf) > cnt && pr.numBits > 0; cnt++ {
 			buf[cnt] = pr.transform[byte(pr.bufBits)]
@@ -167,7 +168,7 @@ func (pr *Reader) TryReadBits(nb uint) (uint, bool) {
 // ReadBits reads nb bits in from the underlying reader.
 func (pr *Reader) ReadBits(nb uint) uint {
 	if err := pr.PullBits(nb); err != nil {
-		panic(err)
+		errors.Panic(err)
 	}
 	val := uint(pr.bufBits & uint64(1<<nb-1))
 	pr.bufBits >>= nb
@@ -196,13 +197,13 @@ func (pr *Reader) TryReadSymbol(pd *Decoder) (uint, bool) {
 // ReadSymbol reads the next symbol using the provided prefix Decoder.
 func (pr *Reader) ReadSymbol(pd *Decoder) uint {
 	if len(pd.chunks) == 0 {
-		panic(internal.ErrInvalid) // Decode with empty tree
+		errors.Panic(errInvalid) // Decode with empty tree
 	}
 
 	nb := uint(pd.MinBits)
 	for {
 		if err := pr.PullBits(nb); err != nil {
-			panic(err)
+			errors.Panic(err)
 		}
 		chunk := pd.chunks[uint32(pr.bufBits)&pd.chunkMask]
 		nb = uint(chunk & countMask)

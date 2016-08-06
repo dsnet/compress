@@ -6,9 +6,20 @@
 package prefix
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/dsnet/compress/internal"
+	"github.com/dsnet/compress/internal/errors"
+)
+
+func errorf(c int, f string, a ...interface{}) error {
+	return errors.Error{c, "prefix", fmt.Sprintf(f, a...)}
+}
+
+var (
+	errInvalid   = errorf(errors.Invalid, "")
+	errUnaligned = errorf(errors.Invalid, "non-aligned bit buffer")
 )
 
 const (
@@ -134,7 +145,7 @@ func GenerateLengths(codes PrefixCodes, maxBits uint) error {
 	cntLast := codes[0].Cnt
 	for _, c := range codes[1:] {
 		if c.Cnt < cntLast {
-			return internal.ErrInvalid // Non-monotonically increasing
+			return errInvalid // Non-monotonically increasing
 		}
 		cntLast = c.Cnt
 	}
@@ -315,7 +326,7 @@ func GeneratePrefixes(codes PrefixCodes) error {
 	if len(codes) <= 1 {
 		if len(codes) == 1 {
 			if codes[0].Len != 0 {
-				return internal.ErrInvalid
+				return errInvalid
 			}
 			codes[0].Val = 0
 		}
@@ -329,7 +340,7 @@ func GeneratePrefixes(codes PrefixCodes) error {
 	minBits, maxBits, symLast := c0.Len, c0.Len, c0.Sym
 	for _, c := range codes[1:] {
 		if c.Sym <= symLast {
-			return internal.ErrInvalid // Non-unique or non-monotonically increasing
+			return errInvalid // Non-unique or non-monotonically increasing
 		}
 		if minBits > c.Len {
 			minBits = c.Len
@@ -341,7 +352,7 @@ func GeneratePrefixes(codes PrefixCodes) error {
 		symLast = c.Sym  // Keep track of last symbol
 	}
 	if minBits == 0 {
-		return internal.ErrInvalid // Bit-length is too short
+		return errInvalid // Bit-length is too short
 	}
 
 	// Compute the next code for a symbol of a given bit length.
@@ -353,7 +364,7 @@ func GeneratePrefixes(codes PrefixCodes) error {
 		code += bitCnts[i]
 	}
 	if code != 1<<maxBits {
-		return internal.ErrInvalid // Tree is under or over subscribed
+		return errInvalid // Tree is under or over subscribed
 	}
 
 	// Assign the code to each symbol.

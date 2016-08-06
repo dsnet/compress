@@ -7,7 +7,6 @@ package xflate_test
 import (
 	"archive/zip"
 	"bytes"
-	"compress/flate"
 	"compress/gzip"
 	"encoding/binary"
 	"fmt"
@@ -15,7 +14,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"math/rand"
 
 	"github.com/dsnet/compress/internal/testutil"
 	"github.com/dsnet/compress/xflate"
@@ -98,7 +96,7 @@ func Example_zipFile() {
 
 		// Since we know that the writer used the XFLATE format, we can open
 		// the compressed file as an xflate.Reader. If the file was compressed
-		// with regular DEFLATE, then this will return ErrCorrupt.
+		// with regular DEFLATE, then this will return an error.
 		xr, err := xflate.NewReader(rds, nil)
 		if err != nil {
 			log.Fatal(err)
@@ -218,7 +216,7 @@ func Example_gzipFile() {
 
 		// Since we know that the writer used the XFLATE format, we can open
 		// the compressed file as an xflate.Reader. If the file was compressed
-		// with regular DEFLATE, then this will return ErrCorrupt.
+		// with regular DEFLATE, then this will return an error.
 		xr, err := xflate.NewReader(rds, nil)
 		if err != nil {
 			log.Fatal(err)

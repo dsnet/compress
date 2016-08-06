@@ -156,7 +156,7 @@ func TestWriter(t *testing.T) {
 		fr := flate.NewReader(rd)
 		buf, err := ioutil.ReadAll(fr)
 		if err != nil {
-			t.Errorf("test %d (%s), unexpected error: ReadAll(): %v", i, v.desc, err)
+			t.Errorf("test %d (%s), unexpected error: ReadAll() = %v", i, v.desc, err)
 		}
 		if !bytes.Equal(buf, bb.Bytes()) {
 			t.Errorf("test %d (%s), mismatching bytes:\ngot  %q\nwant %q", i, v.desc, buf, bb.Bytes())

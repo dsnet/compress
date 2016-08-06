@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/internal/testutil"
 )
 
@@ -18,14 +19,17 @@ import (
 // there are many possible representations. Before changing the test vectors to
 // make a test pass, one must verify the new output is correct.
 func TestWriter(t *testing.T) {
-	var dh = testutil.MustDecodeHex
+	dh := testutil.MustDecodeHex
 
-	var vectors = []struct {
+	errFuncs := map[string]func(error) bool{
+		"IsInvalid": errors.IsInvalid,
+	}
+	vectors := []struct {
 		desc   string    // Description of the text
 		input  []byte    // Test input string
 		output []byte    // Expected output string
 		final  FinalMode // Input final mode
-		err    error     // Expected error
+		errf   string    // Name of error checking callback
 	}{{
 		desc:   "empty meta block (FinalNil)",
 		input:  dh(""),
@@ -155,12 +159,12 @@ func TestWriter(t *testing.T) {
 		desc:  "input hex-string '55'*31",
 		input: dh("55555555555555555555555555555555555555555555555555555555555555"),
 		final: FinalStream,
-		err:   ErrInvalid,
+		errf:  "IsInvalid",
 	}, {
 		desc:  "input hex-string '55'*32",
 		input: dh("5555555555555555555555555555555555555555555555555555555555555555"),
 		final: FinalMeta,
-		err:   ErrInvalid,
+		errf:  "IsInvalid",
 	}, {
 		desc:   "input hex-string '73de76bebcf69d5fed3fb3cee87bacfd7de876facffedf'",
 		input:  dh("73de76bebcf69d5fed3fb3cee87bacfd7de876facffedf"),
@@ -170,7 +174,7 @@ func TestWriter(t *testing.T) {
 		desc:  "input hex-string '73de76bebcf69d5fed3fb3cee87bacfd7de876facffede'",
 		input: dh("73de76bebcf69d5fed3fb3cee87bacfd7de876facffede"),
 		final: FinalStream,
-		err:   ErrInvalid,
+		errf:  "IsInvalid",
 	}, {
 		desc:   "input hex-string 'def773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9'",
 		input:  dh("def773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9"),
@@ -180,7 +184,7 @@ func TestWriter(t *testing.T) {
 		desc:  "input hex-string 'dff773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9'",
 		input: dh("dff773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9"),
 		final: FinalMeta,
-		err:   ErrInvalid,
+		errf:  "IsInvalid",
 	}}
 
 	for i, v := range vectors {
@@ -200,8 +204,10 @@ func TestWriter(t *testing.T) {
 		if len(output) != int(mw.OutputOffset) {
 			t.Errorf("test %d (%s), mismatching offset: got %d, want %d", i, v.desc, len(output), mw.OutputOffset)
 		}
-		if err != v.err {
-			t.Errorf("test %d (%s), unexpected error: got %v, want %v", i, v.desc, err, v.err)
+		if v.errf != "" && !errFuncs[v.errf](err) {
+			t.Errorf("test %d (%s), mismatching error:\ngot %v\nwant %s(got) == true", i, v.desc, err, v.errf)
+		} else if v.errf == "" && err != nil {
+			t.Errorf("test %d (%s), unexpected error: got %v", i, v.desc, err)
 		}
 	}
 }

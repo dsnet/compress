@@ -7,6 +7,8 @@ package bzip2
 import (
 	"reflect"
 	"testing"
+
+	"github.com/dsnet/compress/internal/errors"
 )
 
 func TestMoveToFront(t *testing.T) {
@@ -120,7 +122,7 @@ func TestMoveToFront(t *testing.T) {
 		var input []byte
 		var output []uint16
 		func() {
-			defer errRecover(&err)
+			defer errors.Recover(&err)
 			if v.size == 0 {
 				v.size = 1 << 20
 			}

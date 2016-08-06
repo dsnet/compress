@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/dsnet/compress/internal"
+	"github.com/dsnet/compress/internal/errors"
 )
 
 // Writer implements a prefix encoder. For performance reasons, Writer will not
@@ -50,7 +51,7 @@ func (pw *Writer) WritePads(v uint) {
 func (pw *Writer) Write(buf []byte) (cnt int, err error) {
 	if pw.numBits > 0 || pw.cntBuf > 0 {
 		if pw.numBits%8 != 0 {
-			return 0, internal.Error{"non-aligned bit buffer"}
+			return 0, errUnaligned
 		}
 		if _, err := pw.Flush(); err != nil {
 			return 0, err
@@ -86,7 +87,7 @@ func (pw *Writer) TryWriteBits(v, nb uint) bool {
 // WriteBits writes nb bits of v to the underlying writer.
 func (pw *Writer) WriteBits(v, nb uint) {
 	if _, err := pw.PushBits(); err != nil {
-		panic(err)
+		errors.Panic(err)
 	}
 	pw.bufBits |= uint64(v) << pw.numBits
 	pw.numBits += nb
@@ -110,7 +111,7 @@ func (pw *Writer) TryWriteSymbol(sym uint, pe *Encoder) bool {
 // WriteSymbol writes the symbol using the provided prefix Encoder.
 func (pw *Writer) WriteSymbol(sym uint, pe *Encoder) {
 	if _, err := pw.PushBits(); err != nil {
-		panic(err)
+		errors.Panic(err)
 	}
 	chunk := pe.chunks[uint32(sym)&pe.chunkMask]
 	nb := uint(chunk & countMask)

@@ -53,7 +53,7 @@ func testBackwardCompatibility(t *testing.T, b []byte) {
 func TestRoundTrip(t *testing.T) {
 	testBackwardCompatibility(t, nil)
 
-	var vectors = [][]byte{
+	vectors := [][]byte{
 		nil, testBinary, testDigits, testHuffman, testRandom, testRepeats, testTwain, testZeros,
 	}
 

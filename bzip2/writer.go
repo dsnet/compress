@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/dsnet/compress/internal"
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/internal/prefix"
 )
 
@@ -45,7 +46,7 @@ func NewWriter(w io.Writer, conf *WriterConfig) (*Writer, error) {
 		lvl = DefaultCompression
 	}
 	if lvl < BestSpeed || lvl > BestCompression {
-		return nil, Error{"invalid compression level"}
+		return nil, errorf(errors.Invalid, "compression level: %d", lvl)
 	}
 	zw := new(Writer)
 	zw.level = lvl
@@ -95,7 +96,7 @@ func (zw *Writer) flush() error {
 	}
 	zw.wr.Offset = zw.OutputOffset
 	func() {
-		defer errRecover(&zw.err)
+		defer errors.Recover(&zw.err)
 		if !zw.wrHdr {
 			// Write stream header.
 			zw.wr.WriteBitsBE64(hdrMagic, 16)
@@ -106,13 +107,11 @@ func (zw *Writer) flush() error {
 		zw.encodeBlock(vals)
 	}()
 	var err error
-	if zw.OutputOffset, err = zw.wr.Flush(); err != nil {
+	if zw.OutputOffset, err = zw.wr.Flush(); zw.err == nil {
 		zw.err = err
 	}
 	if zw.err != nil {
-		if zw.err == internal.ErrInvalid {
-			zw.err = errInvalid
-		}
+		zw.err = errWrap(zw.err, errors.Internal)
 		return zw.err
 	}
 	zw.endCRC = (zw.endCRC<<1 | zw.endCRC>>31) ^ zw.blkCRC
@@ -122,7 +121,7 @@ func (zw *Writer) flush() error {
 }
 
 func (zw *Writer) Close() error {
-	if zw.err == ErrClosed {
+	if zw.err == errClosed {
 		return nil
 	}
 
@@ -134,7 +133,7 @@ func (zw *Writer) Close() error {
 	// Write stream footer.
 	zw.wr.Offset = zw.OutputOffset
 	func() {
-		defer errRecover(&zw.err)
+		defer errors.Recover(&zw.err)
 		if !zw.wrHdr {
 			// Write stream header.
 			zw.wr.WriteBitsBE64(hdrMagic, 16)
@@ -147,21 +146,16 @@ func (zw *Writer) Close() error {
 		zw.wr.WritePads(0)
 	}()
 	var err error
-	if zw.OutputOffset, err = zw.wr.Flush(); err != nil {
+	if zw.OutputOffset, err = zw.wr.Flush(); zw.err == nil {
 		zw.err = err
 	}
 	if zw.err != nil {
-		if zw.err == internal.ErrInvalid {
-			zw.err = errInvalid
-		}
+		zw.err = errWrap(zw.err, errors.Internal)
 		return zw.err
 	}
 
-	if zw.err == nil {
-		zw.err = ErrClosed
-		return nil
-	}
-	return zw.err
+	zw.err = errClosed
+	return nil
 }
 
 func (zw *Writer) encodeBlock(buf []byte) {
@@ -207,11 +201,11 @@ func (zw *Writer) encodeBlock(buf []byte) {
 }
 
 func (zw *Writer) encodePrefix(syms []uint16, numSyms int) {
-	numSyms += 2 // Remove 0 symbol, add RUNA, RUNB, and EOF symbols
+	numSyms += 2 // Remove 0 symbol, add RUNA, RUNB, and EOB symbols
 	if numSyms < 3 {
-		panic(errInvalid) // Not possible to encode EOF marker
+		errors.Panic(errorf(errors.Internal, "unable to encode EOB marker"))
 	}
-	syms = append(syms, uint16(numSyms-1)) // EOF marker
+	syms = append(syms, uint16(numSyms-1)) // EOB marker
 
 	// Compute number of prefix trees needed.
 	numTrees := maxNumTrees
@@ -261,7 +255,7 @@ func (zw *Writer) encodePrefix(syms []uint16, numSyms int) {
 		pc := prefix.PrefixCodes(codes2D[i][:numSyms])
 		pc.SortByCount()
 		if err := prefix.GenerateLengths(pc, maxPrefixBits); err != nil {
-			panic(err)
+			errors.Panic(err)
 		}
 		pc.SortBySymbol()
 	}

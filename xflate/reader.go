@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"math"
 
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/xflate/meta"
 )
 
@@ -39,6 +40,13 @@ func (cr *chunkReader) Reset(rd io.Reader, n int64) {
 }
 
 func (cr *chunkReader) Read(buf []byte) (int, error) {
+	max := func(a, b int) int {
+		if a < b {
+			return b
+		}
+		return a
+	}
+
 	// Append endBlock marker.
 	if cr.end != nil {
 		n := copy(buf, cr.end)
@@ -94,7 +102,7 @@ type ReaderConfig struct {
 
 // NewReader creates a new Reader reading the given reader rs. This reader can
 // only decompress files in the XFLATE format. If the underlying stream is
-// regular DEFLATE and not XFLATE, then this returns (nil, ErrCorrupt).
+// regular DEFLATE and not XFLATE, then this returns error.
 //
 // Regardless of the current offset in rs, this function Seeks to the end of rs
 // in order to determine the total compressed size. The Reader returned has its
@@ -139,7 +147,7 @@ func (xr *Reader) Reset(rs io.ReadSeeker) error {
 		return xr.err
 	}
 	if !xr.idx.AppendRecord(footSize, 0, footerType) {
-		xr.err = ErrCorrupt
+		xr.err = errCorrupted
 		return xr.err
 	}
 
@@ -165,7 +173,7 @@ func (xr *Reader) Read(buf []byte) (int, error) {
 			return 0, xr.err
 		}
 		if n != xr.discard {
-			xr.err = ErrCorrupt
+			xr.err = errCorrupted
 			return 0, xr.err
 		}
 		xr.discard = 0
@@ -180,7 +188,7 @@ func (xr *Reader) Read(buf []byte) (int, error) {
 
 			// Verify that the compressed section ends with an empty raw block.
 			if xr.chk.typ == deflateType && xr.cr.sync != 0x0000ffff {
-				xr.err = ErrCorrupt
+				xr.err = errCorrupted
 				break
 			}
 
@@ -189,7 +197,7 @@ func (xr *Reader) Read(buf []byte) (int, error) {
 				xr.chk.csize += int64(len(endBlock)) // Side of effect of using chunkReader
 			}
 			if xr.chk.csize != xr.zr.InputOffset || xr.chk.rsize != xr.zr.OutputOffset {
-				xr.err = ErrCorrupt
+				xr.err = errCorrupted
 				break
 			}
 
@@ -226,10 +234,10 @@ func (xr *Reader) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekEnd:
 		pos = end + offset
 	default:
-		return 0, Error("invalid whence")
+		return 0, errorf(errors.Invalid, "invalid whence: %d", whence)
 	}
 	if pos < 0 {
-		return 0, Error("negative position")
+		return 0, errorf(errors.Invalid, "negative position: %d", pos)
 	}
 
 	// As an optimization if the new position is within the current chunk,
@@ -298,7 +306,7 @@ func (xr *Reader) decodeIndexes(backSize int64) error {
 		// Seek backwards past index and compressed blocks.
 		newPos := pos - (backSize + compSize)
 		if newPos < 0 || newPos > pos {
-			return ErrCorrupt // Integer overflow for new seek position
+			return errCorrupted // Integer overflow for new seek position
 		}
 		if pos, err = xr.rd.Seek(newPos, io.SeekStart); err != nil {
 			return err
@@ -322,17 +330,17 @@ func (xr *Reader) decodeIndexes(backSize int64) error {
 		backSize, compSize = idx.BackSize, idx.LastRecord().CompOffset
 	}
 	if pos != 0 {
-		return ErrCorrupt
+		return errCorrupted
 	}
 
 	// Compact all indexes into one.
 	for i := len(xr.idxs) - 1; i >= 0; i-- {
 		idx := xr.idxs[i]
 		if !xr.idx.AppendIndex(&idx) {
-			return ErrCorrupt
+			return errCorrupted
 		}
 		if !xr.idx.AppendRecord(idx.IndexSize, 0, indexType) {
-			return ErrCorrupt
+			return errCorrupted
 		}
 	}
 	return nil
@@ -349,7 +357,7 @@ func (xr *Reader) decodeIndex(idx *index) error {
 	var readVLI = func() int64 {
 		x, n := binary.Uvarint(xr.bw.Bytes())
 		if n <= 0 || x > math.MaxInt64 {
-			errVLI = ErrCorrupt
+			errVLI = errCorrupted
 			return 0
 		}
 		xr.bw.Next(n)
@@ -390,27 +398,27 @@ func (xr *Reader) decodeIndex(idx *index) error {
 		xr.chunks = append(xr.chunks, chunk{readVLI(), readVLI(), 0})
 	}
 	if xr.bw.Len() != 4 || binary.LittleEndian.Uint32(xr.bw.Bytes()) != crc {
-		return ErrCorrupt
+		return errCorrupted
 	}
 	if xr.mr.FinalMode != meta.FinalMeta {
-		return ErrCorrupt
+		return errCorrupted
 	}
 	if xr.mr.InputOffset != idx.IndexSize {
-		return ErrCorrupt
+		return errCorrupted
 	}
 
 	// Convert individual index sizes to be absolute offsets.
 	for _, chk := range xr.chunks {
 		if chk.csize <= 4 {
-			return ErrCorrupt // Every chunk has a sync marker
+			return errCorrupted // Every chunk has a sync marker
 		}
 		if !idx.AppendRecord(chk.csize, chk.rsize, deflateType) {
-			return ErrCorrupt
+			return errCorrupted
 		}
 	}
 	lastRec := idx.LastRecord()
 	if lastRec.CompOffset != totalCompSize || lastRec.RawOffset != totalRawSize {
-		return ErrCorrupt
+		return errCorrupted
 	}
 	return nil
 }
@@ -440,7 +448,7 @@ func (xr *Reader) decodeFooter() (backSize, footSize int64, err error) {
 	// Search for and read the meta block.
 	idx := meta.ReverseSearch(xr.br.Bytes())
 	if idx < 0 {
-		return 0, 0, ErrCorrupt
+		return 0, 0, errCorrupted
 	}
 	xr.br.Next(idx) // Skip data until magic marker
 
@@ -450,10 +458,10 @@ func (xr *Reader) decodeFooter() (backSize, footSize int64, err error) {
 		return 0, 0, errWrap(err)
 	}
 	if xr.br.Len() != 0 || xr.mr.NumBlocks != 1 {
-		return 0, 0, ErrCorrupt
+		return 0, 0, errCorrupted
 	}
 	if xr.mr.FinalMode != meta.FinalStream {
-		return 0, 0, ErrCorrupt
+		return 0, 0, errCorrupted
 	}
 	if _, err := xr.rd.Seek(-xr.mr.InputOffset, io.SeekCurrent); err != nil {
 		return 0, 0, err
@@ -462,14 +470,14 @@ func (xr *Reader) decodeFooter() (backSize, footSize int64, err error) {
 	// Parse the footer.
 	bufRaw := xr.bw.Bytes()
 	if len(bufRaw) < 3 || !bytes.Equal(bufRaw[:3], magic[:]) {
-		return 0, 0, ErrCorrupt // Magic value mismatch
+		return 0, 0, errCorrupted // Magic value mismatch
 	}
 	backSizeU64, cnt := binary.Uvarint(bufRaw[3:])
 	if cnt <= 0 {
-		return 0, 0, ErrCorrupt // Integer overflow for VLI
+		return 0, 0, errCorrupted // Integer overflow for VLI
 	}
 	if len(bufRaw[3+cnt:]) > 0 {
-		return 0, 0, ErrCorrupt // Trailing unread bytes
+		return 0, 0, errCorrupted // Trailing unread bytes
 	}
 	return int64(backSizeU64), xr.mr.InputOffset, nil
 }

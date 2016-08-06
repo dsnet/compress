@@ -8,15 +8,6 @@
 // require that the caller to ensure that strict invariants are kept.
 package internal
 
-// Error is the wrapper type for errors specific to this library.
-type Error struct{ ErrorString string }
-
-func (e Error) Error() string { return "compress: " + e.ErrorString }
-
-var (
-	ErrInvalid error = Error{"invalid operation"}
-)
-
 var (
 	// IdentityLUT returns the input key itself.
 	IdentityLUT [256]byte

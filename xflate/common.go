@@ -39,8 +39,9 @@ package xflate
 
 import (
 	"compress/flate"
+	"fmt"
 
-	"github.com/dsnet/compress/xflate/meta"
+	"github.com/dsnet/compress/internal/errors"
 )
 
 // These are the magic values found in the XFLATE footer.
@@ -109,46 +110,24 @@ const (
 	FlushIndex
 )
 
-// Error is the wrapper type for all errors specific to this package.
-type Error string
+func errorf(c int, f string, a ...interface{}) error {
+	return errors.Error{c, "xflate", fmt.Sprintf(f, a...)}
+}
 
-func (e Error) Error() string  { return "xflate: " + string(e) }
-func (e Error) CompressError() {}
-
-// Errors specific to this package.
 var (
-	errClosed  error = Error("stream is closed")
-	ErrInvalid error = Error("cannot encode stream")
-	ErrCorrupt error = Error("stream is corrupted")
+	errCorrupted = errorf(errors.Corrupted, "")
+	errClosed    = errorf(errors.Closed, "")
 )
 
 func errWrap(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	switch err {
-	case meta.ErrInvalid:
-		return ErrInvalid
-	case meta.ErrCorrupt:
-		return ErrCorrupt
-	}
-
 	switch err := err.(type) {
-	case meta.Error:
-		return Error(err)
+	case errors.Error:
+		return errorf(err.Code, "%s", err.Msg)
 	case flate.CorruptInputError:
-		return ErrCorrupt
+		return errCorrupted
 	case flate.InternalError:
-		return ErrInvalid
+		return errorf(errors.Internal, "%s", string(err))
 	default:
 		return err
 	}
-}
-
-func max(a, b int) int {
-	if a < b {
-		return b
-	}
-	return a
 }

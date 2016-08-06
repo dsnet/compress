@@ -9,6 +9,7 @@ import (
 	"hash/crc32"
 	"io"
 
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/xflate/meta"
 )
 
@@ -81,7 +82,7 @@ func NewWriter(wr io.Writer, conf *WriterConfig) (*Writer, error) {
 		lvl = conf.Level
 		switch {
 		case conf.ChunkSize < 0:
-			return nil, Error("invalid chunk size")
+			return nil, errorf(errors.Invalid, "invalid chunk size: %d", conf.ChunkSize)
 		case conf.ChunkSize > 0:
 			nchk = conf.ChunkSize
 		}
@@ -198,7 +199,7 @@ func (xw *Writer) Flush(mode FlushMode) error {
 		xw.idx.BackSize = backSize
 		return xw.err
 	default:
-		return Error("invalid flush mode")
+		return errorf(errors.Invalid, "invalid flush mode: %d", mode)
 	}
 }
 
@@ -291,7 +292,7 @@ func (xw *Writer) encodeFooter(backSize int64) error {
 		return errWrap(err)
 	}
 	if xw.mw.NumBlocks != 1 {
-		return ErrInvalid // Sanity check: should never happen
+		return errorf(errors.Internal, "footer was not a single block")
 	}
 	return nil
 }

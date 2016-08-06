@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/dsnet/compress/internal"
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/internal/prefix"
 )
 
@@ -63,21 +64,21 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 		// Read the next chunk.
 		zr.rd.Offset = zr.InputOffset
 		func() {
-			defer errRecover(&zr.err)
+			defer errors.Recover(&zr.err)
 			if !zr.rdHdr {
 				// Read stream header.
 				if zr.rd.ReadBitsBE64(16) != hdrMagic {
-					panic(ErrCorrupt)
+					errors.Panic(errCorrupted)
 				}
 				if ver := zr.rd.ReadBitsBE64(8); ver != 'h' {
 					if ver == '0' {
-						panic(ErrDeprecated)
+						errors.Panic(errorf(errors.Deprecated, "bzip1 format is not supported"))
 					}
-					panic(ErrCorrupt)
+					errors.Panic(errCorrupted)
 				}
 				lvl := int(zr.rd.ReadBitsBE64(8)) - '0'
 				if lvl < BestSpeed || lvl > BestCompression {
-					panic(ErrCorrupt)
+					errors.Panic(errCorrupted)
 				}
 				zr.level = lvl
 				zr.rdHdr = true
@@ -86,22 +87,20 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 			zr.rle.Init(buf)
 		}()
 		var err error
-		if zr.InputOffset, err = zr.rd.Flush(); err != nil {
+		if zr.InputOffset, err = zr.rd.Flush(); zr.err == nil {
 			zr.err = err
 		}
 		if zr.err != nil {
-			if zr.err == internal.ErrInvalid {
-				zr.err = ErrCorrupt
-			}
+			zr.err = errWrap(zr.err, errors.Corrupted)
 			return 0, zr.err
 		}
 	}
 }
 
 func (zr *Reader) Close() error {
-	if zr.err == io.EOF || zr.err == ErrClosed {
+	if zr.err == io.EOF || zr.err == errClosed {
 		zr.rle.Init(nil) // Make sure future reads fail
-		zr.err = ErrClosed
+		zr.err = errClosed
 		return nil
 	}
 	return zr.err // Return the persistent error
@@ -114,13 +113,13 @@ func (zr *Reader) decodeBlock() []byte {
 			// TODO(dsnet): Check for block and stream CRC errors.
 			zr.rd.ReadBitsBE64(32)
 			zr.rd.ReadPads()
-			panic(io.EOF)
+			errors.Panic(io.EOF)
 		}
-		panic(ErrCorrupt)
+		errors.Panic(errCorrupted)
 	}
 	zr.blkCRC = uint32(zr.rd.ReadBitsBE64(32))
 	if zr.rd.ReadBitsBE64(1) != 0 {
-		panic(ErrDeprecated)
+		errors.Panic(errorf(errors.Deprecated, "block randomization is not supported"))
 	}
 
 	// Read BWT related fields.
@@ -150,7 +149,7 @@ func (zr *Reader) decodeBlock() []byte {
 
 	// Step 3: Burrows-Wheeler transformation.
 	if ptr >= len(buf) {
-		panic(ErrCorrupt)
+		errors.Panic(errCorrupted)
 	}
 	zr.bwt.Decode(buf, ptr)
 
@@ -160,14 +159,14 @@ func (zr *Reader) decodeBlock() []byte {
 func (zr *Reader) decodePrefix(numSyms int) (syms []uint16) {
 	numSyms += 2 // Remove 0 symbol, add RUNA, RUNB, and EOF symbols
 	if numSyms < 3 {
-		panic(ErrCorrupt) // Not possible to encode EOF marker
+		errors.Panic(errCorrupted) // Not possible to encode EOF marker
 	}
 
 	// Read information about the trees and tree selectors.
 	var mtf internal.MoveToFront
 	numTrees := int(zr.rd.ReadBitsBE64(3))
 	if numTrees < minNumTrees || numTrees > maxNumTrees {
-		panic(ErrCorrupt)
+		errors.Panic(errCorrupted)
 	}
 	numSels := int(zr.rd.ReadBitsBE64(15))
 	treeSels := make([]uint8, numSels)
@@ -177,7 +176,7 @@ func (zr *Reader) decodePrefix(numSyms int) (syms []uint16) {
 			sym = zr.rd.ReadSymbol(&decSel)
 		}
 		if int(sym) >= numTrees {
-			panic(ErrCorrupt)
+			errors.Panic(errCorrupted)
 		}
 		treeSels[i] = uint8(sym)
 	}
@@ -203,7 +202,7 @@ func (zr *Reader) decodePrefix(numSyms int) (syms []uint16) {
 		if blkLen == 0 {
 			blkLen = numBlockSyms
 			if selIdx >= len(treeSels) {
-				panic(ErrCorrupt)
+				errors.Panic(errCorrupted)
 			}
 			tree = &trees1D[treeSels[selIdx]]
 			selIdx++
@@ -218,10 +217,10 @@ func (zr *Reader) decodePrefix(numSyms int) (syms []uint16) {
 			break // EOF marker
 		}
 		if int(sym) >= numSyms {
-			panic(ErrCorrupt) // Invalid symbol used
+			errors.Panic(errCorrupted) // Invalid symbol used
 		}
 		if len(syms) >= zr.level*blockSize {
-			panic(ErrCorrupt) // Block is too large
+			errors.Panic(errCorrupted) // Block is too large
 		}
 		syms = append(syms, uint16(sym))
 	}

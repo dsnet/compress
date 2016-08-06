@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"io"
 
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/internal/prefix"
 )
 
@@ -115,7 +116,7 @@ func (mr *Reader) Close() error {
 // into mr.buf and sets mr.final based on the block's final bits.
 // It also manages the statistic variables: InputOffset and NumBlocks.
 func (mr *Reader) decodeBlock() (err error) {
-	defer errRecover(&err)
+	defer errors.Recover(&err)
 
 	// Update the number of bytes read from underlying Reader.
 	offset := mr.rd.Offset
@@ -131,30 +132,30 @@ func (mr *Reader) decodeBlock() (err error) {
 
 	if err := mr.rd.PullBits(1); err != nil {
 		if err == io.ErrUnexpectedEOF {
-			panic(io.EOF) // EOF is okay for first bit
+			return io.EOF // EOF is okay for first bit
 		}
-		panic(err)
+		return err
 	}
 	magic := mr.rd.ReadBits(32)
 	if uint32(magic)&magicMask != magicVals {
-		panic(ErrCorrupt) // Magic must appear
+		return errCorrupted // Magic must appear
 	}
 	finalStream := (magic>>0)&1 > 0
 	pads := (magic >> 3) & 7       // 0..7
 	numHCLen := 4 + (magic>>13)&15 // 6..18, always even
 	if numHCLen < 6 {
-		panic(ErrCorrupt)
+		return errCorrupted
 	}
 	for i := uint(5); i < numHCLen-1; i++ {
 		if mr.rd.ReadBits(3) != 0 {
-			panic(ErrCorrupt) // Empty HCLen code
+			return errCorrupted // Empty HCLen code
 		}
 	}
 	if mr.rd.ReadBits(3) != 2 {
-		panic(ErrCorrupt) // Final HCLen code
+		return errCorrupted // Final HCLen code
 	}
 	if mr.rd.ReadBits(1) != 0 {
-		panic(ErrCorrupt) // First symbol always symZero
+		return errCorrupted // First symbol always symZero
 	}
 	mr.bw.WriteBits(0, 1)
 
@@ -200,7 +201,7 @@ func (mr *Reader) decodeBlock() (err error) {
 			// The specification forbids a sequence of 8 zero bits to appear
 			// in the data section. This ensures that the magic value never
 			// appears in the meta encoding by accident.
-			panic(ErrCorrupt)
+			return errCorrupted
 		}
 		for i := 0; i < cnt; i++ {
 			if ok := mr.bw.TryWriteBits(bit, 1); !ok {
@@ -211,7 +212,7 @@ func (mr *Reader) decodeBlock() (err error) {
 		idx += cnt
 	}
 	if mr.bw.BitsWritten() != maxSyms {
-		panic(ErrCorrupt)
+		return errCorrupted
 	}
 	mr.bw.WriteBits(0, numPads(maxSyms)) // Flush to byte boundary
 
@@ -219,10 +220,10 @@ func (mr *Reader) decodeBlock() (err error) {
 	mr.bw.Flush()
 	syms := mr.bb.Bytes() // Exactly 33 bytes
 	if int(ones) != huffRange {
-		panic(ErrCorrupt) // Ensure complete HLitTree
+		return errCorrupted // Ensure complete HLitTree
 	}
 	if i := uint(maxSyms - 1); syms[i/8]&(1<<(i%8)) == 0 {
-		panic(ErrCorrupt) // EOM symbol must be set
+		return errCorrupted // EOM symbol must be set
 	}
 
 	flags := syms[0]
@@ -239,21 +240,21 @@ func (mr *Reader) decodeBlock() (err error) {
 
 	final := FinalMode(btoi(finalMeta) + btoi(finalStream))
 	if finalStream && !finalMeta {
-		panic(ErrCorrupt)
+		return errCorrupted
 	}
 
 	// Decode footer.
 	if mr.rd.ReadBits(pads) > 0 {
-		panic(ErrCorrupt) // Pads must be zero
+		return errCorrupted // Pads must be zero
 	}
 	if mr.rd.ReadBits(1) > 0 {
-		panic(ErrCorrupt) // HDistTree must be empty
+		return errCorrupted // HDistTree must be empty
 	}
 	if mr.rd.ReadBits(huffLen) != uint(huffRange-1) {
-		panic(ErrCorrupt) // EOM marker
+		return errCorrupted // EOM marker
 	}
 	if mr.rd.BitsRead()%8 > 0 {
-		panic(ErrCorrupt) // Bit reader not byte-aligned
+		return errCorrupted // Bit reader not byte-aligned
 	}
 
 	mr.buf, mr.final = buf, final

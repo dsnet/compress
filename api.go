@@ -5,14 +5,26 @@
 // Package compress is a collection of compression libraries.
 package compress
 
-import "io"
-import "bufio"
+import (
+	"bufio"
+	"io"
+
+	"github.com/dsnet/compress/internal/errors"
+)
 
 // The Error interface identifies all compression related errors.
 type Error interface {
 	error
 	CompressError()
+
+	// IsDeprecated reports the use of a deprecated and unsupported feature.
+	IsDeprecated() bool
+
+	// IsCorrupted reports whether the input the stream was corrupted.
+	IsCorrupted() bool
 }
+
+var _ Error = errors.Error{}
 
 // ByteReader is an interface accepted by all decompression Readers.
 // It guarantees that the decompressor never reads more data than is necessary
