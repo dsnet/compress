@@ -885,3 +885,41 @@ func TestRange(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkBitReader(b *testing.B) {
+	var br Reader
+	nbs := []uint{1, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 7, 7, 8, 9, 9, 13, 15}
+	n := 16 * b.N
+	bb := bytes.NewBuffer(make([]byte, n))
+	br.Init(bb, false)
+
+	b.SetBytes(16)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, nb := range nbs {
+			_, ok := br.TryReadBits(nb)
+			if !ok {
+				_ = br.ReadBits(nb)
+			}
+		}
+	}
+}
+
+func BenchmarkBitWriter(b *testing.B) {
+	var bw Writer
+	nbs := []uint{1, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 7, 7, 8, 9, 9, 13, 15}
+	n := 16 * b.N
+	bb := bytes.NewBuffer(make([]byte, 0, n))
+	bw.Init(bb, false)
+
+	b.SetBytes(16)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, nb := range nbs {
+			ok := bw.TryWriteBits(0, nb)
+			if !ok {
+				bw.WriteBits(0, nb)
+			}
+		}
+	}
+}

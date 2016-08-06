@@ -5,9 +5,9 @@
 package prefix
 
 import (
+	"encoding/binary"
 	"io"
 
-	"github.com/dsnet/compress/internal"
 	"github.com/dsnet/compress/internal/errors"
 )
 
@@ -146,16 +146,21 @@ func (pw *Writer) PushBits() (uint, error) {
 			return 0, err
 		}
 	}
-	nb := pw.numBits
-	for pw.numBits >= 8 {
-		c := byte(pw.bufBits)
-		if pw.bigEndian {
-			c = internal.ReverseLUT[c]
-		}
-		pw.buf[pw.cntBuf] = c
-		pw.cntBuf++
-		pw.bufBits >>= 8
-		pw.numBits -= 8
+
+	u := pw.bufBits
+	if pw.bigEndian {
+		// Swap all the bits within each byte.
+		u = (u&0xaaaaaaaaaaaaaaaa)>>1 | (u&0x5555555555555555)<<1
+		u = (u&0xcccccccccccccccc)>>2 | (u&0x3333333333333333)<<2
+		u = (u&0xf0f0f0f0f0f0f0f0)>>4 | (u&0x0f0f0f0f0f0f0f0f)<<4
 	}
-	return nb - pw.numBits, nil
+	// Starting with Go 1.7, the compiler should use a wide integer
+	// store here if the architecture supports it.
+	binary.LittleEndian.PutUint64(pw.buf[pw.cntBuf:], u)
+
+	nb := pw.numBits / 8 // Number of bytes to copy from bit buffer
+	pw.cntBuf += int(nb)
+	pw.bufBits >>= 8 * nb
+	pw.numBits -= 8 * nb
+	return 8 * nb, nil
 }
