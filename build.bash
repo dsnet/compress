@@ -21,14 +21,14 @@ if [ $# -gt 0 ] && [[ ! "$1" =~ -.* ]]; then
 	#	./build.bash bzip2 -tags debug
 	X=$1
 	shift
-	env GOPATH=$TMPDIR:$GOPATH go build $@ $PKGDIR/$X
+	GOPATH=$TMPDIR:$GOPATH go install $TMPDIR/out $@ $PKGDIR/$X
 else
 	# Build all packages with Go files.
 	#	./build.bash -tags debug -bench .
 	for X in $(find . -type d -not -path '*/\.*' -not -path '*/_*' -not -path '*/testdata'); do
 		RET=$(ls $X/*.go &> /dev/null; echo $?)
 		if [ $RET -eq 0 ]; then
-			env GOPATH=$TMPDIR:$GOPATH go build $@ $PKGDIR/$X
+			GOPATH=$TMPDIR:$GOPATH go install $@ $PKGDIR/$X
 		fi
 	done
 fi
