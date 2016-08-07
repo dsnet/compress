@@ -5,6 +5,7 @@
 package flate
 
 import (
+	"bufio"
 	"bytes"
 	"io"
 	"testing"
@@ -92,15 +93,41 @@ func TestRoundTrip(t *testing.T) {
 	}
 }
 
+// syncBuffer is a special reader that records whether the Reader ever tried to
+// read past the io.EOF. Since the flate Writer and Reader should be in sync,
+// the reader should never attempt to read past the sync marker, otherwise the
+// reader could potentially end up blocking on a network read when it had enough
+// data to report back to the user.
+type syncBuffer struct {
+	bytes.Buffer
+	blocked bool // blocked reports where a Read would have blocked
+}
+
+func (sb *syncBuffer) Read(buf []byte) (int, error) {
+	n, err := sb.Buffer.Read(buf)
+	if n == 0 && len(buf) > 0 {
+		sb.blocked = true
+	}
+	return n, err
+}
+
+func (sb *syncBuffer) ReadByte() (byte, error) {
+	b, err := sb.Buffer.ReadByte()
+	if err == io.EOF {
+		sb.blocked = true
+	}
+	return b, err
+}
+
 // TestSync tests that the Reader can read all data compressed thus far by the
 // Writer once Flush is called.
 func TestSync(t *testing.T) {
 	const prime = 13
 	var flushSizes []int
-	for i := 1; i < 1000; i++ {
+	for i := 1; i < 100; i += 3 {
 		flushSizes = append(flushSizes, i)
 	}
-	for i := 1; i <= 1<<16; i *= 2 {
+	for i := 1; i <= 1<<16; i *= 4 {
 		flushSizes = append(flushSizes, i)
 		flushSizes = append(flushSizes, i+prime)
 	}
@@ -117,39 +144,63 @@ func TestSync(t *testing.T) {
 			maxSize = n
 		}
 	}
-	rdBuf := make([]byte, maxSize)
+	maxBuf := make([]byte, maxSize)
 	data := testutil.MustLoadFile("../testdata/twain.txt")
 	data = testutil.ResizeData(data, totalSize)
 
-	var buf bytes.Buffer
-	wr, _ := flate.NewWriter(&buf, flate.DefaultCompression)
-	rd, err := NewReader(&buf, nil)
-	if err != nil {
-		t.Errorf("unexpected NewReader error: %v", err)
-	}
-	for i, n := range flushSizes {
-		// Write and flush some portion of the test data.
-		want := data[:n]
-		data = data[n:]
-		if _, err := wr.Write(want); err != nil {
-			t.Errorf("test %d, flushSize: %d, unexpected Write error: %v", i, n, err)
-		}
-		if err := wr.Flush(); err != nil {
-			t.Errorf("test %d, flushSize: %d, unexpected Flush error: %v", i, n, err)
-		}
+	for _, name := range []string{"Reader", "ByteReader", "BufferedReader"} {
+		t.Run(name, func(t *testing.T) {
+			data := data // Closure to ensure fresh data per iteration
 
-		// Verify that we can read all data flushed so far.
-		m, err := io.ReadAtLeast(rd, rdBuf, n)
-		if err != nil {
-			t.Errorf("test %d, flushSize: %d, unexpected ReadAtLeast error: %v", i, n, err)
-		}
-		got := rdBuf[:m]
-		if !bytes.Equal(got, want) {
-			t.Errorf("test %d, flushSize: %d, output mismatch:\ngot  %q\nwant %q", i, n, got, want)
-		}
-		if buf.Len() != 0 {
-			t.Errorf("test %d, flushSize: %d, unconsumed buffer data: %d bytes", i, n, buf.Len())
-		}
+			// Test each type of reader.
+			var rdBuf io.Reader
+			buf := new(syncBuffer)
+			switch name {
+			case "Reader":
+				rdBuf = struct{ io.Reader }{buf}
+			case "ByteReader":
+				rdBuf = buf // syncBuffer already has a ReadByte method
+			case "BufferedReader":
+				rdBuf = bufio.NewReader(buf)
+			default:
+				t.Errorf("unknown reader type: %s", name)
+				return
+			}
+
+			wr, _ := flate.NewWriter(buf, flate.DefaultCompression)
+			rd, err := NewReader(rdBuf, nil)
+			if err != nil {
+				t.Errorf("unexpected NewReader error: %v", err)
+			}
+			for _, n := range flushSizes {
+				// Write and flush some portion of the test data.
+				want := data[:n]
+				data = data[n:]
+				if _, err := wr.Write(want); err != nil {
+					t.Errorf("flushSize: %d, unexpected Write error: %v", n, err)
+				}
+				if err := wr.Flush(); err != nil {
+					t.Errorf("flushSize: %d, unexpected Flush error: %v", n, err)
+				}
+
+				// Verify that we can read all data flushed so far.
+				m, err := io.ReadAtLeast(rd, maxBuf, n)
+				if err != nil {
+					t.Errorf("flushSize: %d, unexpected ReadAtLeast error: %v", n, err)
+				}
+				got := maxBuf[:m]
+				if !bytes.Equal(got, want) {
+					t.Errorf("flushSize: %d, output mismatch:\ngot  %q\nwant %q", n, got, want)
+				}
+				if buf.Len() > 0 {
+					t.Errorf("flushSize: %d, unconsumed buffer data: %d bytes", n, buf.Len())
+				}
+				if buf.blocked {
+					t.Errorf("flushSize: %d, attempted over-consumption of buffer", n)
+				}
+				buf.blocked = false
+			}
+		})
 	}
 }
 
