@@ -50,12 +50,14 @@ func (c prefixCodesBySymbol) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 
 type prefixCodesByCount []PrefixCode
 
-func (c prefixCodesByCount) Len() int           { return len(c) }
-func (c prefixCodesByCount) Less(i, j int) bool { return c[i].Cnt < c[j].Cnt }
-func (c prefixCodesByCount) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
+func (c prefixCodesByCount) Len() int { return len(c) }
+func (c prefixCodesByCount) Less(i, j int) bool {
+	return c[i].Cnt < c[j].Cnt || (c[i].Cnt == c[j].Cnt && c[i].Sym < c[j].Sym)
+}
+func (c prefixCodesByCount) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
 
 func (pc PrefixCodes) SortBySymbol() { sort.Sort(prefixCodesBySymbol(pc)) }
-func (pc PrefixCodes) SortByCount()  { sort.Stable(prefixCodesByCount(pc)) }
+func (pc PrefixCodes) SortByCount()  { sort.Sort(prefixCodesByCount(pc)) }
 
 // Length computes the total bit-length using the Len and Cnt fields.
 func (pc PrefixCodes) Length() (nb uint) {
