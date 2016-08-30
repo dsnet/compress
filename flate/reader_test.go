@@ -58,14 +58,14 @@ func TestReader(t *testing.T) {
 	}, {
 		name: "RawBlock",
 		input: db(`<<<
-			< 0 00 0*5                 # Non-last, raw block, padding
-			< H16:000c H16:fff3        # RawSize: 12
-			X:68656c6c6f2c20776f726c64 # Raw data
+			< 0 00 0*5          # Non-last, raw block, padding
+			< H16:000c H16:fff3 # RawSize: 12
+			"hello, world"      # Raw data
 
 			< 1 10    # Last, fixed block
 			> 0000000 # EOB marker
 		`),
-		output: dh("68656c6c6f2c20776f726c64"),
+		output: []byte("hello, world"),
 		inIdx:  19,
 		outIdx: 12,
 		errf:   "IsErrUnexpectedEOF",
@@ -146,9 +146,9 @@ func TestReader(t *testing.T) {
 		input: db(`<<<
 			< 0 00 0*5          # Non-last, raw block, padding
 			< H16:000c H16:fff3 # RawSize: 12
-			X:68656c6c6f        # Raw data
+			"hello"             # Raw data
 		`),
-		output: dh("68656c6c6f"),
+		output: []byte("hello"),
 		inIdx:  10,
 		outIdx: 5,
 		errf:   "IsErrUnexpectedEOF",
@@ -156,13 +156,56 @@ func TestReader(t *testing.T) {
 		// Truncated before next block.
 		name: "RawBlockTruncated5",
 		input: db(`<<<
-			< 0 00 0*5                 # Non-last, raw block, padding
-			< H16:000c H16:fff3        # RawSize: 12
-			X:68656c6c6f2c20776f726c64 # Raw data
+			< 0 00 0*5          # Non-last, raw block, padding
+			< H16:000c H16:fff3 # RawSize: 12
+			"hello, world"      # Raw data
 		`),
-		output: dh("68656c6c6f2c20776f726c64"),
+		output: []byte("hello, world"),
 		inIdx:  17,
 		outIdx: 12,
+		errf:   "IsErrUnexpectedEOF",
+	}, {
+		// Truncated after fixed block header.
+		name: "FixedBlockTruncated0",
+		input: db(`<<<
+			< 0 01 # Non-last, fixed block
+		`),
+		inIdx:  1,
+		outIdx: 0,
+		errf:   "IsErrUnexpectedEOF",
+	}, {
+		// Truncated after mid-block and mid-symbol.
+		name: "FixedBlockTruncated1",
+		input: db(`<<<
+			< 0 01 # Non-last, fixed block
+			> 01111000 10010101 10011 # Truncate 100 from last symbol
+		`),
+		output: []byte("He"),
+		inIdx:  3,
+		outIdx: 2,
+		errf:   "IsErrUnexpectedEOF",
+	}, {
+		// Truncated after mid-block and post-symbol.
+		name: "FixedBlockTruncated2",
+		input: db(`<<<
+			< 0 01 # Non-last, fixed block
+			> 01111000 10010101 10011100 110010000*5
+		`),
+		output: []byte("Hel\x90\x90\x90\x90\x90"),
+		inIdx:  9,
+		outIdx: 8,
+		errf:   "IsErrUnexpectedEOF",
+	}, {
+		// Truncated after mid-block and post-EOB.
+		name: "FixedBlockTruncated3",
+		input: db(`<<<
+			< 0 01 # Non-last, fixed block
+			> 01111000 10010101 10011100 110010000*5
+			> 0000000 # EOB marker
+		`),
+		output: []byte("Hel\x90\x90\x90\x90\x90"),
+		inIdx:  10,
+		outIdx: 8,
 		errf:   "IsErrUnexpectedEOF",
 	}, {
 		name: "FixedBlockShortest",
@@ -604,7 +647,7 @@ func TestReader(t *testing.T) {
 			< 1 00 0*3          # Last, raw block, padding
 			< H16:0000 H16:ffff # RawSize: 0
 		`),
-		output: dh("616263616263"),
+		output: []byte("abcabc"),
 		inIdx:  21,
 		outIdx: 6,
 	}, {
