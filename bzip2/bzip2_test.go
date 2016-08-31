@@ -15,15 +15,16 @@ import (
 var testdata = []struct {
 	name string
 	data []byte
+	ratio float64 // The minimum expected ratio (uncompressed / compressed)
 }{
-	{"Nil", nil},
-	{"Binary", testutil.MustLoadFile("../testdata/binary.bin")},
-	{"Digits", testutil.MustLoadFile("../testdata/digits.txt")},
-	{"Huffman", testutil.MustLoadFile("../testdata/huffman.txt")},
-	{"Random", testutil.MustLoadFile("../testdata/random.bin")},
-	{"Repeats", testutil.MustLoadFile("../testdata/repeats.bin")},
-	{"Twain", testutil.MustLoadFile("../testdata/twain.txt")},
-	{"Zeros", testutil.MustLoadFile("../testdata/zeros.bin")},
+	{"Nil", nil, 0},
+	{"Binary", testutil.MustLoadFile("../testdata/binary.bin"), 5.68},
+	{"Digits", testutil.MustLoadFile("../testdata/digits.txt"), 2.22},
+	{"Huffman", testutil.MustLoadFile("../testdata/huffman.txt"), 1.24},
+	{"Random", testutil.MustLoadFile("../testdata/random.bin"), 0.98},
+	{"Repeats", testutil.MustLoadFile("../testdata/repeats.bin"), 3.93},
+	{"Twain", testutil.MustLoadFile("../testdata/twain.txt"), 2.99},
+	{"Zeros", testutil.MustLoadFile("../testdata/zeros.bin"), 5825.0},
 }
 
 var levels = []struct {
@@ -59,6 +60,11 @@ func TestRoundTrip(t *testing.T) {
 		}
 		if err := wr.Close(); err != nil {
 			t.Errorf("test %d, Close() = %v, want nil", i, err)
+		}
+
+		ratio := float64(len(v.data)) / float64(buf1.Len())
+		if ratio < v.ratio {
+			t.Errorf("test %d, poor compression ratio: %0.2f < %0.2f", i, ratio, v.ratio)
 		}
 
 		// Write a canary byte to ensure this does not get read.
