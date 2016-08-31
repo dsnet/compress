@@ -740,6 +740,43 @@ func TestReader(t *testing.T) {
 		inIdx: 3,
 		errf:  "IsCorrupted",
 	}, {
+		// Incomplete HCLenTree causes a panic.
+		name: "Issue5915",
+		input: db(`<<<
+			< 1 10             # Last, dynamic block
+			< 10000 11001 1010 # HLit: 273, HDist: 26, HCLen: 14
+
+			# HCLens: {...}, this is valid
+			< 101 101 110 100 011 011 100 010 100 011 101 100 000 110
+
+			# HLits: {...}, this is invalid
+			> 11110 <D3:7 11100 111111 <D7:10 011 100 00 1010 11100 1010 100
+			  1010 00 00 1101 100 00 1100 00 011 010 011 011 1100 100
+			  11101 <D2:0 1101 100 00 011 1101 00 1101 1100 1010 1100 1100 100
+			  1100 11101 <D2:1 100 1010 1010 1100 010 11101 <D2:3 00 1101
+			  11101 <D00:0 1100 1101 11110 <D3:2 00 011 100 100 1010 1100 00 100
+			  100 1100 00 010 011 011 00 00 011 011 00 00 00 010 00 1100 00 010
+			  010 00 011 011 100 011 100 00 011 011 111111 <D7:119 1101 1011
+			  1011 010 010 010 00 011 011 00 011 00
+
+			# HDists: {...}, this is invalid
+			> 100 00 100 100 11100 100 11110 <D3:0 100 010 010 010 1011 1011
+			  111110 010 1011 010 1011 010 1011 010 1011 010
+		`),
+		inIdx: 61,
+		errf: "IsCorrupted",
+	}, {
+		// Incomplete HCLenTree causes a panic.
+		name: "Issue5962",
+		input: db(`<<<
+			< 0 10             # Non-last, dynamic block
+			< 10101 10011 1000 # HLit: 278, HDist: 20, HCLen: 12
+			# HCLens: {0:7, 5:7, 6:6, 9:3, 10:7, 11:1, 16:5, 18:6}
+			< 101 000 110 111 000*2 011 110 111*2 001 000
+		`),
+		inIdx: 7,
+		errf: "IsCorrupted",
+	}, {
 		// Over-subscribed HCLenTree caused a hang.
 		name: "Issue10426",
 		input: db(`<<<
