@@ -24,9 +24,9 @@ func TestReader(t *testing.T) {
 	dh := testutil.MustDecodeHex
 
 	errFuncs := map[string]func(error) bool{
-		"IsEOF":              func(err error) bool { return err == io.EOF },
-		"IsErrUnexpectedEOF": func(err error) bool { return err == io.ErrUnexpectedEOF },
-		"IsCorrupted":        errors.IsCorrupted,
+		"IsEOF":           func(err error) bool { return err == io.EOF },
+		"IsUnexpectedEOF": func(err error) bool { return err == io.ErrUnexpectedEOF },
+		"IsCorrupted":     errors.IsCorrupted,
 	}
 	vectors := []struct {
 		desc   string    // Description of the test
@@ -165,19 +165,19 @@ func TestReader(t *testing.T) {
 	}, {
 		desc:  "meta block truncated short",
 		input: dh("1c8086"),
-		errf:  "IsErrUnexpectedEOF",
+		errf:  "IsUnexpectedEOF",
 	}, {
 		desc:  "meta block truncated medium-short",
 		input: dh("1c808605"),
-		errf:  "IsErrUnexpectedEOF",
+		errf:  "IsUnexpectedEOF",
 	}, {
 		desc:  "meta block truncated medium-long",
 		input: dh("1c808605800409d10451418520"),
-		errf:  "IsErrUnexpectedEOF",
+		errf:  "IsUnexpectedEOF",
 	}, {
 		desc:  "meta block truncated long",
 		input: dh("1c808605800409d1045141852022294a09fd7f417befbd07"),
-		errf:  "IsErrUnexpectedEOF",
+		errf:  "IsUnexpectedEOF",
 	}, {
 		desc:  "random junk",
 		input: dh("911fe47084a4668b"),

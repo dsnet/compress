@@ -42,8 +42,8 @@ func TestReader(t *testing.T) {
 	dh := testutil.MustDecodeHex
 
 	errFuncs := map[string]func(error) bool{
-		"IsErrUnexpectedEOF": func(err error) bool { return err == io.ErrUnexpectedEOF },
-		"IsCorrupted":        errors.IsCorrupted,
+		"IsUnexpectedEOF": func(err error) bool { return err == io.ErrUnexpectedEOF },
+		"IsCorrupted":     errors.IsCorrupted,
 	}
 	vectors := []struct {
 		name   string // Sub-test name
@@ -54,7 +54,7 @@ func TestReader(t *testing.T) {
 		errf   string // Name of error checking callback
 	}{{
 		name: "EmptyString",
-		errf: "IsErrUnexpectedEOF",
+		errf: "IsUnexpectedEOF",
 	}, {
 		name: "RawBlock",
 		input: db(`<<<
@@ -68,7 +68,7 @@ func TestReader(t *testing.T) {
 		output: []byte("hello, world"),
 		inIdx:  19,
 		outIdx: 12,
-		errf:   "IsErrUnexpectedEOF",
+		errf:   "IsUnexpectedEOF",
 	}, {
 		name: "RawBlockNonZeroPadding",
 		input: db(`<<<
@@ -112,7 +112,7 @@ func TestReader(t *testing.T) {
 			< 0 00 0*5 # Non-last, raw block, padding
 		`),
 		inIdx: 1,
-		errf:  "IsErrUnexpectedEOF",
+		errf:  "IsUnexpectedEOF",
 	}, {
 		// Truncated inside size field.
 		name: "RawBlockTruncated1",
@@ -121,7 +121,7 @@ func TestReader(t *testing.T) {
 			< H8:0c    # RawSize: 12
 		`),
 		inIdx: 1,
-		errf:  "IsErrUnexpectedEOF",
+		errf:  "IsUnexpectedEOF",
 	}, {
 		// Truncated after size field.
 		name: "RawBlockTruncated2",
@@ -130,7 +130,7 @@ func TestReader(t *testing.T) {
 			< H16:000c # RawSize: 12
 		`),
 		inIdx: 3,
-		errf:  "IsErrUnexpectedEOF",
+		errf:  "IsUnexpectedEOF",
 	}, {
 		// Truncated before raw data.
 		name: "RawBlockTruncated3",
@@ -139,7 +139,7 @@ func TestReader(t *testing.T) {
 			< H16:000c H16:fff3 # RawSize: 12
 		`),
 		inIdx: 5,
-		errf:  "IsErrUnexpectedEOF",
+		errf:  "IsUnexpectedEOF",
 	}, {
 		// Truncated inside raw data.
 		name: "RawBlockTruncated4",
@@ -151,7 +151,7 @@ func TestReader(t *testing.T) {
 		output: []byte("hello"),
 		inIdx:  10,
 		outIdx: 5,
-		errf:   "IsErrUnexpectedEOF",
+		errf:   "IsUnexpectedEOF",
 	}, {
 		// Truncated before next block.
 		name: "RawBlockTruncated5",
@@ -163,7 +163,7 @@ func TestReader(t *testing.T) {
 		output: []byte("hello, world"),
 		inIdx:  17,
 		outIdx: 12,
-		errf:   "IsErrUnexpectedEOF",
+		errf:   "IsUnexpectedEOF",
 	}, {
 		// Truncated after fixed block header.
 		name: "FixedBlockTruncated0",
@@ -172,7 +172,7 @@ func TestReader(t *testing.T) {
 		`),
 		inIdx:  1,
 		outIdx: 0,
-		errf:   "IsErrUnexpectedEOF",
+		errf:   "IsUnexpectedEOF",
 	}, {
 		// Truncated after mid-block and mid-symbol.
 		name: "FixedBlockTruncated1",
@@ -183,7 +183,7 @@ func TestReader(t *testing.T) {
 		output: []byte("He"),
 		inIdx:  3,
 		outIdx: 2,
-		errf:   "IsErrUnexpectedEOF",
+		errf:   "IsUnexpectedEOF",
 	}, {
 		// Truncated after mid-block and post-symbol.
 		name: "FixedBlockTruncated2",
@@ -194,7 +194,7 @@ func TestReader(t *testing.T) {
 		output: []byte("Hel\x90\x90\x90\x90\x90"),
 		inIdx:  9,
 		outIdx: 8,
-		errf:   "IsErrUnexpectedEOF",
+		errf:   "IsUnexpectedEOF",
 	}, {
 		// Truncated after mid-block and post-EOB.
 		name: "FixedBlockTruncated3",
@@ -206,7 +206,7 @@ func TestReader(t *testing.T) {
 		output: []byte("Hel\x90\x90\x90\x90\x90"),
 		inIdx:  10,
 		outIdx: 8,
-		errf:   "IsErrUnexpectedEOF",
+		errf:   "IsUnexpectedEOF",
 	}, {
 		name: "FixedBlockShortest",
 		input: db(`<<<
@@ -469,7 +469,7 @@ func TestReader(t *testing.T) {
 		output: dh("00ff"),
 		inIdx:  44,
 		outIdx: 2,
-		errf:   "IsErrUnexpectedEOF",
+		errf:   "IsUnexpectedEOF",
 	}, {
 		// Complete HCLenTree, complete HLitTree, empty HDistTree.
 		name: "HuffmanTree15",
@@ -764,7 +764,7 @@ func TestReader(t *testing.T) {
 			  111110 010 1011 010 1011 010 1011 010 1011 010
 		`),
 		inIdx: 61,
-		errf: "IsCorrupted",
+		errf:  "IsCorrupted",
 	}, {
 		// Incomplete HCLenTree causes a panic.
 		name: "Issue5962",
@@ -775,7 +775,7 @@ func TestReader(t *testing.T) {
 			< 101 000 110 111 000*2 011 110 111*2 001 000
 		`),
 		inIdx: 7,
-		errf: "IsCorrupted",
+		errf:  "IsCorrupted",
 	}, {
 		// Over-subscribed HCLenTree caused a hang.
 		name: "Issue10426",

@@ -13,8 +13,8 @@ import (
 )
 
 var testdata = []struct {
-	name string
-	data []byte
+	name  string
+	data  []byte
 	ratio float64 // The minimum expected ratio (uncompressed / compressed)
 }{
 	{"Nil", nil, 0},
