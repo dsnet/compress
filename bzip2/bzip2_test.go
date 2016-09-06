@@ -6,11 +6,33 @@ package bzip2
 
 import (
 	"bytes"
+	"flag"
 	"io"
+	"os/exec"
 	"testing"
 
 	"github.com/dsnet/compress/internal/testutil"
 )
+
+var zcheck = flag.Bool("zcheck", false, "verify test vectors with C bzip2 library")
+
+func pyCompress(input []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	cmd := exec.Command("python", "-c", "import sys, bz2; sys.stdout.write(bz2.compress(sys.stdin.read()))")
+	cmd.Stdin = bytes.NewReader(input)
+	cmd.Stdout = &buf
+	err := cmd.Run()
+	return buf.Bytes(), err
+}
+
+func pyDecompress(input []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	cmd := exec.Command("python", "-c", "import sys, bz2; sys.stdout.write(bz2.decompress(sys.stdin.read()))")
+	cmd.Stdin = bytes.NewReader(input)
+	cmd.Stdout = &buf
+	err := cmd.Run()
+	return buf.Bytes(), err
+}
 
 var testdata = []struct {
 	name  string
@@ -46,50 +68,71 @@ var sizes = []struct {
 }
 
 func TestRoundTrip(t *testing.T) {
-	for i, v := range testdata {
-		var buf1, buf2 bytes.Buffer
+	for _, v := range testdata {
+		t.Run(v.name, func(t *testing.T) {
+			var buf1, buf2 bytes.Buffer
 
-		// Compress the input.
-		wr, err := NewWriter(&buf1, nil)
-		if err != nil {
-			t.Errorf("test %d, NewWriter() = (_, %v), want (_, nil)", i, err)
-		}
-		n, err := io.Copy(wr, bytes.NewReader(v.data))
-		if n != int64(len(v.data)) || err != nil {
-			t.Errorf("test %d, Copy() = (%d, %v), want (%d, nil)", i, n, err, len(v.data))
-		}
-		if err := wr.Close(); err != nil {
-			t.Errorf("test %d, Close() = %v, want nil", i, err)
-		}
+			// Compress the input.
+			wr, err := NewWriter(&buf1, nil)
+			if err != nil {
+				t.Errorf("NewWriter() = (_, %v), want (_, nil)", err)
+			}
+			n, err := io.Copy(wr, bytes.NewReader(v.data))
+			if n != int64(len(v.data)) || err != nil {
+				t.Errorf("Copy() = (%d, %v), want (%d, nil)", n, err, len(v.data))
+			}
+			if err := wr.Close(); err != nil {
+				t.Errorf("Close() = %v, want nil", err)
+			}
 
-		ratio := float64(len(v.data)) / float64(buf1.Len())
-		if ratio < v.ratio {
-			t.Errorf("test %d, poor compression ratio: %0.2f < %0.2f", i, ratio, v.ratio)
-		}
+			// Verify that the compression ratio is within expected bounds.
+			ratio := float64(len(v.data)) / float64(buf1.Len())
+			if ratio < v.ratio {
+				t.Errorf("poor compression ratio: %0.2f < %0.2f", ratio, v.ratio)
+			}
 
-		// Write a canary byte to ensure this does not get read.
-		buf1.WriteByte(0x7a)
+			// Verify that the C library can decompress the output of Writer and
+			// that the Reader can decompress the output of the C library.
+			if *zcheck {
+				zd, err := pyDecompress(buf1.Bytes())
+				if err != nil {
+					t.Errorf("unexpected pyDecompress error: %v", err)
+				}
+				if !bytes.Equal(zd, v.data) {
+					t.Errorf("output data mismatch")
+				}
+				zc, err := pyCompress(v.data)
+				if err != nil {
+					t.Errorf("unexpected pyCompress error: %v", err)
+				}
+				buf1.Reset()
+				buf1.Write(zc) // Use output of C library for Reader test
+			}
 
-		// Decompress the output.
-		rd, err := NewReader(&buf1, nil)
-		if err != nil {
-			t.Errorf("test %d, NewReader() = (_, %v), want (_, nil)", i, err)
-		}
-		n, err = io.Copy(&buf2, rd)
-		if n != int64(len(v.data)) || err != nil {
-			t.Errorf("test %d, Copy() = (%d, %v), want (%d, nil)", i, n, err, len(v.data))
-		}
-		if err := rd.Close(); err != nil {
-			t.Errorf("test %d, Close() = %v, want nil", i, err)
-		}
-		if !bytes.Equal(buf2.Bytes(), v.data) {
-			t.Errorf("test %d, output data mismatch", i)
-		}
+			// Write a canary byte to ensure this does not get read.
+			buf1.WriteByte(0x7a)
 
-		// Read back the canary byte.
-		if v, _ := buf1.ReadByte(); v != 0x7a {
-			t.Errorf("Read consumed more data than necessary")
-		}
+			// Decompress the output.
+			rd, err := NewReader(&buf1, nil)
+			if err != nil {
+				t.Errorf("NewReader() = (_, %v), want (_, nil)", err)
+			}
+			n, err = io.Copy(&buf2, rd)
+			if n != int64(len(v.data)) || err != nil {
+				t.Errorf("Copy() = (%d, %v), want (%d, nil)", n, err, len(v.data))
+			}
+			if err := rd.Close(); err != nil {
+				t.Errorf("Close() = %v, want nil", err)
+			}
+			if !bytes.Equal(buf2.Bytes(), v.data) {
+				t.Errorf("output data mismatch")
+			}
+
+			// Read back the canary byte.
+			if v, _ := buf1.ReadByte(); v != 0x7a {
+				t.Errorf("Read consumed more data than necessary")
+			}
+		})
 	}
 }
 
