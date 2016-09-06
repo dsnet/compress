@@ -111,7 +111,7 @@ const (
 )
 
 func errorf(c int, f string, a ...interface{}) error {
-	return errors.Error{c, "xflate", fmt.Sprintf(f, a...)}
+	return errors.Error{Code: c, Pkg: "xflate", Msg: fmt.Sprintf(f, a...)}
 }
 
 var (

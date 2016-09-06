@@ -18,7 +18,7 @@ const (
 )
 
 func errorf(c int, f string, a ...interface{}) error {
-	return errors.Error{c, "flate", fmt.Sprintf(f, a...)}
+	return errors.Error{Code: c, Pkg: "flate", Msg: fmt.Sprintf(f, a...)}
 }
 
 // errWrap converts a lower-level errors.Error to be one from this package.

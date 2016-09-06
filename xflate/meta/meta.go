@@ -136,7 +136,7 @@ func init() {
 }
 
 func errorf(c int, f string, a ...interface{}) error {
-	return errors.Error{c, "meta", fmt.Sprintf(f, a...)}
+	return errors.Error{Code: c, Pkg: "meta", Msg: fmt.Sprintf(f, a...)}
 }
 
 var (
