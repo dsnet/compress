@@ -105,6 +105,10 @@ func TestRoundTrip(t *testing.T) {
 				if err != nil {
 					t.Errorf("unexpected pyCompress error: %v", err)
 				}
+				zratio := float64(len(v.data)) / float64(len(zc))
+				if ratio < 0.9*zratio {
+					t.Errorf("poor compression ratio: %0.2f < %0.2f", ratio, 0.9*zratio)
+				}
 				buf1.Reset()
 				buf1.Write(zc) // Use output of C library for Reader test
 			}
