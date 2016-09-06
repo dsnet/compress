@@ -6,9 +6,11 @@ package bzip2
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"io"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/dsnet/compress/internal/testutil"
@@ -17,21 +19,26 @@ import (
 var zcheck = flag.Bool("zcheck", false, "verify test vectors with C bzip2 library")
 
 func pyCompress(input []byte) ([]byte, error) {
-	var buf bytes.Buffer
-	cmd := exec.Command("python", "-c", "import sys, bz2; sys.stdout.write(bz2.compress(sys.stdin.read()))")
-	cmd.Stdin = bytes.NewReader(input)
-	cmd.Stdout = &buf
-	err := cmd.Run()
-	return buf.Bytes(), err
+	return pyExec("import sys, bz2; sys.stdout.write(bz2.compress(sys.stdin.read()))", input)
 }
 
 func pyDecompress(input []byte) ([]byte, error) {
-	var buf bytes.Buffer
-	cmd := exec.Command("python", "-c", "import sys, bz2; sys.stdout.write(bz2.decompress(sys.stdin.read()))")
+	return pyExec("import sys, bz2; sys.stdout.write(bz2.decompress(sys.stdin.read()))", input)
+}
+
+// pyExec executes a single-line Python program pyc, using input as the stdin.
+// It returns the stdout and an error.
+func pyExec(pyc string, input []byte) ([]byte, error) {
+	var bo, be bytes.Buffer
+	cmd := exec.Command("python", "-c", pyc)
 	cmd.Stdin = bytes.NewReader(input)
-	cmd.Stdout = &buf
+	cmd.Stdout = &bo
+	cmd.Stderr = &be
 	err := cmd.Run()
-	return buf.Bytes(), err
+	if ss := strings.Split(strings.TrimSpace(be.String()), "\n"); err != nil && len(ss) > 0 {
+		return nil, errors.New(ss[len(ss)-1]) // Assume last line is error message
+	}
+	return bo.Bytes(), err
 }
 
 var testdata = []struct {
