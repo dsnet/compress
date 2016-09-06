@@ -3,6 +3,12 @@
 // license that can be found in the LICENSE.md file.
 
 // Package bzip2 implements the BZip2 compressed data format.
+//
+// Canonical C implementation:
+//	http://bzip.org
+//
+// Unofficial format specification:
+//	https://github.com/dsnet/compress/blob/development/doc/bzip2-format.pdf
 package bzip2
 
 import (
