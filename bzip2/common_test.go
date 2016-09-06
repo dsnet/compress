@@ -5,7 +5,10 @@
 package bzip2
 
 import (
+	"strconv"
 	"testing"
+
+	"github.com/dsnet/compress/internal/testutil"
 )
 
 func TestCRC(t *testing.T) {
@@ -62,5 +65,18 @@ func TestCRC(t *testing.T) {
 				t.Errorf("test %d, crc.update(crc1, str2): got 0x%08x, want 0x%08x", i, crc, v.crc)
 			}
 		}
+	}
+}
+
+func BenchmarkCRC(b *testing.B) {
+	var crc crc
+	d := testutil.ResizeData([]byte("the quick brown fox jumped over the lazy dog"), 1<<16)
+	for i := 1; i <= len(d); i <<= 4 {
+		b.Run(strconv.Itoa(i), func(b *testing.B) {
+			b.SetBytes(int64(i))
+			for j := 0; j < b.N; j++ {
+				crc.update(0, d[:i])
+			}
+		})
 	}
 }
