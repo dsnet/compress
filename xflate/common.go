@@ -66,7 +66,7 @@ const (
 
 	// DefaultChunkSize specifies the default uncompressed size for each chunk.
 	// This value was chosen so that the overhead of the XFLATE format would be
-	// approximately 1% for the average dataset.
+	// approximately 1% for the typical dataset.
 	DefaultChunkSize = 1 << 18 // 256 KiB
 
 	// DefaultIndexSize specifies the default number of records that each index

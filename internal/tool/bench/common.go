@@ -43,7 +43,7 @@ var (
 	Encoders map[int]map[string]Encoder
 	Decoders map[int]map[string]Decoder
 
-	// List of search paths for test files.
+	// Paths is a list of search paths for test files.
 	Paths []string
 )
 

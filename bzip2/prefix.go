@@ -227,8 +227,9 @@ func handleDegenerateCodes(codes prefix.PrefixCodes) prefix.PrefixCodes {
 		limits [maxPrefixBits + 2]int32
 		bases  [maxPrefixBits + 2]int32
 		perms  [maxNumSyms]int32
-		minLen uint32 = maxPrefixBits
-		maxLen uint32 = 0
+
+		minLen = uint32(maxPrefixBits)
+		maxLen = uint32(0)
 	)
 
 	const (

@@ -163,7 +163,8 @@ func (br *Reader) readBlockHeader() {
 
 	// Read MLEN and MNIBBLES and process meta data.
 	var blkLen int // 1..1<<24
-	if nibbles := br.rd.ReadBits(2) + 4; nibbles == 7 {
+	nibbles := br.rd.ReadBits(2) + 4
+	if nibbles == 7 {
 		if reserved := br.rd.ReadBits(1) == 1; reserved {
 			panic(ErrCorrupt)
 		}
@@ -183,14 +184,12 @@ func (br *Reader) readBlockHeader() {
 		br.blkLen = skipLen // Use blkLen to track meta data number of bytes
 		br.readMetaData()
 		return
-	} else {
-		blkLen = int(br.rd.ReadBits(nibbles * 4))
-		if nibbles > 4 && blkLen>>((nibbles-1)*4) == 0 {
-			panic(ErrCorrupt) // Shortest representation not used
-		}
-		blkLen++
 	}
-	br.blkLen = blkLen
+	blkLen = int(br.rd.ReadBits(nibbles * 4))
+	if nibbles > 4 && blkLen>>((nibbles-1)*4) == 0 {
+		panic(ErrCorrupt) // Shortest representation not used
+	}
+	br.blkLen = blkLen + 1
 
 	// Read ISUNCOMPRESSED and process uncompressed data.
 	if !br.last {
@@ -406,9 +405,8 @@ startCommand:
 		br.distZero = iacSym < 128
 		if br.insLen > 0 {
 			goto readLiterals
-		} else {
-			goto readDistance
 		}
+		goto readDistance
 	}
 
 readLiterals:
@@ -447,11 +445,11 @@ readLiterals:
 			br.step = (*Reader).readCommands
 			br.stepState = stateLiterals // Need to continue work here
 			return
-		} else if br.blkLen > 0 {
-			goto readDistance
-		} else {
-			goto finishCommand
 		}
+		if br.blkLen > 0 {
+			goto readDistance
+		}
+		goto finishCommand
 	}
 
 readDistance:
@@ -500,9 +498,8 @@ readDistance:
 				br.dists[0] = br.dist
 			}
 			goto copyDynamicDict
-		} else {
-			goto copyStaticDict
 		}
+		goto copyStaticDict
 	}
 
 copyDynamicDict:
@@ -517,9 +514,8 @@ copyDynamicDict:
 			br.step = (*Reader).readCommands
 			br.stepState = stateDynamicDict // Need to continue work here
 			return
-		} else {
-			goto finishCommand
 		}
+		goto finishCommand
 	}
 
 copyStaticDict:
@@ -552,16 +548,16 @@ copyStaticDict:
 			br.step = (*Reader).readCommands
 			br.stepState = stateStaticDict // Need to continue work here
 			return
-		} else {
-			goto finishCommand
 		}
+		goto finishCommand
 	}
 
 finishCommand:
 	// Finish off this command and check if we need to loop again.
 	if br.blkLen < 0 {
 		panic(ErrCorrupt)
-	} else if br.blkLen > 0 {
+	}
+	if br.blkLen > 0 {
 		goto startCommand // More commands in this block
 	}
 
@@ -569,7 +565,6 @@ finishCommand:
 	br.toRead = br.dict.ReadFlush()
 	br.step = (*Reader).readBlockHeader
 	br.stepState = stateInit // Next call to readCommands must start here
-	return
 }
 
 // readContextMap reads the context map according to RFC section 7.3.

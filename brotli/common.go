@@ -59,7 +59,7 @@ func initCommonLUTs() {
 
 // neededBits computes the minimum number of bits needed to encode n elements.
 func neededBits(n uint32) (nb uint) {
-	for n -= 1; n > 0; n >>= 1 {
+	for n--; n > 0; n >>= 1 {
 		nb++
 	}
 	return

@@ -243,9 +243,8 @@ copyDistance:
 			zr.step = (*Reader).readBlock
 			zr.stepState = stateDict // Need to continue work here
 			return
-		} else {
-			goto readLiteral
 		}
+		goto readLiteral
 	}
 }
 
