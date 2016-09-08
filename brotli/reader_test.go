@@ -16,7 +16,7 @@ import (
 )
 
 func TestReader(t *testing.T) {
-	var vectors = []struct {
+	vectors := []struct {
 		desc   string // Description of the test
 		input  string // Test input string in hex
 		output string // Expected output string in hex
@@ -325,7 +325,7 @@ func TestReader(t *testing.T) {
 }
 
 func TestReaderGolden(t *testing.T) {
-	var vectors = []struct {
+	vectors := []struct {
 		input  string // Input filename
 		output string // Output filename
 	}{

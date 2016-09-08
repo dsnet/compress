@@ -134,7 +134,7 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 			for linkIdx := range pd.links {
 				code := reverseBits(uint32(baseCode)+uint32(linkIdx), uint(pd.chunkBits))
 				pd.links[linkIdx] = allocUint32s(pd.links[linkIdx], numLinks)
-				pd.chunks[code] = uint32(linkIdx<<prefixCountBits) | uint32(pd.chunkBits+1)
+				pd.chunks[code] = uint32(linkIdx<<prefixCountBits) | (pd.chunkBits + 1)
 			}
 		} else {
 			for i := range pd.chunks {
@@ -151,14 +151,14 @@ func (pd *prefixDecoder) Init(codes []prefixCode, assignCodes bool) {
 				linkIdx := len(pd.links)
 				pd.links = extendSliceUints32s(pd.links, len(pd.links)+1)
 				pd.links[linkIdx] = allocUint32s(pd.links[linkIdx], numLinks)
-				pd.chunks[code] = uint32(linkIdx<<prefixCountBits) | uint32(pd.chunkBits+1)
+				pd.chunks[code] = uint32(linkIdx<<prefixCountBits) | (pd.chunkBits + 1)
 			}
 		}
 	}
 
 	// Fill out chunks and links tables with values.
 	for i, c := range codes {
-		chunk := c.sym<<prefixCountBits | uint32(c.len)
+		chunk := c.sym<<prefixCountBits | c.len
 		if assignCodes {
 			codes[i].val = reverseBits(uint32(nextCodes[c.len]), uint(c.len))
 			nextCodes[c.len]++

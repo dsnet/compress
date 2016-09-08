@@ -366,8 +366,7 @@ func TestReaderReset(t *testing.T) {
 
 func TestReaderSeek(t *testing.T) {
 	rand := rand.New(rand.NewSource(0))
-
-	var twain = testutil.MustLoadFile("../testdata/twain.txt")
+	twain := testutil.MustLoadFile("../testdata/twain.txt")
 
 	// Generate compressed version of input file.
 	var buf bytes.Buffer
@@ -401,7 +400,7 @@ func TestReaderSeek(t *testing.T) {
 		offset int64 // Seek to this offset
 		whence int   // Whence value to use
 	}
-	var vectors = []seekCommand{
+	vectors := []seekCommand{
 		{length: 40, offset: int64(len(twain)) - 1, whence: io.SeekStart},
 		{length: 40, offset: int64(len(twain)), whence: io.SeekStart},
 		{length: 40, offset: int64(len(twain)) + 1, whence: io.SeekStart},
@@ -516,9 +515,9 @@ func TestRecursiveReader(t *testing.T) {
 	// Recursively compress the same input data multiple times using XFLATE.
 	// Run as a closured function to ensure defer statements execute.
 	func() {
-		var wlast io.Writer = &bb // Latest writer
-		for i := uint(0); i < numIters; i++ {
-			xw, err := NewWriter(wlast, &WriterConfig{ChunkSize: 1 << (10 + i)})
+		wlast := io.Writer(&bb) // Latest writer
+		for i := 0; i < numIters; i++ {
+			xw, err := NewWriter(wlast, &WriterConfig{ChunkSize: 1 << uint(10+i)})
 			if err != nil {
 				t.Fatalf("unexpected error: NewWriter() = %v", err)
 			}
@@ -536,8 +535,8 @@ func TestRecursiveReader(t *testing.T) {
 
 	// Recursively decompress the same input stream multiple times.
 	func() {
-		var rlast io.ReadSeeker = bytes.NewReader(bb.Bytes())
-		for i := uint(0); i < numIters; i++ {
+		rlast := io.ReadSeeker(bytes.NewReader(bb.Bytes()))
+		for i := 0; i < numIters; i++ {
 			xr, err := NewReader(rlast, nil)
 			if err != nil {
 				t.Fatalf("unexpected error: NewReader() = %v", err)

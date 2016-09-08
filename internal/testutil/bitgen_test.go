@@ -10,7 +10,7 @@ import (
 )
 
 func TestDecodeBitGen(t *testing.T) {
-	var vectors = []struct {
+	vectors := []struct {
 		input  string
 		output []byte
 		valid  bool

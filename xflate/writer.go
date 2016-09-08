@@ -239,7 +239,7 @@ func (xw *Writer) encodeIndex(index *index) error {
 	// Helper function to write VLIs.
 	var crc uint32
 	var errVLI error
-	var writeVLI = func(x int64) {
+	writeVLI := func(x int64) {
 		b := xw.scratch[:binary.PutUvarint(xw.scratch[:], uint64(x))]
 		crc = crc32.Update(crc, crc32.MakeTable(crc32.IEEE), b)
 		if _, err := xw.mw.Write(b); err != nil {

@@ -240,7 +240,7 @@ func handleDegenerateCodes(codes prefix.PrefixCodes) prefix.PrefixCodes {
 	)
 
 	// createTables is the BZ2_hbCreateDecodeTables function from the C code.
-	var createTables = func(codes []prefix.PrefixCode) {
+	createTables := func(codes []prefix.PrefixCode) {
 		for _, c := range codes {
 			if c.Len > maxLen {
 				maxLen = c.Len
@@ -278,7 +278,7 @@ func handleDegenerateCodes(codes prefix.PrefixCodes) prefix.PrefixCodes {
 	}
 
 	// getSymbol is the GET_MTF_VAL macro from the C code.
-	var getSymbol = func(c prefix.PrefixCode) (uint32, int) {
+	getSymbol := func(c prefix.PrefixCode) (uint32, int) {
 		v := internal.ReverseUint32(c.Val)
 		n := c.Len
 
@@ -315,7 +315,7 @@ func handleDegenerateCodes(codes prefix.PrefixCodes) prefix.PrefixCodes {
 	// If tree is under-subscribed, the worst-case runtime is O(1<<maxLen).
 	// If tree is over-subscribed, the worst-case runtime is O(maxNumSyms).
 	var pcodesArr [2 * maxNumSyms]prefix.PrefixCode
-	var pcodes = pcodesArr[:maxNumSyms]
+	pcodes := pcodesArr[:maxNumSyms]
 	var exploreCode func(prefix.PrefixCode) bool
 	exploreCode = func(c prefix.PrefixCode) (term bool) {
 		sym, status := getSymbol(c)

@@ -70,7 +70,7 @@ func TestDictDecoder(t *testing.T) {
 	var dd dictDecoder
 	dd.Init(1 << 11)
 
-	var checkLastBytes = func(str string) {
+	checkLastBytes := func(str string) {
 		if len(str) < 2 {
 			str = "\x00\x00" + str
 		}
@@ -81,7 +81,7 @@ func TestDictDecoder(t *testing.T) {
 			t.Errorf("last bytes mismatch: got %q, want %q", got, str)
 		}
 	}
-	var writeCopy = func(dist, length int) {
+	writeCopy := func(dist, length int) {
 		if dist < length {
 			cnt := (dist + length - 1) / dist
 			want += strings.Repeat(want[len(want)-dist:], cnt)[:length]
@@ -98,7 +98,7 @@ func TestDictDecoder(t *testing.T) {
 
 		checkLastBytes(want)
 	}
-	var writeString = func(str string) {
+	writeString := func(str string) {
 		want += str
 
 		for len(str) > 0 {

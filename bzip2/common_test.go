@@ -12,7 +12,7 @@ import (
 )
 
 func TestCRC(t *testing.T) {
-	var vectors = []struct {
+	vectors := []struct {
 		crc uint32
 		str string
 	}{

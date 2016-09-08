@@ -135,7 +135,7 @@ func (br *Reader) Reset(r io.Reader) error {
 
 // readStreamHeader reads the Brotli stream header according to RFC section 9.1.
 func (br *Reader) readStreamHeader() {
-	wbits := uint(br.rd.ReadSymbol(&decWinBits))
+	wbits := br.rd.ReadSymbol(&decWinBits)
 	if wbits == 0 {
 		panic(ErrCorrupt) // Reserved value used
 	}

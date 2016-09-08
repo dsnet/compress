@@ -9,7 +9,7 @@ import (
 )
 
 func TestBurrowsWheelerTransform(t *testing.T) {
-	var vectors = []struct {
+	vectors := []struct {
 		input  string // The input test string
 		output string // Expected output string after BWT (skip if empty)
 		ptr    int    // The BWT origin pointer

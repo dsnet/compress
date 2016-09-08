@@ -196,9 +196,9 @@ func main() {
 	flag.Parse()
 
 	// Parse the flag arguments.
-	var sep = regexp.MustCompile("[,:]")
 	var codecs, paths, files []string
 	var formats, tests, levels, sizes []int
+	sep := regexp.MustCompile("[,:]")
 	codecs = sep.Split(*f2, -1)
 	paths = sep.Split(*f3, -1)
 	files = sep.Split(*f4, -1)

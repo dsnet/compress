@@ -8,7 +8,7 @@ import "encoding/hex"
 import "testing"
 
 func TestMoveToFront(t *testing.T) {
-	var vectors = []struct {
+	vectors := []struct {
 		input, output string
 	}{{
 		input:  "",

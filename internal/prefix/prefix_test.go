@@ -81,7 +81,7 @@ var (
 )
 
 func TestReader(t *testing.T) {
-	var readers = map[string]func([]byte) io.Reader{
+	readers := map[string]func([]byte) io.Reader{
 		"io.Reader": func(b []byte) io.Reader {
 			return struct{ io.Reader }{bytes.NewReader(b)}
 		},
@@ -101,7 +101,7 @@ func TestReader(t *testing.T) {
 			return struct{ compress.BufferedReader }{bufio.NewReader(bytes.NewReader(b))}
 		},
 	}
-	var endians = map[string]bool{"littleEndian": false, "bigEndian": true}
+	endians := map[string]bool{"littleEndian": false, "bigEndian": true}
 
 	var i int
 	for ne, endian := range endians {
@@ -215,7 +215,7 @@ func TestReader(t *testing.T) {
 }
 
 func TestWriter(t *testing.T) {
-	var endians = map[string]bool{"littleEndian": false, "bigEndian": true}
+	endians := map[string]bool{"littleEndian": false, "bigEndian": true}
 
 	var i int
 	for ne, endian := range endians {
@@ -315,7 +315,7 @@ func TestWriter(t *testing.T) {
 
 func TestGenerate(t *testing.T) {
 	r := testutil.NewRand(0)
-	var makeCodes = func(freqs []uint) PrefixCodes {
+	makeCodes := func(freqs []uint) PrefixCodes {
 		codes := make(PrefixCodes, len(freqs))
 		for i, j := range r.Perm(len(freqs)) {
 			codes[i] = PrefixCode{Sym: uint32(i), Cnt: uint32(freqs[j])}
@@ -324,7 +324,7 @@ func TestGenerate(t *testing.T) {
 		return codes
 	}
 
-	var vectors = []struct {
+	vectors := []struct {
 		maxBits uint // Maximum prefix bit-length (0 to skip GenerateLengths)
 		input   PrefixCodes
 		valid   bool
@@ -590,7 +590,7 @@ func TestGenerate(t *testing.T) {
 }
 
 func TestPrefix(t *testing.T) {
-	var makeCodes = func(freqs []uint) PrefixCodes {
+	makeCodes := func(freqs []uint) PrefixCodes {
 		codes := make(PrefixCodes, len(freqs))
 		for i, n := range freqs {
 			codes[i] = PrefixCode{Sym: uint32(i), Cnt: uint32(n)}
@@ -606,7 +606,7 @@ func TestPrefix(t *testing.T) {
 		return codes
 	}
 
-	var vectors = []struct {
+	vectors := []struct {
 		codes PrefixCodes
 	}{{
 		codes: makeCodes([]uint{}),
@@ -650,7 +650,7 @@ func TestPrefix(t *testing.T) {
 		codes: func() (codes PrefixCodes) {
 			codes = PrefixCodes{{Sym: 0, Val: 0, Len: 1}}
 			for i := uint32(0); i < 16; i++ {
-				var code = PrefixCode{Sym: i + 1, Val: i<<1 | 1, Len: 5}
+				code := PrefixCode{Sym: i + 1, Val: i<<1 | 1, Len: 5}
 				codes = append(codes, code)
 			}
 			return codes
@@ -807,7 +807,7 @@ func TestPrefix(t *testing.T) {
 }
 
 func TestRange(t *testing.T) {
-	var vectors = []struct {
+	vectors := []struct {
 		input RangeCodes
 		valid bool
 	}{{

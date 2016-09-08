@@ -12,7 +12,7 @@ import (
 )
 
 func TestRunLengthEncoder(t *testing.T) {
-	var vectors = []struct {
+	vectors := []struct {
 		size   int
 		input  string
 		output string
@@ -86,7 +86,7 @@ func TestRunLengthEncoder(t *testing.T) {
 }
 
 func TestRunLengthDecoder(t *testing.T) {
-	var vectors = []struct {
+	vectors := []struct {
 		input  string
 		output string
 	}{{

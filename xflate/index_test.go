@@ -12,7 +12,7 @@ import (
 )
 
 func TestIndexRoundTrip(t *testing.T) {
-	var vectors = []index{{
+	vectors := []index{{
 		Records:  nil,
 		BackSize: 0,
 	}, {
@@ -115,7 +115,7 @@ func TestIndexSearch(t *testing.T) {
 		offset     int64  // Input query
 		prev, curr record // Expected output
 	}
-	var vectors = []struct {
+	vectors := []struct {
 		idx index   // The index to query on
 		qs  []query // A list of query results
 	}{{

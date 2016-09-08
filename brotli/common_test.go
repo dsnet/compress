@@ -19,7 +19,7 @@ func TestTableCRC(t *testing.T) {
 		transformBuf.WriteString(t.suffix + "\x00")
 	}
 
-	var vectors = []struct {
+	vectors := []struct {
 		crc uint32
 		buf []byte
 	}{

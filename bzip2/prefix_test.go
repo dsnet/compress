@@ -12,7 +12,7 @@ import (
 )
 
 func TestDegenerateCodes(t *testing.T) {
-	var vectors = []struct {
+	vectors := []struct {
 		input  prefix.PrefixCodes
 		output prefix.PrefixCodes
 	}{{

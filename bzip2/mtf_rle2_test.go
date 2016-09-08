@@ -12,7 +12,7 @@ import (
 )
 
 func TestMoveToFront(t *testing.T) {
-	var getDict = func(buf []byte) []uint8 {
+	getDict := func(buf []byte) []uint8 {
 		var dictMap [256]bool
 		for _, b := range buf {
 			dictMap[b] = true
@@ -27,7 +27,7 @@ func TestMoveToFront(t *testing.T) {
 		return dict
 	}
 
-	var vectors = []struct {
+	vectors := []struct {
 		size   int // If zero, default to 1MiB
 		input  []byte
 		output []uint16

@@ -258,12 +258,12 @@ func (br *bitReader) readSimplePrefixCode(pd *prefixDecoder, maxSyms uint) {
 		codes[i].sym = uint32(br.ReadBits(clen))
 	}
 
-	var copyLens = func(lens []uint) {
+	copyLens := func(lens []uint) {
 		for i := 0; i < nsym; i++ {
 			codes[i].len = uint32(lens[i])
 		}
 	}
-	var compareSwap = func(i, j int) {
+	compareSwap := func(i, j int) {
 		if codes[i].sym > codes[j].sym {
 			codes[i], codes[j] = codes[j], codes[i]
 		}

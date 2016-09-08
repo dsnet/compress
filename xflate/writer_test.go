@@ -14,10 +14,10 @@ import (
 )
 
 func TestWriter(t *testing.T) {
-	var br = bytes.Repeat
-	var dh = testutil.MustDecodeHex
+	br := bytes.Repeat
+	dh := testutil.MustDecodeHex
 
-	var vectors = []struct {
+	vectors := []struct {
 		desc   string        // Test description
 		conf   *WriterConfig // Input WriterConfig
 		input  []interface{} // Test input tokens (either flush mode or input string)

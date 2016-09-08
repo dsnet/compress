@@ -172,8 +172,8 @@ func main() {
 		pr.compSize = r.compSize
 	}
 
-	var pf = func(a, b int64) float64 { return 100.0 * (float64(a) / float64(b)) }
-	var me = func(b []byte) []byte { return b }
+	pf := func(a, b int64) float64 { return 100.0 * (float64(a) / float64(b)) }
+	me := func(b []byte) []byte { return b }
 	if *metaEncode {
 		me = encode
 	}

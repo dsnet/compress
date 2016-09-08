@@ -28,7 +28,7 @@ const (
 
 func main() {
 	var b []byte
-	var r = rand.New(rand.NewSource(0))
+	r := rand.New(rand.NewSource(0))
 
 	for len(b) < size {
 		n := 16 + r.Intn(64) // Length of substring

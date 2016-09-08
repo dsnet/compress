@@ -354,7 +354,7 @@ func (xr *Reader) decodeIndexes(backSize int64) error {
 func (xr *Reader) decodeIndex(idx *index) error {
 	// Helper function to read VLIs.
 	var errVLI error
-	var readVLI = func() int64 {
+	readVLI := func() int64 {
 		x, n := binary.Uvarint(xr.bw.Bytes())
 		if n <= 0 || x > math.MaxInt64 {
 			errVLI = errCorrupted

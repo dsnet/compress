@@ -19,7 +19,7 @@ const (
 
 func main() {
 	var b []byte
-	var r = rand.New(rand.NewSource(0))
+	r := rand.New(rand.NewSource(0))
 
 	randLen := func() (l int) {
 		p := r.Float32()

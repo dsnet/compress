@@ -23,7 +23,7 @@ var (
 )
 
 func TestRoundTrip(t *testing.T) {
-	var vectors = [][]byte{
+	vectors := [][]byte{
 		nil, testBinary, testDigits, testHuffman, testRandom, testRepeats, testTwain, testZeros,
 	}
 
