@@ -10,7 +10,7 @@ import (
 	"io"
 
 	"github.com/dsnet/compress/internal/errors"
-	"github.com/dsnet/compress/xflate/meta"
+	"github.com/dsnet/compress/xflate/internal/meta"
 )
 
 // A Writer is an io.Writer that can write the XFLATE format.
