@@ -11,7 +11,7 @@ import (
 func TestBurrowsWheelerTransform(t *testing.T) {
 	vectors := []struct {
 		input  string // The input test string
-		output string // Expected output string after BWT (skip if empty)
+		output string // Expected output string after BWT
 		ptr    int    // The BWT origin pointer
 	}{{
 		input:  "",
