@@ -35,7 +35,7 @@ import (
 	"math/big"
 	"math/rand"
 
-	"github.com/dsnet/compress/xflate/meta"
+	"github.com/dsnet/compress/xflate/internal/meta"
 )
 
 func init() { log.SetFlags(log.Lshortfile) }
