@@ -75,7 +75,7 @@ func (mr *Reader) Read(buf []byte) (int, error) {
 	for len(buf) > 0 {
 		if len(mr.buf) > 0 {
 			cpCnt := copy(buf, mr.buf)
-			buf, mr.buf = buf[cpCnt:], mr.buf[cpCnt:]
+			mr.buf = mr.buf[cpCnt:]
 			rdCnt += cpCnt
 			break
 		}
