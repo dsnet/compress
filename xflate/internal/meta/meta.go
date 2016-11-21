@@ -25,8 +25,23 @@ import (
 )
 
 // These are the magic values that begin every single meta block.
-const magicVals uint32 = 0x05860004
-const magicMask uint32 = 0xfffe3fc6
+const (
+	magicVals uint32 = 0x05860004
+	magicMask uint32 = 0xfffe3fc6
+)
+
+// ReverseSearch searches for a meta header in reverse. This returns the last
+// index where the header was found. If not found, it returns -1.
+func ReverseSearch(data []byte) int {
+	var magic uint32
+	for i := len(data) - 1; i >= 0; i-- {
+		magic = (magic << 8) | uint32(data[i])
+		if magic&magicMask == magicVals {
+			return i
+		}
+	}
+	return -1
+}
 
 const (
 	maxSyms    = 257 // Maximum number of literal codes (with EOM marker)
@@ -108,22 +123,7 @@ const (
 	symRepZero        // Symbol to repeat zero symbol  (clen: 18)
 )
 
-var (
-	oneBits [256]byte
-
-	encHuff prefix.Encoder
-	decHuff prefix.Decoder
-)
-
-func init() {
-	// Dynamically generate the LUT to count bits.
-	for i := range oneBits[:] {
-		for b := byte(i); b > 0; b >>= 1 {
-			oneBits[i] += b & 1
-		}
-	}
-
-	// Dynamically generate the Huffman codes.
+var encHuff, decHuff = func() (enc prefix.Encoder, dec prefix.Decoder) {
 	codes := [4]prefix.PrefixCode{
 		{Sym: symZero, Len: 1},
 		{Sym: symOne, Len: 2},
@@ -131,9 +131,10 @@ func init() {
 		{Sym: symRepZero, Len: 3},
 	}
 	prefix.GeneratePrefixes(codes[:])
-	decHuff.Init(codes[:])
-	encHuff.Init(codes[:])
-}
+	enc.Init(codes[:])
+	dec.Init(codes[:])
+	return
+}()
 
 func errorf(c int, f string, a ...interface{}) error {
 	return errors.Error{Code: c, Pkg: "meta", Msg: fmt.Sprintf(f, a...)}
@@ -144,22 +145,19 @@ var (
 	errClosed    = errorf(errors.Closed, "")
 )
 
-// ReverseSearch searches for a meta header in reverse. This returns the last
-// index where the header was found. If not found, it returns -1.
-func ReverseSearch(data []byte) int {
-	var magic uint32
-	for i := len(data) - 1; i >= 0; i-- {
-		magic = (magic << 8) | uint32(data[i])
-		if magic&magicMask == magicVals {
-			return i
+// oneBitsLUT reports the number of set bits in the input byte.
+var oneBitsLUT = func() (lut [256]byte) {
+	for i := range lut[:] {
+		for b := byte(i); b > 0; b >>= 1 {
+			lut[i] += b & 1
 		}
 	}
-	return -1
-}
+	return
+}()
 
 // numBits counts the number of zero and one bits in the byte.
 func numBits(b byte) (zeros, ones int) {
-	ones = int(oneBits[b])
+	ones = int(oneBitsLUT[b])
 	zeros = 8 - ones
 	return
 }
