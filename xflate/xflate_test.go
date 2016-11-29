@@ -23,46 +23,61 @@ var (
 )
 
 func TestRoundTrip(t *testing.T) {
-	vectors := [][]byte{
-		nil, testBinary, testDigits, testHuffman, testRandom, testRepeats, testTwain, testZeros,
+	vectors := []struct {
+		name  string
+		input []byte
+	}{
+		{"Nil", nil},
+		{"Binary", testBinary},
+		{"Digits", testDigits},
+		{"Huffman", testHuffman},
+		{"Random", testRandom},
+		{"Repeats", testRepeats},
+		{"Twain", testTwain},
+		{"Zeros", testZeros},
 	}
 
-	for i, input := range vectors {
-		var wb, rb bytes.Buffer
+	for _, v := range vectors {
+		v := v
+		t.Run(v.name, func(t *testing.T) {
+			t.Parallel()
 
-		xw, err := NewWriter(&wb, &WriterConfig{ChunkSize: 1 << 10})
-		if err != nil {
-			t.Errorf("test %d, unexpected error: NewWriter() = %v", i, err)
-		}
-		cnt, err := io.Copy(xw, bytes.NewReader(input))
-		if err != nil {
-			t.Errorf("test %d, unexpected error: Write() = %v", i, err)
-		}
-		if cnt != int64(len(input)) {
-			t.Errorf("test %d, write count mismatch: got %d, want %d", i, cnt, len(input))
-		}
-		if err := xw.Close(); err != nil {
-			t.Errorf("test %d, unexpected error: Close() = %v", i, err)
-		}
+			var wb, rb bytes.Buffer
 
-		xr, err := NewReader(bytes.NewReader(wb.Bytes()), nil)
-		if err != nil {
-			t.Errorf("test %d, unexpected error: NewReader() = %v", i, err)
-		}
-		cnt, err = io.Copy(&rb, xr)
-		if err != nil {
-			t.Errorf("test %d, unexpected error: Read() = %v", i, err)
-		}
-		if cnt != int64(len(input)) {
-			t.Errorf("test %d, read count mismatch: got %d, want %d", i, cnt, len(input))
-		}
-		if err := xr.Close(); err != nil {
-			t.Errorf("test %d, unexpected error: Close() = %v", i, err)
-		}
+			xw, err := NewWriter(&wb, &WriterConfig{ChunkSize: 1 << 10})
+			if err != nil {
+				t.Errorf("unexpected error: NewWriter() = %v", err)
+			}
+			cnt, err := io.Copy(xw, bytes.NewReader(v.input))
+			if err != nil {
+				t.Errorf("unexpected error: Write() = %v", err)
+			}
+			if cnt != int64(len(v.input)) {
+				t.Errorf("write count mismatch: got %d, want %d", cnt, len(v.input))
+			}
+			if err := xw.Close(); err != nil {
+				t.Errorf("unexpected error: Close() = %v", err)
+			}
 
-		output := rb.Bytes()
-		if !bytes.Equal(output, input) {
-			t.Errorf("test %d, output data mismatch", i)
-		}
+			xr, err := NewReader(bytes.NewReader(wb.Bytes()), nil)
+			if err != nil {
+				t.Errorf("unexpected error: NewReader() = %v", err)
+			}
+			cnt, err = io.Copy(&rb, xr)
+			if err != nil {
+				t.Errorf("unexpected error: Read() = %v", err)
+			}
+			if cnt != int64(len(v.input)) {
+				t.Errorf("read count mismatch: got %d, want %d", cnt, len(v.input))
+			}
+			if err := xr.Close(); err != nil {
+				t.Errorf("unexpected error: Close() = %v", err)
+			}
+
+			output := rb.Bytes()
+			if !bytes.Equal(output, v.input) {
+				t.Errorf("output data mismatch")
+			}
+		})
 	}
 }
