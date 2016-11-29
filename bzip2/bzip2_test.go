@@ -76,7 +76,10 @@ var sizes = []struct {
 
 func TestRoundTrip(t *testing.T) {
 	for _, v := range testdata {
+		v := v
 		t.Run(v.name, func(t *testing.T) {
+			t.Parallel()
+
 			var buf1, buf2 bytes.Buffer
 
 			// Compress the input.
