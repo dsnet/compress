@@ -53,41 +53,56 @@ func testBackwardCompatibility(t *testing.T, b []byte) {
 func TestRoundTrip(t *testing.T) {
 	testBackwardCompatibility(t, nil)
 
-	vectors := [][]byte{
-		nil, testBinary, testDigits, testHuffman, testRandom, testRepeats, testTwain, testZeros,
+	vectors := []struct {
+		name  string
+		input []byte
+	}{
+		{"Nil", nil},
+		{"Binary", testBinary},
+		{"Digits", testDigits},
+		{"Huffman", testHuffman},
+		{"Random", testRandom},
+		{"Repeats", testRepeats},
+		{"Twain", testTwain},
+		{"Zeros", testZeros},
 	}
 
-	for i, input := range vectors {
-		var wb, rb bytes.Buffer
+	for _, v := range vectors {
+		v := v
+		t.Run(v.name, func(t *testing.T) {
+			t.Parallel()
 
-		mw := NewWriter(&wb)
-		cnt, err := io.Copy(mw, bytes.NewReader(input))
-		if err != nil {
-			t.Errorf("test %d, unexpected error: Write() = %v", i, err)
-		}
-		if cnt != int64(len(input)) {
-			t.Errorf("test %d, write count mismatch: got %d, want %d", i, cnt, len(input))
-		}
-		if err := mw.Close(); err != nil {
-			t.Errorf("test %d, unexpected error: Close() = %v", i, err)
-		}
+			var wb, rb bytes.Buffer
 
-		mr := NewReader(&wb)
-		cnt, err = io.Copy(&rb, mr)
-		if err != nil {
-			t.Errorf("test %d, unexpected error: Read() = %v", i, err)
-		}
-		if cnt != int64(len(input)) {
-			t.Errorf("test %d, read count mismatch: got %d, want %d", i, cnt, len(input))
-		}
-		if err := mr.Close(); err != nil {
-			t.Errorf("test %d, unexpected error: Close() = %v", i, err)
-		}
+			mw := NewWriter(&wb)
+			cnt, err := io.Copy(mw, bytes.NewReader(v.input))
+			if err != nil {
+				t.Errorf("unexpected error: Write() = %v", err)
+			}
+			if cnt != int64(len(v.input)) {
+				t.Errorf("write count mismatch: got %d, want %d", cnt, len(v.input))
+			}
+			if err := mw.Close(); err != nil {
+				t.Errorf("unexpected error: Close() = %v", err)
+			}
 
-		output := rb.Bytes()
-		if !bytes.Equal(output, input) {
-			t.Errorf("test %d, output data mismatch", i)
-		}
+			mr := NewReader(&wb)
+			cnt, err = io.Copy(&rb, mr)
+			if err != nil {
+				t.Errorf("unexpected error: Read() = %v", err)
+			}
+			if cnt != int64(len(v.input)) {
+				t.Errorf("read count mismatch: got %d, want %d", cnt, len(v.input))
+			}
+			if err := mr.Close(); err != nil {
+				t.Errorf("unexpected error: Close() = %v", err)
+			}
+
+			output := rb.Bytes()
+			if !bytes.Equal(output, v.input) {
+				t.Errorf("output data mismatch")
+			}
+		})
 	}
 }
 
