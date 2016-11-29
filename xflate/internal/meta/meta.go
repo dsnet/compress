@@ -8,7 +8,7 @@
 // or more RFC 1951 compliant DEFLATE blocks. This encoding has the special
 // property that when the blocks are decoded by a RFC 1951 compliant
 // decompressor, they produce absolutely no output. However, when decoded with
-// the XFLATE meta decoder, it losslessly produces the encoded input.
+// the XFLATE meta decoder, it losslessly produces the original input.
 //
 // The meta encoding works by encoding arbitrary data into the Huffman tree
 // definition of dynamic DEFLATE blocks. These blocks have an empty data section
@@ -79,7 +79,7 @@ const (
 //	This bit indicate absolute termination of the stream.
 //
 //	Meta: This final bit indicates that the current sequence of meta blocks has
-//	terminated. The decoded data from those blocks form a single stream.
+//	terminated. The decoded data from those blocks form a meta substream.
 //	This bit is used as a form of message framing for the meta encoding format.
 //
 // It invalid for the stream final bit to be set, while the meta final bit is
