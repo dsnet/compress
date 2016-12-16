@@ -7,6 +7,8 @@ package brotli
 import (
 	"bufio"
 	"io"
+
+	"github.com/dsnet/compress/internal/errors"
 )
 
 // The bitReader preserves the property that it will never read more bytes than
@@ -103,7 +105,7 @@ func (br *bitReader) FeedBits(nb uint) {
 					if err == io.EOF {
 						err = io.ErrUnexpectedEOF
 					}
-					panic(err)
+					errors.Panic(err)
 				}
 			}
 			cnt := int(64-br.numBits) / 8
@@ -127,7 +129,7 @@ func (br *bitReader) FeedBits(nb uint) {
 				if err == io.EOF {
 					err = io.ErrUnexpectedEOF
 				}
-				panic(err)
+				errors.Panic(err)
 			}
 			br.bufBits |= uint64(c) << br.numBits
 			br.numBits += 8
@@ -139,7 +141,7 @@ func (br *bitReader) FeedBits(nb uint) {
 // Read reads up to len(buf) bytes into buf.
 func (br *bitReader) Read(buf []byte) (cnt int, err error) {
 	if br.numBits%8 != 0 {
-		return 0, Error("non-aligned bit buffer")
+		return 0, errorf(errors.Invalid, "non-aligned bit buffer")
 	}
 	if br.numBits > 0 {
 		for cnt = 0; len(buf) > cnt && br.numBits > 0; cnt++ {
@@ -208,7 +210,7 @@ func (br *bitReader) TryReadSymbol(pd *prefixDecoder) (uint, bool) {
 // ReadSymbol reads the next prefix symbol using the provided prefixDecoder.
 func (br *bitReader) ReadSymbol(pd *prefixDecoder) uint {
 	if len(pd.chunks) == 0 {
-		panic(ErrCorrupt) // Decode with empty tree
+		errors.Panic(errInvalid) // Decode with empty tree
 	}
 
 	nb := uint(pd.minBits)
@@ -293,7 +295,7 @@ func (br *bitReader) readSimplePrefixCode(pd *prefixDecoder, maxSyms uint) {
 		compareSwap(1, 2)
 	}
 	if uint(codes[nsym-1].sym) >= maxSyms {
-		panic(ErrCorrupt) // Symbol goes beyond range of alphabet
+		errors.Panic(errCorrupted) // Symbol goes beyond range of alphabet
 	}
 	pd.Init(codes[:nsym], true) // Must have 1..4 symbols
 }
@@ -319,7 +321,7 @@ func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, maxSyms, hskip uin
 		}
 	}
 	if len(codeCLens) < 1 {
-		panic(ErrCorrupt)
+		errors.Panic(errCorrupted)
 	}
 	br.prefix.Init(codeCLens, true) // Must have 1..len(complexLens) symbols
 
@@ -369,7 +371,7 @@ func (br *bitReader) readComplexPrefixCode(pd *prefixDecoder, maxSyms, hskip uin
 		}
 	}
 	if len(codes) < 2 || sym > maxSyms {
-		panic(ErrCorrupt)
+		errors.Panic(errCorrupted)
 	}
 	pd.Init(codes, true) // Must have 2..maxSyms symbols
 }

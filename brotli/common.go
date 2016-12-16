@@ -7,30 +7,37 @@
 package brotli
 
 import (
-	"runtime"
+	"fmt"
+
+	"github.com/dsnet/compress/internal/errors"
 )
 
-// Error is the wrapper type for errors specific to this library.
-type Error string
+func errorf(c int, f string, a ...interface{}) error {
+	return errors.Error{Code: c, Pkg: "brotli", Msg: fmt.Sprintf(f, a...)}
+}
 
-func (e Error) Error() string { return "brotli: " + string(e) }
+// errWrap converts a lower-level errors.Error to be one from this package.
+// The replaceCode passed in will be used to replace the code for any errors
+// with the errors.Invalid code.
+//
+// For the Reader, set this to errors.Corrupted.
+// For the Writer, set this to errors.Internal.
+func errWrap(err error, replaceCode int) error {
+	if cerr, ok := err.(errors.Error); ok {
+		if errors.IsInvalid(cerr) {
+			cerr.Code = replaceCode
+		}
+		err = errorf(cerr.Code, "%s", cerr.Msg)
+	}
+	return err
+}
 
 var (
-	ErrCorrupt error = Error("stream is corrupted")
+	errClosed    = errorf(errors.Closed, "")
+	errCorrupted = errorf(errors.Corrupted, "")
+	errInvalid   = errorf(errors.Invalid, "")
+	errUnaligned = errorf(errors.Invalid, "non-aligned bit buffer")
 )
-
-func errRecover(err *error) {
-	switch ex := recover().(type) {
-	case nil:
-		// Do nothing.
-	case runtime.Error:
-		panic(ex)
-	case error:
-		*err = ex
-	default:
-		panic(ex)
-	}
-}
 
 var (
 	reverseLUT [256]uint8

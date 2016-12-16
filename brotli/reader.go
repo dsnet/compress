@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 
 	"github.com/dsnet/compress/internal"
+	"github.com/dsnet/compress/internal/errors"
 )
 
 type Reader struct {
@@ -91,7 +92,7 @@ func (br *Reader) Read(buf []byte) (int, error) {
 		// Perform next step in decompression process.
 		br.rd.offset = br.InputOffset
 		func() {
-			defer errRecover(&br.err)
+			defer errors.Recover(&br.err)
 			br.step(br)
 		}()
 		br.InputOffset = br.rd.FlushOffset()
@@ -137,7 +138,7 @@ func (br *Reader) Reset(r io.Reader) error {
 func (br *Reader) readStreamHeader() {
 	wbits := br.rd.ReadSymbol(&decWinBits)
 	if wbits == 0 {
-		panic(ErrCorrupt) // Reserved value used
+		errors.Panic(errCorrupted) // Reserved value used
 	}
 	size := int(1<<wbits) - 16
 	br.dict.Init(size)
@@ -148,9 +149,9 @@ func (br *Reader) readStreamHeader() {
 func (br *Reader) readBlockHeader() {
 	if br.last {
 		if br.rd.ReadPads() > 0 {
-			panic(ErrCorrupt)
+			errors.Panic(errCorrupted)
 		}
-		panic(io.EOF)
+		errors.Panic(io.EOF)
 	}
 
 	// Read ISLAST and ISLASTEMPTY.
@@ -166,28 +167,28 @@ func (br *Reader) readBlockHeader() {
 	nibbles := br.rd.ReadBits(2) + 4
 	if nibbles == 7 {
 		if reserved := br.rd.ReadBits(1) == 1; reserved {
-			panic(ErrCorrupt)
+			errors.Panic(errCorrupted)
 		}
 
 		var skipLen int // 0..1<<24
 		if skipBytes := br.rd.ReadBits(2); skipBytes > 0 {
 			skipLen = int(br.rd.ReadBits(skipBytes * 8))
 			if skipBytes > 1 && skipLen>>((skipBytes-1)*8) == 0 {
-				panic(ErrCorrupt) // Shortest representation not used
+				errors.Panic(errCorrupted) // Shortest representation not used
 			}
 			skipLen++
 		}
 
 		if br.rd.ReadPads() > 0 {
-			panic(ErrCorrupt)
+			errors.Panic(errCorrupted)
 		}
-		br.blkLen = skipLen // Use blkLen to track meta data number of bytes
+		br.blkLen = skipLen // Use blkLen to track metadata number of bytes
 		br.readMetaData()
 		return
 	}
 	blkLen = int(br.rd.ReadBits(nibbles * 4))
 	if nibbles > 4 && blkLen>>((nibbles-1)*4) == 0 {
-		panic(ErrCorrupt) // Shortest representation not used
+		errors.Panic(errCorrupted) // Shortest representation not used
 	}
 	br.blkLen = blkLen + 1
 
@@ -195,7 +196,7 @@ func (br *Reader) readBlockHeader() {
 	if !br.last {
 		if uncompressed := br.rd.ReadBits(1) == 1; uncompressed {
 			if br.rd.ReadPads() > 0 {
-				panic(ErrCorrupt)
+				errors.Panic(errCorrupted)
 			}
 			br.readRawData()
 			return
@@ -212,9 +213,9 @@ func (br *Reader) readMetaData() {
 		br.metaBuf = make([]byte, 4096) // Lazy allocate
 	}
 	if cnt, err := io.CopyBuffer(br.metaWr, &br.metaRd, br.metaBuf); err != nil {
-		panic(err) // Will never panic with io.EOF
+		errors.Panic(err) // Will never panic with io.EOF
 	} else if cnt < int64(br.blkLen) {
-		panic(io.ErrUnexpectedEOF)
+		errors.Panic(io.ErrUnexpectedEOF)
 	}
 	br.step = (*Reader).readBlockHeader
 }
@@ -233,7 +234,7 @@ func (br *Reader) readRawData() {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
-		panic(err)
+		errors.Panic(err)
 	}
 
 	if br.blkLen > 0 {
@@ -486,7 +487,7 @@ readDistance:
 			}
 			br.distZero = bool(distSym == 0)
 			if br.dist <= 0 {
-				panic(ErrCorrupt)
+				errors.Panic(errCorrupted)
 			}
 		}
 
@@ -523,7 +524,7 @@ copyStaticDict:
 	{
 		if len(br.word) == 0 {
 			if br.cpyLen < minDictLen || br.cpyLen > maxDictLen {
-				panic(ErrCorrupt)
+				errors.Panic(errCorrupted)
 			}
 			wordIdx := br.dist - (br.dict.HistSize() + 1)
 			index := wordIdx % dictSizes[br.cpyLen]
@@ -531,7 +532,7 @@ copyStaticDict:
 			baseWord := dictLUT[offset : offset+br.cpyLen]
 			transformIdx := wordIdx >> uint(dictBitSizes[br.cpyLen])
 			if transformIdx >= len(transformLUT) {
-				panic(ErrCorrupt)
+				errors.Panic(errCorrupted)
 			}
 			cnt := transformWord(br.wordBuf[:], baseWord, transformIdx)
 			br.word = br.wordBuf[:cnt]
@@ -555,7 +556,7 @@ copyStaticDict:
 finishCommand:
 	// Finish off this command and check if we need to loop again.
 	if br.blkLen < 0 {
-		panic(ErrCorrupt)
+		errors.Panic(errCorrupted)
 	}
 	if br.blkLen > 0 {
 		goto startCommand // More commands in this block
@@ -589,7 +590,7 @@ func (br *Reader) readContextMap(cm []uint8, numTrees uint) {
 			// Repeated zeros.
 			n := int(br.rd.ReadOffset(sym-1, maxRLERanges))
 			if i+n > len(cm) {
-				panic(ErrCorrupt)
+				errors.Panic(errCorrupted)
 			}
 			for j := i + n; i < j; i++ {
 				cm[i] = 0
