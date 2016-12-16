@@ -20,7 +20,7 @@ type Error interface {
 	// IsDeprecated reports the use of a deprecated and unsupported feature.
 	IsDeprecated() bool
 
-	// IsCorrupted reports whether the input the stream was corrupted.
+	// IsCorrupted reports whether the input stream was corrupted.
 	IsCorrupted() bool
 }
 
