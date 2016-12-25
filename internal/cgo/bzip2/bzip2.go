@@ -21,8 +21,8 @@ bz_stream* bzDecCreate() {
 
 int bzDecStream(
 	bz_stream* state,
-	uint* avail_in, char* next_in,
-	uint* avail_out, char* next_out
+	unsigned int* avail_in, char* next_in,
+	unsigned int* avail_out, char* next_out
 ) {
 	state->avail_in = *avail_in;
 	state->avail_out = *avail_out;
@@ -49,8 +49,8 @@ bz_stream* bzEncCreate(int level) {
 
 int bzEncStream(
 	bz_stream* state, int mode,
-	uint* avail_in, char* next_in,
-	uint* avail_out, char* next_out
+	unsigned int* avail_in, char* next_in,
+	unsigned int* avail_out, char* next_out
 ) {
 	state->avail_in = *avail_in;
 	state->avail_out = *avail_out;
