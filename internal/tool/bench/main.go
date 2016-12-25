@@ -274,11 +274,13 @@ func runBenchmarks(files, codecs []string, formats []Format, tests []Test, level
 			// Check that we can actually do this
 			fmt.Printf("BENCHMARK: %s:%s\n", enumToFmt[f], enumToTest[t])
 			if len(encs) == 0 {
-				fmt.Println("\tSKIP: There are no encoders available.\n")
+				fmt.Println("\tSKIP: There are no encoders available.")
+				fmt.Println("")
 				continue
 			}
 			if len(decs) == 0 && t == TestDecodeRate {
-				fmt.Println("\tSKIP: There are no decoders available.\n")
+				fmt.Println("\tSKIP: There are no decoders available.")
+				fmt.Println("")
 				continue
 			}
 
