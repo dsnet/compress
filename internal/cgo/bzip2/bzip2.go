@@ -108,7 +108,7 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 
 		switch ret {
 		case C.BZ_OK:
-			if len(zr.buf) == 0 {
+			if len(zr.buf) == 0 && n == 0 {
 				n1, err := zr.r.Read(zr.arr[:])
 				if n1 > 0 {
 					zr.buf = zr.arr[:n1]

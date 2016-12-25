@@ -23,48 +23,83 @@ import (
 	"github.com/dsnet/golib/strconv"
 )
 
-const (
-	FormatFlate = iota
-	FormatBZ2
-	FormatXZ
-	FormatBrotli
-)
+type Format int
 
 const (
-	TestEncodeRate = iota
+	FormatFlate Format = iota
+	FormatBrotli
+	FormatBZ2
+	FormatLZMA2
+	FormatZstd
+)
+
+func (f Format) String() string {
+	switch f {
+	case FormatFlate:
+		return "Flate"
+	case FormatBrotli:
+		return "Brotli"
+	case FormatBZ2:
+		return "BZip2"
+	case FormatLZMA2:
+		return "LZMA2"
+	case FormatZstd:
+		return "Zstd"
+	default:
+		return "<UnknownFormat>"
+	}
+}
+
+type Test int
+
+const (
+	TestEncodeRate Test = iota
 	TestDecodeRate
 	TestCompressRatio
 )
+
+func (t Test) String() string {
+	switch t {
+	case TestEncodeRate:
+		return "EncodeRate"
+	case TestDecodeRate:
+		return "DecodeRate"
+	case TestCompressRatio:
+		return "CompressRatio"
+	default:
+		return "<UnknownTest>"
+	}
+}
 
 type Encoder func(io.Writer, int) io.WriteCloser
 type Decoder func(io.Reader) io.ReadCloser
 
 var (
-	Encoders map[int]map[string]Encoder
-	Decoders map[int]map[string]Decoder
+	Encoders map[Format]map[string]Encoder
+	Decoders map[Format]map[string]Decoder
 
 	// Paths is a list of search paths for test files.
 	Paths []string
 )
 
-func RegisterEncoder(format int, name string, enc Encoder) {
+func RegisterEncoder(ft Format, name string, enc Encoder) {
 	if Encoders == nil {
-		Encoders = make(map[int]map[string]Encoder)
+		Encoders = make(map[Format]map[string]Encoder)
 	}
-	if Encoders[format] == nil {
-		Encoders[format] = make(map[string]Encoder)
+	if Encoders[ft] == nil {
+		Encoders[ft] = make(map[string]Encoder)
 	}
-	Encoders[format][name] = enc
+	Encoders[ft][name] = enc
 }
 
-func RegisterDecoder(format int, name string, dec Decoder) {
+func RegisterDecoder(ft Format, name string, dec Decoder) {
 	if Decoders == nil {
-		Decoders = make(map[int]map[string]Decoder)
+		Decoders = make(map[Format]map[string]Decoder)
 	}
-	if Decoders[format] == nil {
-		Decoders[format] = make(map[string]Decoder)
+	if Decoders[ft] == nil {
+		Decoders[ft] = make(map[string]Decoder)
 	}
-	Decoders[format][name] = dec
+	Decoders[ft][name] = dec
 }
 
 // BenchmarkEncoder benchmarks a single encoder on the given input data using
@@ -102,10 +137,10 @@ type Result struct {
 // The values returned have the following structure:
 //	results: [len(files)*len(levels)*len(sizes)][len(encs)]Result
 //	names:   [len(files)*len(levels)*len(sizes)]string
-func BenchmarkEncoderSuite(format int, encs, files []string, levels, sizes []int, tick func()) (results [][]Result, names []string) {
+func BenchmarkEncoderSuite(ft Format, encs, files []string, levels, sizes []int, tick func()) (results [][]Result, names []string) {
 	return benchmarkSuite(encs, files, levels, sizes, tick,
 		func(input []byte, enc string, lvl int) Result {
-			result := BenchmarkEncoder(input, Encoders[format][enc], lvl)
+			result := BenchmarkEncoder(input, Encoders[ft][enc], lvl)
 			if result.N == 0 {
 				return Result{}
 			}
@@ -145,7 +180,7 @@ func BenchmarkDecoder(input []byte, dec Decoder) testing.BenchmarkResult {
 // The values returned have the following structure:
 //	results: [len(files)*len(levels)*len(sizes)][len(decs)]Result
 //	names:   [len(files)*len(levels)*len(sizes)]string
-func BenchmarkDecoderSuite(format int, decs, files []string, levels, sizes []int, ref Encoder, tick func()) (results [][]Result, names []string) {
+func BenchmarkDecoderSuite(ft Format, decs, files []string, levels, sizes []int, ref Encoder, tick func()) (results [][]Result, names []string) {
 	return benchmarkSuite(decs, files, levels, sizes, tick,
 		func(input []byte, dec string, lvl int) Result {
 			buf := new(bytes.Buffer)
@@ -158,7 +193,7 @@ func BenchmarkDecoderSuite(format int, decs, files []string, levels, sizes []int
 			}
 			output := buf.Bytes()
 
-			result := BenchmarkDecoder(output, Decoders[format][dec])
+			result := BenchmarkDecoder(output, Decoders[ft][dec])
 			if result.N == 0 {
 				return Result{}
 			}
@@ -174,11 +209,11 @@ func BenchmarkDecoderSuite(format int, decs, files []string, levels, sizes []int
 // The values returned have the following structure:
 //	results: [len(files)*len(levels)*len(sizes)][len(encs)]Result
 //	names:   [len(files)*len(levels)*len(sizes)]string
-func BenchmarkRatioSuite(format int, encs, files []string, levels, sizes []int, tick func()) (results [][]Result, names []string) {
+func BenchmarkRatioSuite(ft Format, encs, files []string, levels, sizes []int, tick func()) (results [][]Result, names []string) {
 	return benchmarkSuite(encs, files, levels, sizes, tick,
 		func(input []byte, enc string, lvl int) Result {
 			buf := new(bytes.Buffer)
-			wr := Encoders[format][enc](buf, lvl)
+			wr := Encoders[ft][enc](buf, lvl)
 			if _, err := io.Copy(wr, bytes.NewReader(input)); err != nil {
 				return Result{}
 			}
