@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE.md file.
 
-// Package bench compares the performance of various compression implementations
-// with respect to encode speed, decode speed, and ratio.
-package bench
+package main
 
 import (
 	"bufio"
@@ -33,23 +31,6 @@ const (
 	FormatZstd
 )
 
-func (f Format) String() string {
-	switch f {
-	case FormatFlate:
-		return "Flate"
-	case FormatBrotli:
-		return "Brotli"
-	case FormatBZ2:
-		return "BZip2"
-	case FormatLZMA2:
-		return "LZMA2"
-	case FormatZstd:
-		return "Zstd"
-	default:
-		return "<UnknownFormat>"
-	}
-}
-
 type Test int
 
 const (
@@ -57,19 +38,6 @@ const (
 	TestDecodeRate
 	TestCompressRatio
 )
-
-func (t Test) String() string {
-	switch t {
-	case TestEncodeRate:
-		return "EncodeRate"
-	case TestDecodeRate:
-		return "DecodeRate"
-	case TestCompressRatio:
-		return "CompressRatio"
-	default:
-		return "<UnknownTest>"
-	}
-}
 
 type Encoder func(io.Writer, int) io.WriteCloser
 type Decoder func(io.Reader) io.ReadCloser

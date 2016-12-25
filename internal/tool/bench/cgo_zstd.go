@@ -4,7 +4,7 @@
 
 // +build cgo,!no_cgo_zstd
 
-package bench
+package main
 
 import "github.com/dsnet/compress/internal/cgo/zstd"
 

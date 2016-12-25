@@ -4,7 +4,7 @@
 
 // +build !no_lib_uk
 
-package bench
+package main
 
 import (
 	"io"

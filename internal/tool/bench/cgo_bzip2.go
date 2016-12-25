@@ -4,7 +4,7 @@
 
 // +build cgo,!no_cgo_bzip2
 
-package bench
+package main
 
 import "github.com/dsnet/compress/internal/cgo/bzip2"
 

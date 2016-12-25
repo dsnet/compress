@@ -4,7 +4,7 @@
 
 // +build !no_lib_kp
 
-package bench
+package main
 
 import (
 	"io"

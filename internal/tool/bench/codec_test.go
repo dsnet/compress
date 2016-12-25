@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE.md file.
 
-package bench
+package main
 
 import (
 	"bytes"
@@ -24,7 +24,9 @@ func TestCodecs(t *testing.T) {
 	}
 	for _, fl := range files {
 		dd := testutil.MustLoadFile(filepath.Join("../../../testdata", fl))
-		t.Run(fmt.Sprintf("File:%v", fl), func(t *testing.T) { testFormats(t, dd) })
+		t.Run(fmt.Sprintf("File:%v", fl), func(t *testing.T) {
+			testFormats(t, dd)
+		})
 	}
 }
 
@@ -37,7 +39,9 @@ func testFormats(t *testing.T, dd []byte) {
 		if len(Encoders[ft]) == 0 || len(Decoders[ft]) == 0 {
 			t.Skip("no codecs available")
 		}
-		t.Run(fmt.Sprintf("Format:%v", ft), func(t *testing.T) { testEncoders(t, ft, dd) })
+		t.Run(fmt.Sprintf("Format:%v", enumToFmt[ft]), func(t *testing.T) {
+			testEncoders(t, ft, dd)
+		})
 	}
 }
 

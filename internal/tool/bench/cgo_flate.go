@@ -4,7 +4,7 @@
 
 // +build cgo,!no_cgo_flate
 
-package bench
+package main
 
 import "github.com/dsnet/compress/internal/cgo/flate"
 
