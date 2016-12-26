@@ -37,6 +37,7 @@ func TestCodecs(t *testing.T) {
 		dd := testutil.MustLoadFile(fi.Abs)
 		name := strings.Replace(fi.Rel, string(filepath.Separator), "_", -1)
 		t.Run(fmt.Sprintf("File:%v", name), func(t *testing.T) {
+			t.Parallel()
 			testFormats(t, dd)
 		})
 	}
@@ -44,20 +45,22 @@ func TestCodecs(t *testing.T) {
 
 func testFormats(t *testing.T, dd []byte) {
 	for _, ft := range formats {
-		if len(encoders[ft]) == 0 || len(decoders[ft]) == 0 {
-			t.Skip("no codecs available")
-		}
+		ft := ft
 		t.Run(fmt.Sprintf("Format:%v", enumToFmt[ft]), func(t *testing.T) {
+			t.Parallel()
+			if len(encoders[ft]) == 0 || len(decoders[ft]) == 0 {
+				t.Skip("no codecs available")
+			}
 			testEncoders(t, ft, dd)
 		})
 	}
 }
 
 func testEncoders(t *testing.T, ft Format, dd []byte) {
-	t.Parallel()
 	for encName := range encoders[ft] {
 		encName := encName
 		t.Run(fmt.Sprintf("Encoder:%v", encName), func(t *testing.T) {
+			t.Parallel()
 			defer recoverPanic(t)
 
 			be := new(bytes.Buffer)
@@ -75,10 +78,10 @@ func testEncoders(t *testing.T, ft Format, dd []byte) {
 }
 
 func testDecoders(t *testing.T, ft Format, dd, de []byte) {
-	t.Parallel()
 	for decName := range decoders[ft] {
 		decName := decName
 		t.Run(fmt.Sprintf("Decoder:%v", decName), func(t *testing.T) {
+			t.Parallel()
 			defer recoverPanic(t)
 
 			bd := new(bytes.Buffer)
