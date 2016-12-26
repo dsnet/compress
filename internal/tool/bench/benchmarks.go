@@ -10,65 +10,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"os"
-	"path"
-	"regexp"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/dsnet/compress/internal/testutil"
-	"github.com/dsnet/golib/strconv"
 )
-
-type Format int
-
-const (
-	FormatFlate Format = iota
-	FormatBrotli
-	FormatBZ2
-	FormatLZMA2
-	FormatZstd
-)
-
-type Test int
-
-const (
-	TestEncodeRate Test = iota
-	TestDecodeRate
-	TestCompressRatio
-)
-
-type Encoder func(io.Writer, int) io.WriteCloser
-type Decoder func(io.Reader) io.ReadCloser
-
-var (
-	Encoders map[Format]map[string]Encoder
-	Decoders map[Format]map[string]Decoder
-
-	// Paths is a list of search paths for test files.
-	Paths []string
-)
-
-func RegisterEncoder(ft Format, name string, enc Encoder) {
-	if Encoders == nil {
-		Encoders = make(map[Format]map[string]Encoder)
-	}
-	if Encoders[ft] == nil {
-		Encoders[ft] = make(map[string]Encoder)
-	}
-	Encoders[ft][name] = enc
-}
-
-func RegisterDecoder(ft Format, name string, dec Decoder) {
-	if Decoders == nil {
-		Decoders = make(map[Format]map[string]Decoder)
-	}
-	if Decoders[ft] == nil {
-		Decoders[ft] = make(map[string]Decoder)
-	}
-	Decoders[ft][name] = dec
-}
 
 // BenchmarkEncoder benchmarks a single encoder on the given input data using
 // the selected compression level and reports the result.
@@ -105,10 +53,10 @@ type Result struct {
 // The values returned have the following structure:
 //	results: [len(files)*len(levels)*len(sizes)][len(encs)]Result
 //	names:   [len(files)*len(levels)*len(sizes)]string
-func BenchmarkEncoderSuite(ft Format, encs, files []string, levels, sizes []int, tick func()) (results [][]Result, names []string) {
+func BenchmarkEncoderSuite(ft Format, encs []string, files []file, levels, sizes []int, tick func()) (results [][]Result, names []string) {
 	return benchmarkSuite(encs, files, levels, sizes, tick,
 		func(input []byte, enc string, lvl int) Result {
-			result := BenchmarkEncoder(input, Encoders[ft][enc], lvl)
+			result := BenchmarkEncoder(input, encoders[ft][enc], lvl)
 			if result.N == 0 {
 				return Result{}
 			}
@@ -148,7 +96,7 @@ func BenchmarkDecoder(input []byte, dec Decoder) testing.BenchmarkResult {
 // The values returned have the following structure:
 //	results: [len(files)*len(levels)*len(sizes)][len(decs)]Result
 //	names:   [len(files)*len(levels)*len(sizes)]string
-func BenchmarkDecoderSuite(ft Format, decs, files []string, levels, sizes []int, ref Encoder, tick func()) (results [][]Result, names []string) {
+func BenchmarkDecoderSuite(ft Format, decs []string, files []file, levels, sizes []int, ref Encoder, tick func()) (results [][]Result, names []string) {
 	return benchmarkSuite(decs, files, levels, sizes, tick,
 		func(input []byte, dec string, lvl int) Result {
 			buf := new(bytes.Buffer)
@@ -161,7 +109,7 @@ func BenchmarkDecoderSuite(ft Format, decs, files []string, levels, sizes []int,
 			}
 			output := buf.Bytes()
 
-			result := BenchmarkDecoder(output, Decoders[ft][dec])
+			result := BenchmarkDecoder(output, decoders[ft][dec])
 			if result.N == 0 {
 				return Result{}
 			}
@@ -177,11 +125,11 @@ func BenchmarkDecoderSuite(ft Format, decs, files []string, levels, sizes []int,
 // The values returned have the following structure:
 //	results: [len(files)*len(levels)*len(sizes)][len(encs)]Result
 //	names:   [len(files)*len(levels)*len(sizes)]string
-func BenchmarkRatioSuite(ft Format, encs, files []string, levels, sizes []int, tick func()) (results [][]Result, names []string) {
+func BenchmarkRatioSuite(ft Format, encs []string, files []file, levels, sizes []int, tick func()) (results [][]Result, names []string) {
 	return benchmarkSuite(encs, files, levels, sizes, tick,
 		func(input []byte, enc string, lvl int) Result {
 			buf := new(bytes.Buffer)
-			wr := Encoders[ft][enc](buf, lvl)
+			wr := encoders[ft][enc](buf, lvl)
 			if _, err := io.Copy(wr, bytes.NewReader(input)); err != nil {
 				return Result{}
 			}
@@ -196,7 +144,7 @@ func BenchmarkRatioSuite(ft Format, encs, files []string, levels, sizes []int, t
 
 type benchFunc func(input []byte, codec string, level int) Result
 
-func benchmarkSuite(codecs, files []string, levels, sizes []int, tick func(), run benchFunc) ([][]Result, []string) {
+func benchmarkSuite(codecs []string, files []file, levels, sizes []int, tick func(), run benchFunc) ([][]Result, []string) {
 	// Allocate buffers for the result.
 	d0 := len(files) * len(levels) * len(sizes)
 	d1 := len(codecs)
@@ -211,11 +159,12 @@ func benchmarkSuite(codecs, files []string, levels, sizes []int, tick func(), ru
 	for _, f := range files {
 		for _, l := range levels {
 			for _, n := range sizes {
-				b, err := ioutil.ReadFile(getPath(f))
+				b, err := ioutil.ReadFile(f.Abs)
 				if err == nil {
 					b = testutil.ResizeData(b, n)
 				}
-				name := getName(f, l, len(b))
+				fname := strings.Replace(f.Rel, string(filepath.Separator), "_", -1)
+				name := fmt.Sprintf("%s:%d:%s", fname, l, intName(len(b)))
 				for j, c := range codecs {
 					if tick != nil {
 						tick()
@@ -231,31 +180,4 @@ func benchmarkSuite(codecs, files []string, levels, sizes []int, tick func(), ru
 		}
 	}
 	return results, names
-}
-
-func getPath(file string) string {
-	if path.IsAbs(file) {
-		return file
-	}
-	for _, p := range Paths {
-		p = path.Join(p, file)
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return file
-}
-
-func getName(f string, l, n int) string {
-	var sn string
-	switch n {
-	case 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12:
-		s := fmt.Sprintf("%e", float64(n))
-		re := regexp.MustCompile("\\.0*e\\+0*")
-		sn = re.ReplaceAllString(s, "e")
-	default:
-		s := strconv.FormatPrefix(float64(n), strconv.Base1024, 2)
-		sn = strings.Replace(s, ".00", "", -1)
-	}
-	return fmt.Sprintf("%s:%d:%s", path.Base(f), l, sn)
 }

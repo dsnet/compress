@@ -6,37 +6,45 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dsnet/compress/internal/testutil"
 )
+
+var level int
+
+func TestMain(m *testing.M) {
+	setDefaults()
+	flag.Var(&paths, "paths", "List of paths to search for test files")
+	flag.Var(&globs, "globs", "List of globs to match for test files")
+	flag.IntVar(&level, "level", 6, "Default compression level to use")
+	flag.Parse()
+	os.Exit(m.Run())
+}
 
 // TestCodecs tests that the output of each registered encoder is a valid input
 // for each registered decoder. This test runs in O(n^2) where n is the number
 // of registered codecs. This assumes that the number of test files and
 // compression formats stays relatively constant.
 func TestCodecs(t *testing.T) {
-	files := []string{
-		"binary.bin", "digits.txt", "huffman.txt", "random.bin", "repeats.bin", "twain.txt", "zeros.bin",
-	}
-	for _, fl := range files {
-		dd := testutil.MustLoadFile(filepath.Join("../../../testdata", fl))
-		t.Run(fmt.Sprintf("File:%v", fl), func(t *testing.T) {
+	for _, fi := range getFiles(paths, globs) {
+		dd := testutil.MustLoadFile(fi.Abs)
+		name := strings.Replace(fi.Rel, string(filepath.Separator), "_", -1)
+		t.Run(fmt.Sprintf("File:%v", name), func(t *testing.T) {
 			testFormats(t, dd)
 		})
 	}
 }
 
 func testFormats(t *testing.T, dd []byte) {
-	t.Parallel()
-	formats := []Format{
-		FormatFlate, FormatBrotli, FormatBZ2, FormatLZMA2, FormatZstd,
-	}
 	for _, ft := range formats {
-		if len(Encoders[ft]) == 0 || len(Decoders[ft]) == 0 {
+		if len(encoders[ft]) == 0 || len(decoders[ft]) == 0 {
 			t.Skip("no codecs available")
 		}
 		t.Run(fmt.Sprintf("Format:%v", enumToFmt[ft]), func(t *testing.T) {
@@ -47,12 +55,13 @@ func testFormats(t *testing.T, dd []byte) {
 
 func testEncoders(t *testing.T, ft Format, dd []byte) {
 	t.Parallel()
-	const level = 6 // Default compression on all encoders
-	for encName := range Encoders[ft] {
+	for encName := range encoders[ft] {
 		encName := encName
 		t.Run(fmt.Sprintf("Encoder:%v", encName), func(t *testing.T) {
+			defer recoverPanic(t)
+
 			be := new(bytes.Buffer)
-			zw := Encoders[ft][encName](be, level)
+			zw := encoders[ft][encName](be, level)
 			if _, err := io.Copy(zw, bytes.NewReader(dd)); err != nil {
 				t.Fatalf("unexpected Write error: %v", err)
 			}
@@ -67,11 +76,13 @@ func testEncoders(t *testing.T, ft Format, dd []byte) {
 
 func testDecoders(t *testing.T, ft Format, dd, de []byte) {
 	t.Parallel()
-	for decName := range Decoders[ft] {
+	for decName := range decoders[ft] {
 		decName := decName
 		t.Run(fmt.Sprintf("Decoder:%v", decName), func(t *testing.T) {
+			defer recoverPanic(t)
+
 			bd := new(bytes.Buffer)
-			zr := Decoders[ft][decName](bytes.NewReader(de))
+			zr := decoders[ft][decName](bytes.NewReader(de))
 			if _, err := io.Copy(bd, zr); err != nil {
 				t.Fatalf("unexpected Read error: %v", err)
 			}
@@ -82,5 +93,11 @@ func testDecoders(t *testing.T, ft Format, dd, de []byte) {
 				t.Error("data mismatch")
 			}
 		})
+	}
+}
+
+func recoverPanic(t *testing.T) {
+	if ex := recover(); ex != nil {
+		t.Fatalf("unexpected panic: %v", ex)
 	}
 }
