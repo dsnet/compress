@@ -6,6 +6,8 @@ package bzip2
 
 import (
 	"testing"
+
+	"github.com/dsnet/compress/internal/testutil"
 )
 
 func TestBurrowsWheelerTransform(t *testing.T) {
@@ -73,15 +75,35 @@ func TestBurrowsWheelerTransform(t *testing.T) {
 			"ACTGAGGGACGGATCGATATAGATGCTATCGGTGGGTGGTTTTATAATAAATAAGATATTGGTC" +
 			"TTTCACTCCCCTGCAATCAGGCCGGCAGCGAATAAAAGACTTTGCATAGAGCTTTTACTGTTTC",
 		ptr: 99,
+	}, {
+		input:  string(testutil.MustLoadFile("testdata/gauntlet_test3.bin")),
+		output: string(testutil.MustLoadFile("testdata/gauntlet_test3.bwt")),
+		ptr:    0,
+	}, {
+		input:  string(testutil.MustLoadFile("testdata/silesia_ooffice.bin")),
+		output: string(testutil.MustLoadFile("testdata/silesia_ooffice.bwt")),
+		ptr:    461,
+	}, {
+		input:  string(testutil.MustLoadFile("testdata/silesia_xray.bin")),
+		output: string(testutil.MustLoadFile("testdata/silesia_xray.bwt")),
+		ptr:    1532,
+	}, {
+		input:  string(testutil.MustLoadFile("testdata/testfiles_test3.bin")),
+		output: string(testutil.MustLoadFile("testdata/testfiles_test3.bwt")),
+		ptr:    0,
+	}, {
+		input:  string(testutil.MustLoadFile("testdata/testfiles_test4.bin")),
+		output: string(testutil.MustLoadFile("testdata/testfiles_test4.bwt")),
+		ptr:    1026,
 	}}
 
 	bwt := new(burrowsWheelerTransform)
 	for i, v := range vectors {
 		b := []byte(v.input)
-		p := bwt.Encode(b)
+		ptr := bwt.Encode(b)
 		output := string(b)
 		b = []byte(v.output)
-		bwt.Decode(b, p)
+		bwt.Decode(b, ptr)
 		input := string(b)
 
 		if input != v.input {
@@ -90,8 +112,8 @@ func TestBurrowsWheelerTransform(t *testing.T) {
 		if output != v.output {
 			t.Errorf("test %d, output mismatch:\ngot  %q\nwant %q", i, output, v.output)
 		}
-		if p != v.ptr {
-			t.Errorf("test %d, pointer mismatch: got %d, want %d", i, p, v.ptr)
+		if ptr != v.ptr {
+			t.Errorf("test %d, pointer mismatch: got %d, want %d", i, ptr, v.ptr)
 		}
 	}
 }

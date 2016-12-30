@@ -454,6 +454,7 @@ func computeSA_int(T []int, SA []int, fs, n, k int) {
 		}
 	} else {
 		C = make([]int, k)
+		B = C
 		flags = 4 | 8
 	}
 	if n <= sortLMS2Limit && 2 <= (n/k) {
