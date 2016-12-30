@@ -4,6 +4,8 @@
 
 // +build gofuzz
 
+// This file exists to export internal implementation details for fuzz testing.
+
 package bzip2
 
 func ForwardBWT(buf []byte) (ptr int) {
