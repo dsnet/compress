@@ -91,7 +91,7 @@ func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
 	numDistSyms := pr.ReadBits(5) + 1
 	numCLenSyms := pr.ReadBits(4) + 4
 	if numLitSyms > maxNumLitSyms || numDistSyms > maxNumDistSyms {
-		errors.Panic(errCorrupted)
+		panicf(errors.Corrupted, "invalid number of prefix symbols")
 	}
 
 	// Read the code-lengths prefix table.
@@ -143,7 +143,7 @@ func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
 			switch repSym := clen; repSym {
 			case 16:
 				if sym == 0 {
-					errors.Panic(errCorrupted)
+					panicf(errors.Corrupted, "invalid first use of repeator code")
 				}
 				clen = clenLast
 				repCnt = 3 + pr.ReadBits(2)
@@ -154,7 +154,7 @@ func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
 				clen = 0
 				repCnt = 11 + pr.ReadBits(7)
 			default:
-				errors.Panic(errCorrupted)
+				panicf(errors.Corrupted, "invalid code symbol: %d", clen)
 			}
 
 			if clen > 0 {
@@ -165,7 +165,7 @@ func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
 				sym += repCnt
 			}
 			if sym > maxSyms {
-				errors.Panic(errCorrupted)
+				panicf(errors.Corrupted, "excessive number of code symbols")
 			}
 		}
 	}

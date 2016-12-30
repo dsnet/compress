@@ -106,7 +106,7 @@ func (zr *Reader) readBlockHeader() {
 		n := uint16(zr.rd.ReadBits(16))
 		nn := uint16(zr.rd.ReadBits(16))
 		if n^nn != 0xffff {
-			errors.Panic(errCorrupted)
+			panicf(errors.Corrupted, "raw block size mismatch")
 		}
 		zr.blkLen = int(n)
 
@@ -128,7 +128,7 @@ func (zr *Reader) readBlockHeader() {
 		zr.step = (*Reader).readBlock
 	default:
 		// Reserved block (RFC section 3.2.3).
-		errors.Panic(errCorrupted)
+		panicf(errors.Corrupted, "encountered reserved block")
 	}
 }
 
@@ -209,7 +209,7 @@ readLiteral:
 				distSym = zr.rd.ReadSymbol(zr.distTree)
 			}
 			if distSym >= maxNumDistSyms {
-				errors.Panic(errCorrupted)
+				panicf(errors.Corrupted, "invalid distance symbol: %d", distSym)
 			}
 
 			// Decode the copy distance.
@@ -220,12 +220,12 @@ readLiteral:
 			}
 			zr.dist = int(rec.Base) + int(extra)
 			if zr.dist > zr.dict.HistSize() {
-				errors.Panic(errCorrupted)
+				panicf(errors.Corrupted, "copy distance exceeds window history")
 			}
 
 			goto copyDistance
 		default:
-			errors.Panic(errCorrupted)
+			panicf(errors.Corrupted, "invalid literal symbol: %d", litSym)
 		}
 	}
 
