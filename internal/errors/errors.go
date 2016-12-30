@@ -27,10 +27,7 @@
 //
 package errors
 
-import (
-	"fmt"
-	"strings"
-)
+import "strings"
 
 const (
 	// Unknown indicates that there is no classification for this error.
@@ -55,6 +52,7 @@ const (
 )
 
 var codeMap = map[int]string{
+	Unknown:    "unknown error",
 	Internal:   "internal error",
 	Invalid:    "invalid argument",
 	Deprecated: "deprecated format",
@@ -63,21 +61,19 @@ var codeMap = map[int]string{
 }
 
 type Error struct {
-	Code     int
-	Pkg, Msg string
+	Code int    // The error type
+	Pkg  string // Name of the package where the error originated
+	Msg  string // Descriptive message about the error (optional)
 }
 
 func (e Error) Error() string {
-	if e.Code == Unknown && e.Msg == "" {
-		return fmt.Sprintf("%s: unknown error", e.Pkg)
-	}
 	var ss []string
-	for _, s := range []string{codeMap[e.Code], e.Msg} {
+	for _, s := range []string{e.Pkg, codeMap[e.Code], e.Msg} {
 		if s != "" {
 			ss = append(ss, s)
 		}
 	}
-	return fmt.Sprintf("%s: %s", e.Pkg, strings.Join(ss, " - "))
+	return strings.Join(ss, ": ")
 }
 
 func (e Error) CompressError()     {}

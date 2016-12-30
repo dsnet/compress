@@ -123,7 +123,7 @@ func (pr *Reader) ReadPads() uint {
 func (pr *Reader) Read(buf []byte) (cnt int, err error) {
 	if pr.numBits > 0 {
 		if pr.numBits%8 != 0 {
-			return 0, errUnaligned
+			return 0, errorf(errors.Invalid, "non-aligned bit buffer")
 		}
 		for cnt = 0; len(buf) > cnt && pr.numBits > 0; cnt++ {
 			if pr.bigEndian {
@@ -197,7 +197,7 @@ func (pr *Reader) TryReadSymbol(pd *Decoder) (uint, bool) {
 // ReadSymbol reads the next symbol using the provided prefix Decoder.
 func (pr *Reader) ReadSymbol(pd *Decoder) uint {
 	if len(pd.chunks) == 0 {
-		errors.Panic(errInvalid) // Decode with empty tree
+		panicf(errors.Invalid, "decode with empty prefix tree")
 	}
 
 	nb := uint(pd.MinBits)

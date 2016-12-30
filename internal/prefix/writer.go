@@ -51,7 +51,7 @@ func (pw *Writer) WritePads(v uint) {
 func (pw *Writer) Write(buf []byte) (cnt int, err error) {
 	if pw.numBits > 0 || pw.cntBuf > 0 {
 		if pw.numBits%8 != 0 {
-			return 0, errUnaligned
+			return 0, errorf(errors.Invalid, "non-aligned bit buffer")
 		}
 		if _, err := pw.Flush(); err != nil {
 			return 0, err

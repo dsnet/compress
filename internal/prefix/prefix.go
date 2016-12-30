@@ -17,10 +17,9 @@ func errorf(c int, f string, a ...interface{}) error {
 	return errors.Error{Code: c, Pkg: "prefix", Msg: fmt.Sprintf(f, a...)}
 }
 
-var (
-	errInvalid   = errorf(errors.Invalid, "")
-	errUnaligned = errorf(errors.Invalid, "non-aligned bit buffer")
-)
+func panicf(c int, f string, a ...interface{}) {
+	errors.Panic(errorf(c, f, a...))
+}
 
 const (
 	countBits = 5  // Number of bits to store the bit-length of the code
@@ -147,7 +146,7 @@ func GenerateLengths(codes PrefixCodes, maxBits uint) error {
 	cntLast := codes[0].Cnt
 	for _, c := range codes[1:] {
 		if c.Cnt < cntLast {
-			return errInvalid // Non-monotonically increasing
+			return errorf(errors.Invalid, "non-monotonically increasing symbol counts")
 		}
 		cntLast = c.Cnt
 	}
@@ -328,7 +327,7 @@ func GeneratePrefixes(codes PrefixCodes) error {
 	if len(codes) <= 1 {
 		if len(codes) == 1 {
 			if codes[0].Len != 0 {
-				return errInvalid
+				return errorf(errors.Invalid, "degenerate prefix tree with one node")
 			}
 			codes[0].Val = 0
 		}
@@ -342,7 +341,7 @@ func GeneratePrefixes(codes PrefixCodes) error {
 	minBits, maxBits, symLast := c0.Len, c0.Len, c0.Sym
 	for _, c := range codes[1:] {
 		if c.Sym <= symLast {
-			return errInvalid // Non-unique or non-monotonically increasing
+			return errorf(errors.Invalid, "non-unique or non-monotonically increasing symbols")
 		}
 		if minBits > c.Len {
 			minBits = c.Len
@@ -354,7 +353,7 @@ func GeneratePrefixes(codes PrefixCodes) error {
 		symLast = c.Sym  // Keep track of last symbol
 	}
 	if minBits == 0 {
-		return errInvalid // Bit-length is too short
+		return errorf(errors.Invalid, "invalid prefix bit-length")
 	}
 
 	// Compute the next code for a symbol of a given bit length.
@@ -366,7 +365,7 @@ func GeneratePrefixes(codes PrefixCodes) error {
 		code += bitCnts[i]
 	}
 	if code != 1<<maxBits {
-		return errInvalid // Tree is under or over subscribed
+		return errorf(errors.Invalid, "degenerate prefix tree")
 	}
 
 	// Assign the code to each symbol.
