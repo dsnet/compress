@@ -64,123 +64,89 @@ func TestReader(t *testing.T) {
 	}, {
 		name: "HelloWorld",
 		input: db(`>>>
-			"BZh9" # Stream header
-
-			# Block header, OriginPtr:3
+			"BZh9"
 			> H48:314159265359 H32:8e9a7706 0 H24:000003
-			# SymMap: " !,Hdelorw"
 			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
-			# NumTrees:2, NumTrees:1, Selectors: [0]
 			> D3:2 D15:1 0
-			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100 # Tree0
-			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0       # Tree1
-			# Compressed data
+			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
 			< 1101 000 100 000 100 0111 010 010 0011 0001 110 0111 110 1111
-
-			> H48:177245385090 H32:8e9a7706 # Stream footer
+			> H48:177245385090 H32:8e9a7706
 		`),
 		output: []byte("Hello, world!"),
 	}, {
 		name: "HelloWorld2B",
 		input: db(`>>>
-			"BZh9" # Stream header
+			"BZh9"
 
-			# Block header, OriginPtr:3
 			> H48:314159265359 H32:8e9a7706 0 H24:000003
-			# SymMap: " !,Hdelorw"
 			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
-			# NumTrees:2, NumTrees:1, Selectors: [0]
 			> D3:2 D15:1 0
-			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100 # Tree0
-			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0       # Tree1
-			# Compressed data
+			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
 			< 1101 000 100 000 100 0111 010 010 0011 0001 110 0111 110 1111
 
-			# Block header, OriginPtr:3
 			> H48:314159265359 H32:8e9a7706 0 H24:000003
-			# SymMap: " !,Hdelorw"
 			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
-			# NumTrees:2, NumTrees:1, Selectors: [0]
 			> D3:2 D15:1 0
-			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100 # Tree0
-			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0       # Tree1
-			# Compressed data
+			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
 			< 1101 000 100 000 100 0111 010 010 0011 0001 110 0111 110 1111
 
-			> H48:177245385090 H32:93ae990b # Stream footer
+			> H48:177245385090 H32:93ae990b
 		`),
 		output: db(`>>> "Hello, world!"*2`),
 	}, {
 		name: "HelloWorld2S",
 		input: db(`>>>
-			"BZh9" # Stream header
+			"BZh9"
 
-			# Block header, OriginPtr:3
 			> H48:314159265359 H32:8e9a7706 0 H24:000003
-			# SymMap: " !,Hdelorw"
 			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
-			# NumTrees:2, NumTrees:1, Selectors: [0]
 			> D3:2 D15:1 0
-			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100 # Tree0
-			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0       # Tree1
-			# Compressed data
+			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
 			< 1101 000 100 000 100 0111 010 010 0011 0001 110 0111 110 1111
 
-			> H48:177245385090 H32:8e9a7706 # Stream footer
+			> H48:177245385090 H32:8e9a7706
 
-			"BZh9" # Stream header
+			"BZh9"
 
-			# Block header, OriginPtr:3
 			> H48:314159265359 H32:8e9a7706 0 H24:000003
-			# SymMap: " !,Hdelorw"
 			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
-			# NumTrees:2, NumTrees:1, Selectors: [0]
 			> D3:2 D15:1 0
-			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100 # Tree0
-			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0       # Tree1
-			# Compressed data
+			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
 			< 1101 000 100 000 100 0111 010 010 0011 0001 110 0111 110 1111
 
-			> H48:177245385090 H32:8e9a7706 # Stream footer
+			> H48:177245385090 H32:8e9a7706
 		`),
 		output: db(`>>> "Hello, world!"*2`),
 	}, {
 		name: "InvalidBlockChecksum",
 		input: db(`>>>
-			"BZh9" # Stream header
-
-			# Block header, OriginPtr:3
+			"BZh9"
 			> H48:314159265359 H32:00000000 0 H24:000003
-			# SymMap: " !,Hdelorw"
 			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
-			# NumTrees:2, NumTrees:1, Selectors: [0]
 			> D3:2 D15:1 0
-			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100 # Tree0
-			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0       # Tree1
-			# Compressed data
+			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
 			< 1101 000 100 000 100 0111 010 010 0011 0001 110 0111 110 1111
-
-			> H48:177245385090 H32:8e9a7706 # Stream footer
+			> H48:177245385090 H32:8e9a7706
 		`),
 		output: []byte("Hello, world!"),
 		errf:   "IsCorrupted",
 	}, {
 		name: "InvalidStreamChecksum",
 		input: db(`>>>
-			"BZh9" # Stream header
-
-			# Block header, OriginPtr:3
+			"BZh9"
 			> H48:314159265359 H32:8e9a7706 0 H24:000003
-			# SymMap: " !,Hdelorw"
 			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
-			# NumTrees:2, NumTrees:1, Selectors: [0]
 			> D3:2 D15:1 0
-			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100 # Tree0
-			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0       # Tree1
-			# Compressed data
+			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
 			< 1101 000 100 000 100 0111 010 010 0011 0001 110 0111 110 1111
-
-			> H48:177245385090 H32:00000000 # Stream footer
+			> H48:177245385090 H32:00000000
 		`),
 		output: []byte("Hello, world!"),
 		errf:   "IsCorrupted",
@@ -214,6 +180,10 @@ func TestReader(t *testing.T) {
 		output: db(`>>> X:41*4`),
 	}, {
 		// RLE1 stage with missing repeater value.
+		//
+		// NOTE: The C library rejects this file. Currently, our implementation
+		// liberally allows this since it simplifies the implementation.
+		// This may change in the future.
 		name: "RLE3",
 		input: db(`>>>
 			"BZh1"
@@ -226,8 +196,6 @@ func TestReader(t *testing.T) {
 			> H48:177245385090 H32:e16e6571
 		`),
 		output: db(`>>> X:41*4`),
-		// TODO(dsnet): The C library chokes on this input, so should we.
-		// errf: "IsCorrupted",
 	}, {
 		// RLE1 stage with sub-optimal repeater usage.
 		name: "RLE4",
