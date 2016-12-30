@@ -78,7 +78,7 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 			if !zr.rdHdr {
 				// Read stream header.
 				if zr.rd.ReadBitsBE64(16) != hdrMagic {
-					panicf(errors.Corrupted, "invalid header magic")
+					panicf(errors.Corrupted, "invalid stream magic")
 				}
 				if ver := zr.rd.ReadBitsBE64(8); ver != 'h' {
 					if ver == '0' {
@@ -126,7 +126,7 @@ func (zr *Reader) decodeBlock() []byte {
 			zr.rd.ReadPads()
 			errors.Panic(io.EOF)
 		}
-		panicf(errors.Corrupted, "invalid footer magic")
+		panicf(errors.Corrupted, "invalid block or footer magic")
 	}
 	zr.gotBlkCRC = uint32(zr.rd.ReadBitsBE64(32))
 	if zr.rd.ReadBitsBE64(1) != 0 {
