@@ -18,6 +18,11 @@ import (
 	"github.com/dsnet/compress/internal/testutil"
 )
 
+type Result struct {
+	R float64 // Rate (MB/s) or ratio (rawSize/compSize)
+	D float64 // Delta ratio relative to primary benchmark
+}
+
 // BenchmarkEncoder benchmarks a single encoder on the given input data using
 // the selected compression level and reports the result.
 func BenchmarkEncoder(input []byte, enc Encoder, lvl int) testing.BenchmarkResult {
@@ -40,11 +45,6 @@ func BenchmarkEncoder(input []byte, enc Encoder, lvl int) testing.BenchmarkResul
 			b.SetBytes(int64(len(input)))
 		}
 	})
-}
-
-type Result struct {
-	R float64 // Rate (MB/s) or ratio (rawSize/compSize)
-	D float64 // Delta ratio relative to primary benchmark
 }
 
 // BenchmarkEncoderSuite runs multiple benchmarks across all encoder
