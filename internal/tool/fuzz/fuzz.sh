@@ -4,7 +4,7 @@ set -e
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-if [ $# != 1 ]; then
+if [ $# == 0 ]; then
 	echo "Usage: $0 PKG"
 	echo
 	echo -e "Valid packages:\n\t$(ls -d */ | sed 's/\/*$//g' | tr '\n' ' ')"
@@ -26,9 +26,10 @@ fi
 
 PKG=$(echo $1 | sed 's/\/*$//g')
 PKG_PATH="github.com/dsnet/compress/internal/tool/fuzz"
+shift
 
 echo "Building..."
 go-fuzz-build -o=".work/$PKG-fuzz.zip" $PKG_PATH/$PKG
 
 echo "Fuzzing..."
-go-fuzz -bin=".work/$PKG-fuzz.zip" -workdir=".work/$PKG"
+go-fuzz -bin=".work/$PKG-fuzz.zip" -workdir=".work/$PKG" "$@"
