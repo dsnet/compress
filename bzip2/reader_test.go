@@ -46,6 +46,22 @@ func TestReader(t *testing.T) {
 			"BZh9" H48:177245385090 H32:00000000
 		`),
 	}, {
+		name:  "InvalidStreamMagic",
+		input: db(`>>> > "XX"`),
+		errf:  "IsCorrupted",
+	}, {
+		name:  "InvalidVersion",
+		input: db(`>>> > "BZX1"`),
+		errf:  "IsCorrupted",
+	}, {
+		name:  "InvalidLevel",
+		input: db(`>>> > "BZh0"`),
+		errf:  "IsCorrupted",
+	}, {
+		name:  "InvalidBlockMagic",
+		input: db(`>>> > "BZh9" H48:000000000000`),
+		errf:  "IsCorrupted",
+	}, {
 		name: "HelloWorld",
 		input: db(`>>>
 			"BZh9" # Stream header
@@ -129,7 +145,7 @@ func TestReader(t *testing.T) {
 		`),
 		output: db(`>>> "Hello, world!"*2`),
 	}, {
-		name: "BadBlockChecksum",
+		name: "InvalidBlockChecksum",
 		input: db(`>>>
 			"BZh9" # Stream header
 
@@ -149,7 +165,7 @@ func TestReader(t *testing.T) {
 		output: []byte("Hello, world!"),
 		errf:   "IsCorrupted",
 	}, {
-		name: "BadStreamChecksum",
+		name: "InvalidStreamChecksum",
 		input: db(`>>>
 			"BZh9" # Stream header
 
@@ -168,6 +184,91 @@ func TestReader(t *testing.T) {
 		`),
 		output: []byte("Hello, world!"),
 		errf:   "IsCorrupted",
+	}, {
+		// RLE1 stage with maximum repeater length.
+		name: "RLE1",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:e1fac440 0 H24:000000
+			< H16:8010 H16:0002 H16:8000
+			> D3:2 D15:1 0
+			> D5:2 0 100 11110 10100
+			> D5:2 0 0 0 0
+			< 0 0 01 01 111 # Pre-RLE1: "AAAA\xff"
+			> H48:177245385090 H32:e1fac440
+		`),
+		output: db(`>>> X:41*259`),
+	}, {
+		// RLE1 stage with minimum repeater length.
+		name: "RLE2",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:e16e6571 0 H24:000004
+			< H16:0011 H16:0001 H16:0002
+			> D3:2 D15:1 0
+			> D5:2 0 100 11110 10100
+			> D5:2 0 0 0 0
+			< 0 01 01 0 111 # Pre-RLE1: "AAAA\x00"
+			> H48:177245385090 H32:e16e6571
+		`),
+		output: db(`>>> X:41*4`),
+	}, {
+		// RLE1 stage with missing repeater value.
+		name: "RLE3",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:e16e6571 0 H24:000003
+			< H16:0010 H16:0002
+			> D3:2 D15:1 0
+			> D5:2 0 0 110
+			> D5:2 0 0 110
+			< 11 01 0 # Pre-RLE1: "AAAA"
+			> H48:177245385090 H32:e16e6571
+		`),
+		output: db(`>>> X:41*4`),
+		// TODO(dsnet): The C library chokes on this input, so should we.
+		// errf: "IsCorrupted",
+	}, {
+		// RLE1 stage with sub-optimal repeater usage.
+		name: "RLE4",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:f59a903a 0 H24:000009
+			< H16:0011 H16:0001 H16:0002
+			> D3:2 D15:1 0
+			> D5:1 0 10100 110 100
+			> D5:2 0 0 0 0
+			< 01 0 0 0 01 0 111 # Pre-RLE1: "AAAA\x00AAAA\x00"
+			> H48:177245385090 H32:f59a903a
+		`),
+		output: db(`>>> X:41*8`),
+	}, {
+		// RLE1 stage with sub-optimal repeater usage.
+		name: "RLE5",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:f59a903a 0 H24:000004
+			< H16:0011 H16:0002 H16:0002
+			> D3:2 D15:1 0
+			> D5:3 0 110 110 10100
+			> D5:2 0 0 0 0
+			< 0 01 01 0 111 # Pre-RLE1: "AAAA\x01AAA"
+			> H48:177245385090 H32:f59a903a
+		`),
+		output: db(`>>> X:41*8`),
+	}, {
+		// The next "stream" is only a single byte 0x30, which the Reader
+		// detects as being truncated since it loads 2 bytes for the magic.
+		name:  "Fuzz1",
+		input: db(`>>> > "BZh8" H48:177245385090 H32:00000000 X:30`),
+		errf:  "IsUnexpectedEOF", // Could be IsCorrupted
+	}, {
+		// Compared to Fuzz1, the next "stream" has 2 bytes 0x3030,
+		// which allows the Reader to properly compare with the magic header
+		// and reject the stream as invalid.
+		name:  "Fuzz2",
+		input: db(`>>> > "BZh8" H48:177245385090 H32:00000000 X:3030`),
+		errf:  "IsCorrupted",
 	}}
 
 	for _, v := range vectors {
