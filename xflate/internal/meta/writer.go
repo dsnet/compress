@@ -173,7 +173,7 @@ func (mw *Writer) computeCounts(buf []byte, maxOnes int, final, invert bool) []i
 	if pcnt < 0 {
 		cnts, pcnt = append(cnts, pcnt), 0
 	}
-	pcnt += +1 * (maxOnes - ones) // Add needed ones (includes EOM)
+	pcnt += +1 * (maxOnes - ones) // Add needed ones (includes EOB)
 	cnts = append(cnts, pcnt)
 
 	mw.cnts = cnts
@@ -257,7 +257,7 @@ func (mw *Writer) encodeBlock(final FinalMode) (err error) {
 	pads := numPads(uint(mw.bw.BitsWritten()) + 1 + huffLen)
 	mw.bw.WriteBits(0, pads)                 // Pad to nearest byte
 	mw.bw.WriteBits(0, 1)                    // Empty HDistTree
-	mw.bw.WriteBits((1<<huffLen)-1, huffLen) // Encode EOM marker
+	mw.bw.WriteBits((1<<huffLen)-1, huffLen) // Encode EOB marker
 
 	mw.bw.Flush()                       // Flush all data to the bytes.Buffer
 	mw.bb.Bytes()[0] |= byte(pads) << 3 // Update NumHLit size

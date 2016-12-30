@@ -44,7 +44,7 @@ func ReverseSearch(data []byte) int {
 }
 
 const (
-	maxSyms    = 257 // Maximum number of literal codes (with EOM marker)
+	maxSyms    = 257 // Maximum number of literal codes (with EOB marker)
 	minHuffLen = 1   // Minimum number of bits for each Huffman code
 	maxHuffLen = 7   // Maximum number of bits for each Huffman code
 	minRepLast = 3   // Minimum number of repeated codes (clen: 16)
@@ -140,10 +140,7 @@ func errorf(c int, f string, a ...interface{}) error {
 	return errors.Error{Code: c, Pkg: "meta", Msg: fmt.Sprintf(f, a...)}
 }
 
-var (
-	errCorrupted = errorf(errors.Corrupted, "")
-	errClosed    = errorf(errors.Closed, "")
-)
+var errClosed = errorf(errors.Closed, "")
 
 // oneBitsLUT reports the number of set bits in the input byte.
 var oneBitsLUT = func() (lut [256]byte) {

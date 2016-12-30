@@ -163,7 +163,7 @@ func main() {
 // This is copied from Writer.computeHuffLen to avoid visibility issues.
 func computeHuffLen(zeros, ones int) (huffLen uint, inv bool) {
 	const (
-		maxSyms    = 257 // Maximum number of literal codes (with EOM marker)
+		maxSyms    = 257 // Maximum number of literal codes (with EOB marker)
 		minHuffLen = 1   // Minimum number of bits for each Huffman code
 		maxHuffLen = 7   // Maximum number of bits for each Huffman code
 	)

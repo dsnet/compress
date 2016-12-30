@@ -211,7 +211,7 @@ func TestReader(t *testing.T) {
 		input: dh("34c0870500000000a0fcff7480"),
 		errf:  "IsCorrupted",
 	}, {
-		desc:  "meta block with no EOM symbol",
+		desc:  "meta block with no EOB symbol",
 		input: dh("34c087050000000020fd7f740001"),
 		errf:  "IsCorrupted",
 	}, {
@@ -227,7 +227,7 @@ func TestReader(t *testing.T) {
 		input: dh("34c087050000000020fdff744001"),
 		errf:  "IsCorrupted",
 	}, {
-		desc:  "meta block with extra symbols before EOM",
+		desc:  "meta block with extra symbols before EOB",
 		input: dh("34c087050000000020fdff740002"),
 		errf:  "IsCorrupted",
 	}, {

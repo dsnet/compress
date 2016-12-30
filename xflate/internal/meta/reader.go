@@ -138,26 +138,23 @@ func (mr *Reader) decodeBlock() (err error) {
 	}
 	magic := mr.rd.ReadBits(32)
 	if uint32(magic)&magicMask != magicVals {
-		return errCorrupted // Magic must appear
+		return errorf(errors.Corrupted, "invalid meta magic value")
 	}
+
+	// Decode header.
+	var fail bool
 	finalStream := (magic>>0)&1 > 0
 	pads := (magic >> 3) & 7       // 0..7
 	numHCLen := 4 + (magic>>13)&15 // 6..18, always even
-	if numHCLen < 6 {
-		return errCorrupted
-	}
+	fail = fail || numHCLen < 6
 	for i := uint(5); i < numHCLen-1; i++ {
-		if mr.rd.ReadBits(3) != 0 {
-			return errCorrupted // Empty HCLen code
-		}
+		fail = fail || mr.rd.ReadBits(3) != 0 // Empty HCLen code
 	}
-	if mr.rd.ReadBits(3) != 2 {
-		return errCorrupted // Final HCLen code
+	fail = fail || mr.rd.ReadBits(3) != 2 // Final HCLen code
+	fail = fail || mr.rd.ReadBits(1) != 0 // First symbol always symZero
+	if fail {
+		return errorf(errors.Corrupted, "invalid meta header")
 	}
-	if mr.rd.ReadBits(1) != 0 {
-		return errCorrupted // First symbol always symZero
-	}
-	mr.bw.WriteBits(0, 1)
 
 	huffLen := 8 - (numHCLen-4)/2 // Based on XFLATE specification
 	huffRange := 1 << huffLen
@@ -165,6 +162,7 @@ func (mr *Reader) decodeBlock() (err error) {
 	// Read symbols.
 	var bit, ones uint
 	fifo := byte(0xff)
+	mr.bw.WriteBits(0, 1) // First symbol is symZero
 	for idx := 0; idx < maxSyms-1; {
 		cnt := 1
 		sym, ok := mr.rd.TryReadSymbol(&decHuff)
@@ -201,7 +199,7 @@ func (mr *Reader) decodeBlock() (err error) {
 			// The specification forbids a sequence of 8 zero bits to appear
 			// in the data section. This ensures that the magic value never
 			// appears in the meta encoding by accident.
-			return errCorrupted
+			return errorf(errors.Corrupted, "invalid sequence of meta symbols")
 		}
 		for i := 0; i < cnt; i++ {
 			if ok := mr.bw.TryWriteBits(bit, 1); !ok {
@@ -212,18 +210,19 @@ func (mr *Reader) decodeBlock() (err error) {
 		idx += cnt
 	}
 	if mr.bw.BitsWritten() != maxSyms {
-		return errCorrupted
+		return errorf(errors.Corrupted, "excessive number of meta symbols")
 	}
 	mr.bw.WriteBits(0, numPads(maxSyms)) // Flush to byte boundary
 
 	// Decode data segment.
+	const idxEOB = maxSyms - 1
 	mr.bw.Flush()
 	syms := mr.bb.Bytes() // Exactly 33 bytes
 	if int(ones) != huffRange {
-		return errCorrupted // Ensure complete HLitTree
+		return errorf(errors.Corrupted, "degenerate meta prefix tree")
 	}
-	if i := uint(maxSyms - 1); syms[i/8]&(1<<(i%8)) == 0 {
-		return errCorrupted // EOM symbol must be set
+	if syms[idxEOB/8]&(1<<(idxEOB%8)) == 0 {
+		return errorf(errors.Corrupted, "missing meta terminator symbol")
 	}
 
 	flags := syms[0]
@@ -240,21 +239,16 @@ func (mr *Reader) decodeBlock() (err error) {
 
 	final := FinalMode(btoi(finalMeta) + btoi(finalStream))
 	if finalStream && !finalMeta {
-		return errCorrupted
+		return errorf(errors.Corrupted, "invalid combination of final bits")
 	}
 
 	// Decode footer.
-	if mr.rd.ReadBits(pads) > 0 {
-		return errCorrupted // Pads must be zero
-	}
-	if mr.rd.ReadBits(1) > 0 {
-		return errCorrupted // HDistTree must be empty
-	}
-	if mr.rd.ReadBits(huffLen) != uint(huffRange-1) {
-		return errCorrupted // EOM marker
-	}
-	if mr.rd.BitsRead()%8 > 0 {
-		return errCorrupted // Bit reader not byte-aligned
+	fail = fail || mr.rd.ReadBits(pads) > 0                     // Pads must be zero
+	fail = fail || mr.rd.ReadBits(1) > 0                        // HDistTree must be empty
+	fail = fail || mr.rd.ReadBits(huffLen) != uint(huffRange-1) // EOB marker
+	fail = fail || mr.rd.BitsRead()%8 > 0                       // Bit reader not byte-aligned
+	if fail {
+		return errorf(errors.Corrupted, "invalid meta footer")
 	}
 
 	mr.buf, mr.final = buf, final
