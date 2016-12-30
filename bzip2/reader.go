@@ -68,17 +68,17 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 			if !zr.rdHdr {
 				// Read stream header.
 				if zr.rd.ReadBitsBE64(16) != hdrMagic {
-					errors.Panic(errCorrupted)
+					panicf(errors.Corrupted, "invalid header magic")
 				}
 				if ver := zr.rd.ReadBitsBE64(8); ver != 'h' {
 					if ver == '0' {
-						errors.Panic(errorf(errors.Deprecated, "bzip1 format is not supported"))
+						panicf(errors.Deprecated, "bzip1 format is not supported")
 					}
-					errors.Panic(errCorrupted)
+					panicf(errors.Corrupted, "invalid version: %q", ver)
 				}
 				lvl := int(zr.rd.ReadBitsBE64(8)) - '0'
 				if lvl < BestSpeed || lvl > BestCompression {
-					errors.Panic(errCorrupted)
+					panicf(errors.Corrupted, "invalid block size: %d", lvl*blockSize)
 				}
 				zr.level = lvl
 				zr.rdHdr = true
@@ -115,11 +115,11 @@ func (zr *Reader) decodeBlock() []byte {
 			zr.rd.ReadPads()
 			errors.Panic(io.EOF)
 		}
-		errors.Panic(errCorrupted)
+		panicf(errors.Corrupted, "invalid footer magic")
 	}
 	zr.blkCRC = uint32(zr.rd.ReadBitsBE64(32))
 	if zr.rd.ReadBitsBE64(1) != 0 {
-		errors.Panic(errorf(errors.Deprecated, "block randomization is not supported"))
+		panicf(errors.Deprecated, "block randomization is not supported")
 	}
 
 	// Read BWT related fields.
@@ -149,7 +149,7 @@ func (zr *Reader) decodeBlock() []byte {
 
 	// Step 3: Burrows-Wheeler transformation.
 	if ptr >= len(buf) {
-		errors.Panic(errCorrupted)
+		panicf(errors.Corrupted, "origin pointer (0x%06x) exceeds block size: %d", ptr, len(buf))
 	}
 	zr.bwt.Decode(buf, ptr)
 
@@ -159,14 +159,14 @@ func (zr *Reader) decodeBlock() []byte {
 func (zr *Reader) decodePrefix(numSyms int) (syms []uint16) {
 	numSyms += 2 // Remove 0 symbol, add RUNA, RUNB, and EOF symbols
 	if numSyms < 3 {
-		errors.Panic(errCorrupted) // Not possible to encode EOF marker
+		panicf(errors.Corrupted, "not enough prefix symbols: %d", numSyms)
 	}
 
 	// Read information about the trees and tree selectors.
 	var mtf internal.MoveToFront
 	numTrees := int(zr.rd.ReadBitsBE64(3))
 	if numTrees < minNumTrees || numTrees > maxNumTrees {
-		errors.Panic(errCorrupted)
+		panicf(errors.Corrupted, "invalid number of prefix trees: %d", numTrees)
 	}
 	numSels := int(zr.rd.ReadBitsBE64(15))
 	treeSels := make([]uint8, numSels)
@@ -176,7 +176,7 @@ func (zr *Reader) decodePrefix(numSyms int) (syms []uint16) {
 			sym = zr.rd.ReadSymbol(&decSel)
 		}
 		if int(sym) >= numTrees {
-			errors.Panic(errCorrupted)
+			panicf(errors.Corrupted, "invalid prefix tree selector: %d", sym)
 		}
 		treeSels[i] = uint8(sym)
 	}
@@ -202,7 +202,7 @@ func (zr *Reader) decodePrefix(numSyms int) (syms []uint16) {
 		if blkLen == 0 {
 			blkLen = numBlockSyms
 			if selIdx >= len(treeSels) {
-				errors.Panic(errCorrupted)
+				panicf(errors.Corrupted, "not enough prefix tree selectors")
 			}
 			tree = &trees1D[treeSels[selIdx]]
 			selIdx++
@@ -217,10 +217,10 @@ func (zr *Reader) decodePrefix(numSyms int) (syms []uint16) {
 			break // EOF marker
 		}
 		if int(sym) >= numSyms {
-			errors.Panic(errCorrupted) // Invalid symbol used
+			panicf(errors.Corrupted, "invalid prefix symbol: %d", sym)
 		}
 		if len(syms) >= zr.level*blockSize {
-			errors.Panic(errCorrupted) // Block is too large
+			panicf(errors.Corrupted, "number of prefix symbols exceeds block size")
 		}
 		syms = append(syms, uint16(sym))
 	}

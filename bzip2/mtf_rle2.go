@@ -101,7 +101,7 @@ func (mtf *moveToFront) Decode(syms []uint16) (vals []byte) {
 		if lastCnt > 0 {
 			cnt := int((1<<lastCnt)|lastRun) - 1
 			if len(vals)+cnt > mtf.blkSize || lastCnt > 24 {
-				errors.Panic(errCorrupted)
+				panicf(errors.Corrupted, "run-length decoding exceeded block size")
 			}
 			for i := cnt; i > 0; i-- {
 				vals = append(vals, dict[0])
@@ -115,14 +115,14 @@ func (mtf *moveToFront) Decode(syms []uint16) (vals []byte) {
 		dict[0] = val
 
 		if len(vals) >= mtf.blkSize {
-			errors.Panic(errCorrupted)
+			panicf(errors.Corrupted, "run-length decoding exceeded block size")
 		}
 		vals = append(vals, val)
 	}
 	if lastCnt > 0 {
 		cnt := int((1<<lastCnt)|lastRun) - 1
 		if len(vals)+cnt > mtf.blkSize || lastCnt > 24 {
-			errors.Panic(errCorrupted)
+			panicf(errors.Corrupted, "run-length decoding exceeded block size")
 		}
 		for i := cnt; i > 0; i-- {
 			vals = append(vals, dict[0])

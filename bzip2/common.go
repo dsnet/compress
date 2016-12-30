@@ -53,6 +53,10 @@ func errorf(c int, f string, a ...interface{}) error {
 	return errors.Error{Code: c, Pkg: "bzip2", Msg: fmt.Sprintf(f, a...)}
 }
 
+func panicf(c int, f string, a ...interface{}) {
+	errors.Panic(errorf(c, f, a...))
+}
+
 // errWrap converts a lower-level errors.Error to be one from this package.
 // The replaceCode passed in will be used to replace the code for any errors
 // with the errors.Invalid code.
@@ -69,10 +73,7 @@ func errWrap(err error, replaceCode int) error {
 	return err
 }
 
-var (
-	errCorrupted = errorf(errors.Corrupted, "")
-	errClosed    = errorf(errors.Closed, "")
-)
+var errClosed = errorf(errors.Closed, "")
 
 // crc computes the CRC-32 used by BZip2.
 // The byte array is used as an intermediate buffer to swap the bits of every
