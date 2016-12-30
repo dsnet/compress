@@ -19,7 +19,7 @@ type Reader struct {
 	rd         prefixReader
 	err        error
 	level      int    // The current compression level
-	rdHdr      bool   // Have we read the stream header?
+	rdHdrFtr   int    // Number of times we read the stream header and footer
 	gotBlkCRC  uint32 // CRC-32 IEEE of each block (as stored)
 	wantBlkCRC uint32 // CRC-32 IEEE of each block (as computed)
 	endCRC     uint32 // Checksum of all blocks using bzip2's custom method
@@ -69,13 +69,22 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 			return 0, zr.err
 		}
 		zr.endCRC = (zr.endCRC<<1 | zr.endCRC>>31) ^ zr.wantBlkCRC
+		zr.gotBlkCRC = 0
 		zr.wantBlkCRC = 0
 
 		// Read the next chunk.
 		zr.rd.Offset = zr.InputOffset
 		func() {
 			defer errors.Recover(&zr.err)
-			if !zr.rdHdr {
+			if zr.rdHdrFtr%2 == 0 {
+				// Check if we are already at EOF.
+				if err := zr.rd.PullBits(1); err != nil {
+					if err == io.ErrUnexpectedEOF && zr.rdHdrFtr > 0 {
+						err = io.EOF // EOF is okay if we read at least one stream
+					}
+					errors.Panic(err)
+				}
+
 				// Read stream header.
 				if zr.rd.ReadBitsBE64(16) != hdrMagic {
 					panicf(errors.Corrupted, "invalid stream magic")
@@ -91,7 +100,7 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 					panicf(errors.Corrupted, "invalid block size: %d", lvl*blockSize)
 				}
 				zr.level = lvl
-				zr.rdHdr = true
+				zr.rdHdrFtr++
 			}
 			buf := zr.decodeBlock()
 			zr.rle.Init(buf)
@@ -119,12 +128,13 @@ func (zr *Reader) Close() error {
 func (zr *Reader) decodeBlock() []byte {
 	if magic := zr.rd.ReadBitsBE64(48); magic != blkMagic {
 		if magic == endMagic {
-			// TODO(dsnet): Handle multiple bzip2 files back-to-back.
 			if zr.endCRC != uint32(zr.rd.ReadBitsBE64(32)) {
 				panicf(errors.Corrupted, "mismatching stream checksum")
 			}
+			zr.endCRC = 0
 			zr.rd.ReadPads()
-			errors.Panic(io.EOF)
+			zr.rdHdrFtr++
+			return nil
 		}
 		panicf(errors.Corrupted, "invalid block or footer magic")
 	}

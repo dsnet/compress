@@ -123,9 +123,6 @@ func TestRoundTrip(t *testing.T) {
 				buf1.Write(zc) // Use output of C library for Reader test
 			}
 
-			// Write a canary byte to ensure this does not get read.
-			buf1.WriteByte(0x7a)
-
 			// Decompress the output.
 			rd, err := NewReader(&buf1, nil)
 			if err != nil {
@@ -140,11 +137,6 @@ func TestRoundTrip(t *testing.T) {
 			}
 			if !bytes.Equal(buf2.Bytes(), v.data) {
 				t.Errorf("output data mismatch")
-			}
-
-			// Read back the canary byte.
-			if v, _ := buf1.ReadByte(); v != 0x7a {
-				t.Errorf("Read consumed more data than necessary")
 			}
 		})
 	}

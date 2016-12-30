@@ -33,9 +33,16 @@ func TestReader(t *testing.T) {
 		name:  "EmptyOutput",
 		input: db(`>>> > "BZh9" H48:177245385090 H32:00000000`),
 	}, {
-		name: "EmptyOutput2S",
+		name: "EmptyOutput9S",
 		input: db(`>>> >
-			"BZh9" H48:177245385090 H32:00000000
+			"BZh1" H48:177245385090 H32:00000000
+			"BZh2" H48:177245385090 H32:00000000
+			"BZh3" H48:177245385090 H32:00000000
+			"BZh4" H48:177245385090 H32:00000000
+			"BZh5" H48:177245385090 H32:00000000
+			"BZh6" H48:177245385090 H32:00000000
+			"BZh7" H48:177245385090 H32:00000000
+			"BZh8" H48:177245385090 H32:00000000
 			"BZh9" H48:177245385090 H32:00000000
 		`),
 	}, {
@@ -120,8 +127,7 @@ func TestReader(t *testing.T) {
 
 			> H48:177245385090 H32:8e9a7706 # Stream footer
 		`),
-		// TODO(dsnet): This should be duplicated with multistream support.
-		output: db(`>>> "Hello, world!"`),
+		output: db(`>>> "Hello, world!"*2`),
 	}, {
 		name: "BadBlockChecksum",
 		input: db(`>>>
@@ -176,7 +182,6 @@ func TestReader(t *testing.T) {
 			}
 
 			if !bytes.Equal(output, v.output) {
-				pf("%q\n", output)
 				t.Errorf("output mismatch:\ngot  %x\nwant %x", output, v.output)
 			}
 			if v.errf != "" && !errFuncs[v.errf](err) {
