@@ -120,7 +120,19 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 				}
 			}
 		case C.BZ_STREAM_END:
-			return n, io.EOF
+			// Handle multi-stream files by re-setting the state.
+			if len(zr.buf) == 0 {
+				if _, err := io.ReadFull(zr.r, zr.arr[:1]); err != nil {
+					if err == io.EOF {
+						return n, io.EOF
+					}
+					zr.err = io.ErrUnexpectedEOF
+					return n, zr.err
+				}
+				zr.buf = zr.arr[:1]
+			}
+			C.bzDecDestroy(zr.state)
+			zr.state = C.bzDecCreate()
 		default:
 			zr.err = errors.New("bzip2: corrupted input")
 		}
