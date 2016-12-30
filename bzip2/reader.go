@@ -16,12 +16,13 @@ type Reader struct {
 	InputOffset  int64 // Total number of bytes read from underlying io.Reader
 	OutputOffset int64 // Total number of bytes emitted from Read
 
-	rd     prefixReader
-	err    error
-	level  int    // The current compression level
-	rdHdr  bool   // Have we read the stream header?
-	blkCRC uint32 // CRC-32 IEEE of each block
-	endCRC uint32 // Checksum of all blocks using bzip2's custom method
+	rd         prefixReader
+	err        error
+	level      int    // The current compression level
+	rdHdr      bool   // Have we read the stream header?
+	gotBlkCRC  uint32 // CRC-32 IEEE of each block (as stored)
+	wantBlkCRC uint32 // CRC-32 IEEE of each block (as computed)
+	endCRC     uint32 // Checksum of all blocks using bzip2's custom method
 
 	crc crc
 	mtf moveToFront
@@ -54,12 +55,21 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 	for {
 		cnt, _ := zr.rle.Read(buf)
 		if cnt > 0 {
+			zr.wantBlkCRC = zr.crc.update(zr.wantBlkCRC, buf[:cnt])
 			zr.OutputOffset += int64(cnt)
 			return cnt, nil
 		}
-		if zr.err != nil {
+		if zr.err != nil || len(buf) == 0 {
 			return 0, zr.err
 		}
+
+		// Update the CRC.
+		if zr.gotBlkCRC != zr.wantBlkCRC {
+			zr.err = errorf(errors.Corrupted, "mismatching block checksum")
+			return 0, zr.err
+		}
+		zr.endCRC = (zr.endCRC<<1 | zr.endCRC>>31) ^ zr.wantBlkCRC
+		zr.wantBlkCRC = 0
 
 		// Read the next chunk.
 		zr.rd.Offset = zr.InputOffset
@@ -110,14 +120,15 @@ func (zr *Reader) decodeBlock() []byte {
 	if magic := zr.rd.ReadBitsBE64(48); magic != blkMagic {
 		if magic == endMagic {
 			// TODO(dsnet): Handle multiple bzip2 files back-to-back.
-			// TODO(dsnet): Check for block and stream CRC errors.
-			zr.rd.ReadBitsBE64(32)
+			if zr.endCRC != uint32(zr.rd.ReadBitsBE64(32)) {
+				panicf(errors.Corrupted, "mismatching stream checksum")
+			}
 			zr.rd.ReadPads()
 			errors.Panic(io.EOF)
 		}
 		panicf(errors.Corrupted, "invalid footer magic")
 	}
-	zr.blkCRC = uint32(zr.rd.ReadBitsBE64(32))
+	zr.gotBlkCRC = uint32(zr.rd.ReadBitsBE64(32))
 	if zr.rd.ReadBitsBE64(1) != 0 {
 		panicf(errors.Deprecated, "block randomization is not supported")
 	}
