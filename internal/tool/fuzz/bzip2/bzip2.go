@@ -8,6 +8,7 @@ package bzip2
 
 import (
 	"bytes"
+	"errors"
 	"io/ioutil"
 
 	"github.com/dsnet/compress"
@@ -16,7 +17,7 @@ import (
 )
 
 func Fuzz(data []byte) int {
-	data, ok := testDecoders(data)
+	data, ok := testDecoders(data, true)
 	for i := 1; i <= 9; i++ {
 		testGoEncoder(data, i)
 		testCEncoder(data, i)
@@ -30,31 +31,51 @@ func Fuzz(data []byte) int {
 // testDecoders tests that the input can be handled by both Go and C decoders.
 // This test does not panic if both decoders run into an error, since it
 // means that they both agree that the input is bad.
-func testDecoders(data []byte) ([]byte, bool) {
+//
+// If updateCRCs is set, then the Go bzip2 implementation will ignore all
+// checksum errors and manually adjust the checksum values before running the
+// C implementation. This hack drastically increases the probability that
+// gofuzz can generate a "valid" file.
+func testDecoders(data []byte, updateCRCs bool) ([]byte, bool) {
+	// Decompress using the Go decoder.
 	gr, err := gbzip2.NewReader(bytes.NewReader(data), nil)
 	if err != nil {
 		panic(err)
 	}
-	defer gr.Close()
-	cr := cbzip2.NewReader(bytes.NewReader(data))
-	defer cr.Close()
-
 	gb, gerr := ioutil.ReadAll(gr)
+	if err := gr.Close(); gerr == nil {
+		gerr = err
+	} else if gerr != nil && err == nil {
+		panic("nil on Close after non-nil error")
+	}
+
+	// Check or update the checksums.
+	if gerr == nil {
+		if updateCRCs {
+			data = gr.Checksums.Apply(data)
+		} else if !gr.Checksums.Verify(data) {
+			gerr = errors.New("bzip2: checksum error")
+		}
+	}
+
+	// Decompress using the C decoder.
+	cr := cbzip2.NewReader(bytes.NewReader(data))
 	cb, cerr := ioutil.ReadAll(cr)
+	if err := cr.Close(); cerr == nil {
+		cerr = err
+	} else if cerr != nil && err == nil {
+		panic("nil on Close after non-nil error")
+	}
 
 	switch {
 	case gerr == nil && cerr == nil:
 		if !bytes.Equal(gb, cb) {
 			panic("mismatching bytes")
 		}
-		if err := gr.Close(); err != nil {
-			panic(err)
-		}
-		if err := cr.Close(); err != nil {
-			panic(err)
-		}
 		return gb, true
 	case gerr != nil && cerr == nil:
+		// Ignore deprecated errors since there are no plans to provide
+		// these features in the Go implementation.
 		if err, ok := gerr.(compress.Error); ok && err.IsDeprecated() {
 			return cb, false
 		}
@@ -85,7 +106,7 @@ func testGoEncoder(data []byte, level int) {
 	}
 
 	// Decompress using both the Go and C decoders.
-	b, ok := testDecoders(bb.Bytes())
+	b, ok := testDecoders(bb.Bytes(), false)
 	if !ok {
 		panic("decoder error")
 	}
@@ -110,7 +131,7 @@ func testCEncoder(data []byte, level int) {
 	}
 
 	// Decompress using both the Go and C decoders.
-	b, ok := testDecoders(bb.Bytes())
+	b, ok := testDecoders(bb.Bytes(), false)
 	if !ok {
 		panic("decoder error")
 	}

@@ -28,6 +28,8 @@ type Reader struct {
 	mtf moveToFront
 	bwt burrowsWheelerTransform
 	rle runLengthEncoding
+
+	fuzzReader // Exported functionality when fuzz testing
 }
 
 type ReaderConfig struct {
@@ -66,15 +68,6 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 			return 0, zr.err
 		}
 
-		// Update the CRC.
-		if zr.gotBlkCRC != zr.wantBlkCRC {
-			zr.err = errorf(errors.Corrupted, "mismatching block checksum")
-			return 0, zr.err
-		}
-		zr.endCRC = (zr.endCRC<<1 | zr.endCRC>>31) ^ zr.wantBlkCRC
-		zr.gotBlkCRC = 0
-		zr.wantBlkCRC = 0
-
 		// Read the next chunk.
 		zr.rd.Offset = zr.InputOffset
 		func() {
@@ -104,6 +97,18 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 				}
 				zr.level = lvl
 				zr.rdHdrFtr++
+			} else {
+				// Check and update the CRC.
+				if internal.GoFuzz {
+					zr.updateChecksum(-1, zr.wantBlkCRC) // Update with value
+					zr.gotBlkCRC = zr.wantBlkCRC         // Suppress CRC failures
+				}
+				if zr.gotBlkCRC != zr.wantBlkCRC {
+					panicf(errors.Corrupted, "mismatching block checksum")
+				}
+				zr.endCRC = (zr.endCRC<<1 | zr.endCRC>>31) ^ zr.wantBlkCRC
+				zr.gotBlkCRC = 0
+				zr.wantBlkCRC = 0
 			}
 			buf := zr.decodeBlock()
 			zr.rle.Init(buf)
@@ -130,7 +135,12 @@ func (zr *Reader) Close() error {
 func (zr *Reader) decodeBlock() []byte {
 	if magic := zr.rd.ReadBitsBE64(48); magic != blkMagic {
 		if magic == endMagic {
-			if zr.endCRC != uint32(zr.rd.ReadBitsBE64(32)) {
+			endCRC := uint32(zr.rd.ReadBitsBE64(32))
+			if internal.GoFuzz {
+				zr.updateChecksum(zr.rd.BitsRead()-32, zr.endCRC)
+				endCRC = zr.endCRC // Suppress CRC failures
+			}
+			if zr.endCRC != endCRC {
 				panicf(errors.Corrupted, "mismatching stream checksum")
 			}
 			zr.endCRC = 0
@@ -140,7 +150,11 @@ func (zr *Reader) decodeBlock() []byte {
 		}
 		panicf(errors.Corrupted, "invalid block or footer magic")
 	}
+
 	zr.gotBlkCRC = uint32(zr.rd.ReadBitsBE64(32))
+	if internal.GoFuzz {
+		zr.updateChecksum(zr.rd.BitsRead()-32, 0) // Record offset only
+	}
 	if zr.rd.ReadBitsBE64(1) != 0 {
 		panicf(errors.Deprecated, "block randomization is not supported")
 	}
