@@ -53,7 +53,10 @@ func (zr *Reader) Reset(r io.Reader) {
 
 func (zr *Reader) Read(buf []byte) (int, error) {
 	for {
-		cnt, _ := zr.rle.Read(buf)
+		cnt, err := zr.rle.Read(buf)
+		if err != rleDone && zr.err == nil {
+			zr.err = err
+		}
 		if cnt > 0 {
 			zr.wantBlkCRC = zr.crc.update(zr.wantBlkCRC, buf[:cnt])
 			zr.OutputOffset += int64(cnt)
@@ -105,7 +108,6 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 			buf := zr.decodeBlock()
 			zr.rle.Init(buf)
 		}()
-		var err error
 		if zr.InputOffset, err = zr.rd.Flush(); zr.err == nil {
 			zr.err = err
 		}

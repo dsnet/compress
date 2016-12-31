@@ -71,9 +71,10 @@ func TestRunLengthEncoder(t *testing.T) {
 
 	buf := make([]byte, 3)
 	for i, v := range vectors {
+		rd := strings.NewReader(v.input)
 		rle := new(runLengthEncoding)
 		rle.Init(make([]byte, v.size))
-		_, err := io.CopyBuffer(rle, strings.NewReader(v.input), buf)
+		_, err := io.CopyBuffer(rle, struct{ io.Reader }{rd}, buf)
 		output := string(rle.Bytes())
 
 		if output != v.output {
@@ -89,6 +90,7 @@ func TestRunLengthDecoder(t *testing.T) {
 	vectors := []struct {
 		input  string
 		output string
+		fail   bool
 	}{{
 		input:  "",
 		output: "",
@@ -98,9 +100,11 @@ func TestRunLengthDecoder(t *testing.T) {
 	}, {
 		input:  "aaaa",
 		output: "aaaa",
+		fail:   true,
 	}, {
 		input:  "baaaa\x00aaaa",
 		output: "baaaaaaaa",
+		fail:   true,
 	}, {
 		input:  "abcccc\x00",
 		output: "abcccc",
@@ -141,14 +145,17 @@ func TestRunLengthDecoder(t *testing.T) {
 
 	buf := make([]byte, 3)
 	for i, v := range vectors {
-		rle := new(runLengthEncoding)
 		wr := new(bytes.Buffer)
+		rle := new(runLengthEncoding)
 		rle.Init([]byte(v.input))
-		io.CopyBuffer(wr, rle, buf)
+		_, err := io.CopyBuffer(struct{ io.Writer }{wr}, rle, buf)
 		output := wr.String()
 
 		if output != v.output {
 			t.Errorf("test %d, output mismatch:\ngot  %q\nwant %q", i, output, v.output)
+		}
+		if fail := err != rleDone; fail != v.fail {
+			t.Errorf("test %d, failure mismatch: got %t, want %t", i, fail, v.fail)
 		}
 	}
 }

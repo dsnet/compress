@@ -180,10 +180,6 @@ func TestReader(t *testing.T) {
 		output: db(`>>> X:41*4`),
 	}, {
 		// RLE1 stage with missing repeater value.
-		//
-		// NOTE: The C library rejects this file. Currently, our implementation
-		// liberally allows this since it simplifies the implementation.
-		// This may change in the future.
 		name: "RLE3",
 		input: db(`>>>
 			"BZh1"
@@ -196,6 +192,7 @@ func TestReader(t *testing.T) {
 			> H48:177245385090 H32:e16e6571
 		`),
 		output: db(`>>> X:41*4`),
+		errf:   "IsCorrupted",
 	}, {
 		// RLE1 stage with sub-optimal repeater usage.
 		name: "RLE4",

@@ -76,7 +76,10 @@ func (zw *Writer) Write(buf []byte) (int, error) {
 
 	cnt := len(buf)
 	for {
-		wrCnt, _ := zw.rle.Write(buf)
+		wrCnt, err := zw.rle.Write(buf)
+		if err != rleDone && zw.err == nil {
+			zw.err = err
+		}
 		zw.blkCRC = zw.crc.update(zw.blkCRC, buf[:wrCnt])
 		buf = buf[wrCnt:]
 		if len(buf) == 0 {
