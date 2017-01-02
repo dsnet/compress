@@ -18,25 +18,22 @@ import (
 
 var zcheck = flag.Bool("zcheck", false, "verify test vectors with C bzip2 library")
 
-func pyCompress(input []byte) ([]byte, error) {
-	return pyExec("import sys, bz2; sys.stdout.write(bz2.compress(sys.stdin.read()))", input)
-}
+func cmdCompress(input []byte) ([]byte, error)   { return cmdExec("-z", input) }
+func cmdDecompress(input []byte) ([]byte, error) { return cmdExec("-d", input) }
 
-func pyDecompress(input []byte) ([]byte, error) {
-	return pyExec("import sys, bz2; sys.stdout.write(bz2.decompress(sys.stdin.read()))", input)
-}
-
-// pyExec executes a single-line Python program pyc, using input as the stdin.
+// cmdExec executes the bzip2 tool, passing the input in as stdin.
 // It returns the stdout and an error.
-func pyExec(pyc string, input []byte) ([]byte, error) {
+func cmdExec(pyc string, input []byte) ([]byte, error) {
 	var bo, be bytes.Buffer
-	cmd := exec.Command("python", "-c", pyc)
+	cmd := exec.Command("bzip2", pyc)
 	cmd.Stdin = bytes.NewReader(input)
 	cmd.Stdout = &bo
 	cmd.Stderr = &be
 	err := cmd.Run()
-	if ss := strings.Split(strings.TrimSpace(be.String()), "\n"); err != nil && len(ss) > 0 {
-		return nil, errors.New(ss[len(ss)-1]) // Assume last line is error message
+	ss := strings.Split(strings.TrimSpace(be.String()), "\n")
+	if len(ss) > 0 && ss[len(ss)-1] != "" {
+		// Assume any stderr indicates an error and last line is the message.
+		return nil, errors.New(ss[len(ss)-1])
 	}
 	return bo.Bytes(), err
 }
@@ -104,16 +101,16 @@ func TestRoundTrip(t *testing.T) {
 			// Verify that the C library can decompress the output of Writer and
 			// that the Reader can decompress the output of the C library.
 			if *zcheck {
-				zd, err := pyDecompress(buf1.Bytes())
+				zd, err := cmdDecompress(buf1.Bytes())
 				if err != nil {
-					t.Errorf("unexpected pyDecompress error: %v", err)
+					t.Errorf("unexpected cmdDecompress error: %v", err)
 				}
 				if !bytes.Equal(zd, v.data) {
 					t.Errorf("output data mismatch")
 				}
-				zc, err := pyCompress(v.data)
+				zc, err := cmdCompress(v.data)
 				if err != nil {
-					t.Errorf("unexpected pyCompress error: %v", err)
+					t.Errorf("unexpected cmdCompress error: %v", err)
 				}
 				zratio := float64(len(v.data)) / float64(len(zc))
 				if ratio < 0.9*zratio {

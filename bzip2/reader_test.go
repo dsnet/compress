@@ -20,6 +20,7 @@ func TestReader(t *testing.T) {
 	errFuncs := map[string]func(error) bool{
 		"IsUnexpectedEOF": func(err error) bool { return err == io.ErrUnexpectedEOF },
 		"IsCorrupted":     errors.IsCorrupted,
+		"IsDeprecated":    errors.IsDeprecated,
 	}
 	vectors := []struct {
 		name   string // Sub-test name
@@ -54,6 +55,10 @@ func TestReader(t *testing.T) {
 		input: db(`>>> > "BZX1"`),
 		errf:  "IsCorrupted",
 	}, {
+		name:  "DeprecatedVersion",
+		input: db(`>>> > "BZ01"`),
+		errf:  "IsDeprecated",
+	}, {
 		name:  "InvalidLevel",
 		input: db(`>>> > "BZh0"`),
 		errf:  "IsCorrupted",
@@ -62,10 +67,14 @@ func TestReader(t *testing.T) {
 		input: db(`>>> > "BZh9" H48:000000000000`),
 		errf:  "IsCorrupted",
 	}, {
+		name:  "DeprecatedRandomization",
+		input: db(`>>> > "BZh9" H48:314159265359 H32:8e9a7706 1 H24:0`),
+		errf:  "IsDeprecated",
+	}, {
 		name: "HelloWorld",
 		input: db(`>>>
 			"BZh9"
-			> H48:314159265359 H32:8e9a7706 0 H24:000003
+			> H48:314159265359 H32:8e9a7706 0 H24:3
 			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
 			> D3:2 D15:1 0
 			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
@@ -79,14 +88,14 @@ func TestReader(t *testing.T) {
 		input: db(`>>>
 			"BZh9"
 
-			> H48:314159265359 H32:8e9a7706 0 H24:000003
+			> H48:314159265359 H32:8e9a7706 0 H24:3
 			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
 			> D3:2 D15:1 0
 			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
 			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
 			< 1101 000 100 000 100 0111 010 010 0011 0001 110 0111 110 1111
 
-			> H48:314159265359 H32:8e9a7706 0 H24:000003
+			> H48:314159265359 H32:8e9a7706 0 H24:3
 			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
 			> D3:2 D15:1 0
 			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
@@ -101,7 +110,7 @@ func TestReader(t *testing.T) {
 		input: db(`>>>
 			"BZh9"
 
-			> H48:314159265359 H32:8e9a7706 0 H24:000003
+			> H48:314159265359 H32:8e9a7706 0 H24:3
 			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
 			> D3:2 D15:1 0
 			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
@@ -112,7 +121,7 @@ func TestReader(t *testing.T) {
 
 			"BZh9"
 
-			> H48:314159265359 H32:8e9a7706 0 H24:000003
+			> H48:314159265359 H32:8e9a7706 0 H24:3
 			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
 			> D3:2 D15:1 0
 			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
@@ -123,10 +132,226 @@ func TestReader(t *testing.T) {
 		`),
 		output: db(`>>> "Hello, world!"*2`),
 	}, {
+		name: "Banana0",
+		input: db(`>>>
+			> "BZh1" H48:314159265359 H32:87f465d8 0 H24:0
+			< H16:0050 H16:0004 H16:4002
+			> D3:2 D15:1 0 D5:2 0 10100 0 1111110 10100 D5:3 0 0 110 0 0
+			< 1111 0 01 0 0 01 011
+			> H48:177245385090 H32:87f465d8
+		`),
+		output: []byte("Banana"),
+	}, {
+		name: "Banana1",
+		input: db(`>>>
+			> "BZh1" H48:314159265359 H32:71d297e8 0 H24:1
+			< H16:0050 H16:0004 H16:4002
+			> D3:2 D15:1 0 D5:2 0 10100 0 1111110 10100 D5:3 0 0 110 0 0
+			< 1111 0 01 0 0 01 011
+			> H48:177245385090 H32:71d297e8
+		`),
+		output: []byte("aBanan"),
+	}, {
+		name: "Banana2",
+		input: db(`>>>
+			> "BZh1" H48:314159265359 H32:21185406 0 H24:2
+			< H16:0050 H16:0004 H16:4002
+			> D3:2 D15:1 0 D5:2 0 10100 0 1111110 10100 D5:3 0 0 110 0 0
+			< 1111 0 01 0 0 01 011
+			> H48:177245385090 H32:21185406
+		`),
+		output: []byte("anaBan"),
+	}, {
+		name: "Banana3",
+		input: db(`>>>
+			> "BZh1" H48:314159265359 H32:be853f46 0 H24:3
+			< H16:0050 H16:0004 H16:4002
+			> D3:2 D15:1 0 D5:2 0 10100 0 1111110 10100 D5:3 0 0 110 0 0
+			< 1111 0 01 0 0 01 011
+			> H48:177245385090 H32:be853f46
+		`),
+		output: []byte("ananaB"),
+	}, {
+		name: "Banana4",
+		input: db(`>>>
+			> "BZh1" H48:314159265359 H32:35a020df 0 H24:4
+			< H16:0050 H16:0004 H16:4002
+			> D3:2 D15:1 0 D5:2 0 10100 0 1111110 10100 D5:3 0 0 110 0 0
+			< 1111 0 01 0 0 01 011
+			> H48:177245385090 H32:35a020df
+		`),
+		output: []byte("naBana"),
+	}, {
+		name: "Banana5",
+		input: db(`>>>
+			> "BZh1" H48:314159265359 H32:b599e6fc 0 H24:5
+			< H16:0050 H16:0004 H16:4002
+			> D3:2 D15:1 0 D5:2 0 10100 0 1111110 10100 D5:3 0 0 110 0 0
+			< 1111 0 01 0 0 01 011
+			> H48:177245385090 H32:b599e6fc
+		`),
+		output: []byte("nanaBa"),
+	}, {
+		// This is invalid since the BWT pointer exceeds the block size.
+		name: "Banana6",
+		input: db(`>>>
+			> "BZh1" H48:314159265359 H32:87f465d8 0 H24:6
+			< H16:0050 H16:0004 H16:4002
+			> D3:2 D15:1 0 D5:2 0 10100 0 1111110 10100 D5:3 0 0 110 0 0
+			< 1111 0 01 0 0 01 011
+			> H48:177245385090 H32:87f465d8
+		`),
+		errf: "IsCorrupted",
+	}, {
+		// There must be between 2..6 trees, inclusive. This test uses only 1.
+		name: "MinTrees",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:8e9a7706 0 H24:3
+			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
+			> D3:1 D15:1 0
+			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
+			< 1101 000 100 000 100 0111 010 010 0011 0001 110 0111 110 1111
+			> H48:177245385090 H32:8e9a7706
+		`),
+		errf: "IsCorrupted",
+	}, {
+		// Define more trees than allowed. The test uses 7.
+		name: "MaxTrees",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:8e9a7706 0 H24:3
+			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
+			> D3:7 D15:1 0
+			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			< 1101 000 100 000 100 0111 010 010 0011 0001 110 0111 110 1111
+			> H48:177245385090 H32:8e9a7706
+		`),
+		errf: "IsCorrupted",
+	}, {
+		// Define more trees and selectors than actually used.
+		name: "SuboptimalTrees",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:8e9a7706 0 H24:3
+			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
+			> D3:6 D15:12 111110 11110 1110 110 10 0 111110 11110 1110 110 10 0
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
+			< 1101 000 100 000 100 0111 010 010 0011 0001 110 0111 110 1111
+			> H48:177245385090 H32:8e9a7706
+		`),
+		output: []byte("Hello, world!"),
+	}, {
+		// Do not define any tree selectors. This should fail when decoding
+		// the prefix codes later on.
+		name: "MinTreeSels",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:8e9a7706 0 H24:3
+			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
+			> D3:2 D15:0
+			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			< 1101 000 100 000 100 0111 010 010 0011 0001 110 0111 110 1111
+			> H48:177245385090 H32:8e9a7706
+		`),
+		errf: "IsCorrupted",
+	}, {
+		// Define up to 32767 tree selectors, even though only 1 is used.
+		name: "MaxTreeSels",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:8e9a7706 0 H24:3
+			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
+			> D3:2 D15:32767 0*32767
+			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			< 1101 000 100 000 100 0111 010 010 0011 0001 110 0111 110 1111
+			> H48:177245385090 H32:8e9a7706
+		`),
+		output: []byte("Hello, world!"),
+	}, {
+		name: "InvalidTreeSels",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:8e9a7706 0 H24:3
+			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
+			> D3:2 D15:1 110
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
+			< 1101 000 100 000 100 0111 010 010 0011 0001 110 0111 110 1111
+			> H48:177245385090 H32:8e9a7706
+		`),
+		errf: "IsCorrupted",
+	}, {
+		name: "MinSymMap",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:b1f7404b 0 H24:0
+			< H16:0001 H16:0001
+			> D3:2 D15:1 0
+			> D5:2 0 0 110
+			> D5:2 0 0 110
+			< 01 0
+			> H48:177245385090 H32:b1f7404b
+		`),
+		output: []byte{0x00},
+	}, {
+		// The high-order symbol map says that all groups have symbols,
+		// but only the first group indicates any symbols are set.
+		name: "SuboptimalSymMap1",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:b1f7404b 0 H24:0
+			< H16:ffff H16:0001 H16:0000*15
+			> D3:2 D15:1 0
+			> D5:2 0 0 110
+			> D5:2 0 0 110
+			< 01 0
+			> H48:177245385090 H32:b1f7404b
+		`),
+		output: []byte{0x00},
+	}, {
+		// The symbol map declares that all symbols are used, even though
+		// only one is actually used.
+		name: "SuboptimalSymMap2",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:b1f7404b 0 H24:0
+			< H16:ffff*17
+			> D3:2 D15:1 0
+			> D5:2 0 10101010101010100 0*255 1111111111111111110
+			> D5:9 0*4 110 0*253
+			< 01 0
+			> H48:177245385090 H32:b1f7404b
+		`),
+		output: []byte{0x00},
+	}, {
+		// It is impossible for the format to encode a block with no symbols
+		// since at least one symbol must exist for the EOF symbol.
+		name: "InvalidSymMap",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:b1f7404b 0 H24:0
+			< H16:0000 # Need at least one symbol
+		`),
+		errf: "IsCorrupted",
+	}, {
 		name: "InvalidBlockChecksum",
 		input: db(`>>>
 			"BZh9"
-			> H48:314159265359 H32:00000000 0 H24:000003
+			> H48:314159265359 H32:00000000 0 H24:3
 			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
 			> D3:2 D15:1 0
 			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
@@ -140,7 +365,7 @@ func TestReader(t *testing.T) {
 		name: "InvalidStreamChecksum",
 		input: db(`>>>
 			"BZh9"
-			> H48:314159265359 H32:8e9a7706 0 H24:000003
+			> H48:314159265359 H32:8e9a7706 0 H24:3
 			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
 			> D3:2 D15:1 0
 			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
@@ -155,7 +380,7 @@ func TestReader(t *testing.T) {
 		name: "RLE1",
 		input: db(`>>>
 			"BZh1"
-			> H48:314159265359 H32:e1fac440 0 H24:000000
+			> H48:314159265359 H32:e1fac440 0 H24:0
 			< H16:8010 H16:0002 H16:8000
 			> D3:2 D15:1 0
 			> D5:2 0 100 11110 10100
@@ -169,7 +394,7 @@ func TestReader(t *testing.T) {
 		name: "RLE2",
 		input: db(`>>>
 			"BZh1"
-			> H48:314159265359 H32:e16e6571 0 H24:000004
+			> H48:314159265359 H32:e16e6571 0 H24:4
 			< H16:0011 H16:0001 H16:0002
 			> D3:2 D15:1 0
 			> D5:2 0 100 11110 10100
@@ -183,7 +408,7 @@ func TestReader(t *testing.T) {
 		name: "RLE3",
 		input: db(`>>>
 			"BZh1"
-			> H48:314159265359 H32:e16e6571 0 H24:000003
+			> H48:314159265359 H32:e16e6571 0 H24:3
 			< H16:0010 H16:0002
 			> D3:2 D15:1 0
 			> D5:2 0 0 110
@@ -198,7 +423,7 @@ func TestReader(t *testing.T) {
 		name: "RLE4",
 		input: db(`>>>
 			"BZh1"
-			> H48:314159265359 H32:f59a903a 0 H24:000009
+			> H48:314159265359 H32:f59a903a 0 H24:9
 			< H16:0011 H16:0001 H16:0002
 			> D3:2 D15:1 0
 			> D5:1 0 10100 110 100
@@ -212,7 +437,7 @@ func TestReader(t *testing.T) {
 		name: "RLE5",
 		input: db(`>>>
 			"BZh1"
-			> H48:314159265359 H32:f59a903a 0 H24:000004
+			> H48:314159265359 H32:f59a903a 0 H24:4
 			< H16:0011 H16:0002 H16:0002
 			> D3:2 D15:1 0
 			> D5:3 0 110 110 10100
@@ -254,6 +479,18 @@ func TestReader(t *testing.T) {
 				t.Errorf("mismatching error:\ngot %v\nwant %s(err) == true", err, v.errf)
 			} else if v.errf == "" && err != nil {
 				t.Errorf("unexpected error: got %v", err)
+			}
+
+			// If the zcheck flag is set, then we verify that the test vectors
+			// themselves are consistent with what the C bzip2 library outputs.
+			if *zcheck {
+				output, err := cmdDecompress(v.input)
+				if got, want := bool(v.errf == ""), bool(err == nil); got != want {
+					t.Errorf("pass mismatch: got %v, want %v", got, err)
+				}
+				if err == nil && !bytes.Equal(v.output, output) {
+					t.Errorf("output mismatch:\ngot  %x\nwant %x", output, v.output)
+				}
 			}
 		})
 	}
