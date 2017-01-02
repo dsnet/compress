@@ -58,7 +58,7 @@ func (pr *prefixReader) ReadPrefixCodes(codes []prefix.PrefixCodes, trees []pref
 	for i, pc := range codes {
 		clen := int(pr.ReadBitsBE64(5))
 		sum := 1 << maxPrefixBits
-		for sym := 0; sym < len(pc); sym++ {
+		for sym := range pc {
 			for {
 				if clen < 1 || clen > maxPrefixBits {
 					panicf(errors.Corrupted, "invalid prefix bit-length: %d", clen)

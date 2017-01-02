@@ -29,6 +29,13 @@ type Reader struct {
 	bwt burrowsWheelerTransform
 	rle runLengthEncoding
 
+	// These fields are allocated with Reader and re-used later.
+	treeSels []uint8
+	codes2D  [maxNumTrees][maxNumSyms]prefix.PrefixCode
+	codes1D  [maxNumTrees]prefix.PrefixCodes
+	trees1D  [maxNumTrees]prefix.Decoder
+	syms     []uint16
+
 	fuzzReader // Exported functionality when fuzz testing
 }
 
@@ -44,10 +51,15 @@ func NewReader(r io.Reader, conf *ReaderConfig) (*Reader, error) {
 
 func (zr *Reader) Reset(r io.Reader) {
 	*zr = Reader{
-		rd:  zr.rd,
+		rd: zr.rd,
+
 		mtf: zr.mtf,
 		bwt: zr.bwt,
 		rle: zr.rle,
+
+		treeSels: zr.treeSels,
+		trees1D:  zr.trees1D,
+		syms:     zr.syms,
 	}
 	zr.rd.Init(r)
 	return
@@ -206,7 +218,10 @@ func (zr *Reader) decodePrefix(numSyms int) (syms []uint16) {
 		panicf(errors.Corrupted, "invalid number of prefix trees: %d", numTrees)
 	}
 	numSels := int(zr.rd.ReadBitsBE64(15))
-	treeSels := make([]uint8, numSels)
+	if cap(zr.treeSels) < numSels {
+		zr.treeSels = make([]uint8, numSels)
+	}
+	treeSels := zr.treeSels[:numSels]
 	for i := range treeSels {
 		sym, ok := zr.rd.TryReadSymbol(&decSel)
 		if !ok {
@@ -218,30 +233,25 @@ func (zr *Reader) decodePrefix(numSyms int) (syms []uint16) {
 		treeSels[i] = uint8(sym)
 	}
 	mtf.Decode(treeSels)
+	zr.treeSels = treeSels
 
 	// Initialize prefix codes.
-	var codes2D [maxNumTrees][maxNumSyms]prefix.PrefixCode
-	var codes1D [maxNumTrees]prefix.PrefixCodes
-	var trees1D [maxNumTrees]prefix.Decoder
-	for i := range codes2D[:numTrees] {
-		pc := codes2D[i][:numSyms]
-		for j := range pc {
-			pc[j].Sym = uint32(j)
-		}
-		codes1D[i] = pc
+	for i := range zr.codes2D[:numTrees] {
+		zr.codes1D[i] = zr.codes2D[i][:numSyms]
 	}
-	zr.rd.ReadPrefixCodes(codes1D[:numTrees], trees1D[:numTrees])
+	zr.rd.ReadPrefixCodes(zr.codes1D[:numTrees], zr.trees1D[:numTrees])
 
 	// Read prefix encoded symbols of compressed data.
 	var tree *prefix.Decoder
 	var blkLen, selIdx int
+	syms = zr.syms[:0]
 	for {
 		if blkLen == 0 {
 			blkLen = numBlockSyms
 			if selIdx >= len(treeSels) {
 				panicf(errors.Corrupted, "not enough prefix tree selectors")
 			}
-			tree = &trees1D[treeSels[selIdx]]
+			tree = &zr.trees1D[treeSels[selIdx]]
 			selIdx++
 		}
 		blkLen--
@@ -261,5 +271,6 @@ func (zr *Reader) decodePrefix(numSyms int) (syms []uint16) {
 		}
 		syms = append(syms, uint16(sym))
 	}
+	zr.syms = syms
 	return syms
 }

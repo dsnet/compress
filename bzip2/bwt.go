@@ -4,9 +4,7 @@
 
 package bzip2
 
-import (
-	"github.com/dsnet/compress/bzip2/internal/sais"
-)
+import "github.com/dsnet/compress/bzip2/internal/sais"
 
 // The Burrows-Wheeler Transform implementation used here is based on the
 // Suffix Array by Induced Sorting (SA-IS) methodology by Nong, Zhang, and Chan.
@@ -21,7 +19,9 @@ import (
 //	https://github.com/cscott/compressjs/blob/master/lib/BWT.js
 //	https://www.quora.com/How-can-I-optimize-burrows-wheeler-transform-and-inverse-transform-to-work-in-O-n-time-O-n-space
 type burrowsWheelerTransform struct {
-	// TODO(dsnet): Reduce memory allocations by caching slices.
+	buf  []byte
+	sa   []int
+	perm []uint32
 }
 
 func (bwt *burrowsWheelerTransform) Encode(buf []byte) (ptr int) {
@@ -29,14 +29,21 @@ func (bwt *burrowsWheelerTransform) Encode(buf []byte) (ptr int) {
 		return -1
 	}
 
-	// TODO(dsnet): Find a way to avoid the duplicate input string trick.
+	// TODO(dsnet): Find a way to avoid the duplicate input string method.
+	// We only need to do this because suffix arrays (by definition) only
+	// operate non-wrapped suffixes of a string. On the other hand,
+	// the BWT specifically used in bzip2 operate on a strings that wrap-around
+	// when being sorted.
 
 	// Step 1: Concatenate the input string to itself so that we can use the
 	// suffix array algorithm for bzip2's variant of BWT.
 	n := len(buf)
-	t := append(buf, buf...)
-	sa := make([]int, 2*n)
-	buf2 := t[n:]
+	bwt.buf = append(append(bwt.buf[:0], buf...), buf...)
+	if cap(bwt.sa) < 2*n {
+		bwt.sa = make([]int, 2*n)
+	}
+	t := bwt.buf[:2*n]
+	sa := bwt.sa[:2*n]
 
 	// Step 2: Compute the suffix array (SA). The input string, t, will not be
 	// modified, while the results will be written to the output, sa.
@@ -46,6 +53,7 @@ func (bwt *burrowsWheelerTransform) Encode(buf []byte) (ptr int) {
 	// input, we have two copies of the input; in buf and buf2. Thus, we write
 	// the transformation to buf, while using buf2.
 	var j int
+	buf2 := t[n:]
 	for _, i := range sa {
 		if i < n {
 			if i == 0 {
@@ -78,7 +86,10 @@ func (bwt *burrowsWheelerTransform) Decode(buf []byte, ptr int) {
 
 	// Step 2: Compute perm, where perm[ptr] contains a pointer to the next
 	// byte in buf and the next pointer in perm itself.
-	perm := make([]uint32, len(buf))
+	if cap(bwt.perm) < len(buf) {
+		bwt.perm = make([]uint32, len(buf))
+	}
+	perm := bwt.perm[:len(buf)]
 	for i, b := range buf {
 		perm[cumm[b]] = uint32(i)
 		cumm[b]++
@@ -86,7 +97,10 @@ func (bwt *burrowsWheelerTransform) Decode(buf []byte, ptr int) {
 
 	// Step 3: Follow each pointer in perm to the next byte, starting with the
 	// origin pointer.
-	buf2 := make([]byte, len(buf))
+	if cap(bwt.buf) < len(buf) {
+		bwt.buf = make([]byte, len(buf))
+	}
+	buf2 := bwt.buf[:len(buf)]
 	i := perm[ptr]
 	for j := range buf2 {
 		buf2[j] = buf[i]

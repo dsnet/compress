@@ -28,7 +28,13 @@ type Writer struct {
 	bwt burrowsWheelerTransform
 	mtf moveToFront
 
-	buf []byte
+	// These fields are allocated with Writer and re-used later.
+	buf         []byte
+	treeSels    []uint8
+	treeSelsMTF []uint8
+	codes2D     [maxNumTrees][maxNumSyms]prefix.PrefixCode
+	codes1D     [maxNumTrees]prefix.PrefixCodes
+	trees1D     [maxNumTrees]prefix.Encoder
 }
 
 type WriterConfig struct {
@@ -58,13 +64,20 @@ func (zw *Writer) Reset(w io.Writer) {
 	*zw = Writer{
 		wr:    zw.wr,
 		level: zw.level,
-		rle:   zw.rle,
-		bwt:   zw.bwt,
-		mtf:   zw.mtf,
-		buf:   zw.buf,
+
+		rle: zw.rle,
+		bwt: zw.bwt,
+		mtf: zw.mtf,
+
+		buf:         zw.buf,
+		treeSels:    zw.treeSels,
+		treeSelsMTF: zw.treeSelsMTF,
+		trees1D:     zw.trees1D,
 	}
 	zw.wr.Init(w)
-	zw.buf = make([]byte, zw.level*blockSize)
+	if len(zw.buf) != zw.level*blockSize {
+		zw.buf = make([]byte, zw.level*blockSize)
+	}
 	zw.rle.Init(zw.buf)
 	return
 }
@@ -221,21 +234,21 @@ func (zw *Writer) encodePrefix(syms []uint16, numSyms int) {
 
 	// Compute number of block selectors.
 	numSels := (len(syms) + numBlockSyms - 1) / numBlockSyms
-	treeSels := make([]uint8, numSels)
+	if cap(zw.treeSels) < numSels {
+		zw.treeSels = make([]uint8, numSels)
+	}
+	treeSels := zw.treeSels[:numSels]
 	for i := range treeSels {
 		treeSels[i] = uint8(i % numTrees)
 	}
 
 	// Initialize prefix codes.
-	var codes2D [maxNumTrees][maxNumSyms]prefix.PrefixCode
-	var codes1D [maxNumTrees]prefix.PrefixCodes
-	var trees1D [maxNumTrees]prefix.Encoder
-	for i := range codes2D[:numTrees] {
-		pc := codes2D[i][:numSyms]
+	for i := range zw.codes2D[:numTrees] {
+		pc := zw.codes2D[i][:numSyms]
 		for j := range pc {
-			pc[j].Sym = uint32(j)
+			pc[j] = prefix.PrefixCode{Sym: uint32(j)}
 		}
-		codes1D[i] = pc
+		zw.codes1D[i] = pc
 	}
 
 	// First cut at assigning prefix trees to each group.
@@ -244,7 +257,7 @@ func (zw *Writer) encodePrefix(syms []uint16, numSyms int) {
 	for _, sym := range syms {
 		if blkLen == 0 {
 			blkLen = numBlockSyms
-			codes = codes2D[treeSels[selIdx]][:numSyms]
+			codes = zw.codes2D[treeSels[selIdx]][:numSyms]
 			selIdx++
 		}
 		blkLen--
@@ -254,8 +267,8 @@ func (zw *Writer) encodePrefix(syms []uint16, numSyms int) {
 	// TODO(dsnet): Use K-means to cluster groups to each prefix tree.
 
 	// Generate lengths and prefixes based on symbol frequencies.
-	for i := range trees1D[:numTrees] {
-		pc := prefix.PrefixCodes(codes2D[i][:numSyms])
+	for i := range zw.trees1D[:numTrees] {
+		pc := prefix.PrefixCodes(zw.codes2D[i][:numSyms])
 		pc.SortByCount()
 		if err := prefix.GenerateLengths(pc, maxPrefixBits); err != nil {
 			errors.Panic(err)
@@ -267,13 +280,12 @@ func (zw *Writer) encodePrefix(syms []uint16, numSyms int) {
 	var mtf internal.MoveToFront
 	zw.wr.WriteBitsBE64(uint64(numTrees), 3)
 	zw.wr.WriteBitsBE64(uint64(numSels), 15)
-	treeSelsMTF := make([]uint8, numSels)
-	copy(treeSelsMTF, treeSels)
-	mtf.Encode(treeSelsMTF)
-	for _, sym := range treeSelsMTF {
+	zw.treeSelsMTF = append(zw.treeSelsMTF[:0], treeSels...)
+	mtf.Encode(zw.treeSelsMTF)
+	for _, sym := range zw.treeSelsMTF {
 		zw.wr.WriteSymbol(uint(sym), &encSel)
 	}
-	zw.wr.WritePrefixCodes(codes1D[:numTrees], trees1D[:numTrees])
+	zw.wr.WritePrefixCodes(zw.codes1D[:numTrees], zw.trees1D[:numTrees])
 
 	// Write out prefix encoded symbols of compressed data.
 	var tree *prefix.Encoder
@@ -281,7 +293,7 @@ func (zw *Writer) encodePrefix(syms []uint16, numSyms int) {
 	for _, sym := range syms {
 		if blkLen == 0 {
 			blkLen = numBlockSyms
-			tree = &trees1D[treeSels[selIdx]]
+			tree = &zw.trees1D[treeSels[selIdx]]
 			selIdx++
 		}
 		blkLen--
