@@ -16,13 +16,12 @@ type Reader struct {
 	InputOffset  int64 // Total number of bytes read from underlying io.Reader
 	OutputOffset int64 // Total number of bytes emitted from Read
 
-	rd         prefixReader
-	err        error
-	level      int    // The current compression level
-	rdHdrFtr   int    // Number of times we read the stream header and footer
-	gotBlkCRC  uint32 // CRC-32 IEEE of each block (as stored)
-	wantBlkCRC uint32 // CRC-32 IEEE of each block (as computed)
-	endCRC     uint32 // Checksum of all blocks using bzip2's custom method
+	rd       prefixReader
+	err      error
+	level    int    // The current compression level
+	rdHdrFtr int    // Number of times we read the stream header and footer
+	blkCRC   uint32 // CRC-32 IEEE of each block (as stored)
+	endCRC   uint32 // Checksum of all blocks using bzip2's custom method
 
 	crc crc
 	mtf moveToFront
@@ -72,7 +71,7 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 			zr.err = err
 		}
 		if cnt > 0 {
-			zr.wantBlkCRC = zr.crc.update(zr.wantBlkCRC, buf[:cnt])
+			zr.crc.update(buf[:cnt])
 			zr.OutputOffset += int64(cnt)
 			return cnt, nil
 		}
@@ -112,15 +111,13 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 			} else {
 				// Check and update the CRC.
 				if internal.GoFuzz {
-					zr.updateChecksum(-1, zr.wantBlkCRC) // Update with value
-					zr.gotBlkCRC = zr.wantBlkCRC         // Suppress CRC failures
+					zr.updateChecksum(-1, zr.crc.val) // Update with value
+					zr.blkCRC = zr.crc.val            // Suppress CRC failures
 				}
-				if zr.gotBlkCRC != zr.wantBlkCRC {
+				if zr.blkCRC != zr.crc.val {
 					panicf(errors.Corrupted, "mismatching block checksum")
 				}
-				zr.endCRC = (zr.endCRC<<1 | zr.endCRC>>31) ^ zr.wantBlkCRC
-				zr.gotBlkCRC = 0
-				zr.wantBlkCRC = 0
+				zr.endCRC = (zr.endCRC<<1 | zr.endCRC>>31) ^ zr.blkCRC
 			}
 			buf := zr.decodeBlock()
 			zr.rle.Init(buf)
@@ -163,7 +160,8 @@ func (zr *Reader) decodeBlock() []byte {
 		panicf(errors.Corrupted, "invalid block or footer magic")
 	}
 
-	zr.gotBlkCRC = uint32(zr.rd.ReadBitsBE64(32))
+	zr.crc.val = 0
+	zr.blkCRC = uint32(zr.rd.ReadBitsBE64(32))
 	if internal.GoFuzz {
 		zr.updateChecksum(zr.rd.BitsRead()-32, 0) // Record offset only
 	}

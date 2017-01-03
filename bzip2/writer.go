@@ -93,7 +93,7 @@ func (zw *Writer) Write(buf []byte) (int, error) {
 		if err != rleDone && zw.err == nil {
 			zw.err = err
 		}
-		zw.blkCRC = zw.crc.update(zw.blkCRC, buf[:wrCnt])
+		zw.crc.update(buf[:wrCnt])
 		buf = buf[wrCnt:]
 		if len(buf) == 0 {
 			zw.InputOffset += int64(cnt)
@@ -175,9 +175,11 @@ func (zw *Writer) Close() error {
 }
 
 func (zw *Writer) encodeBlock(buf []byte) {
+	zw.blkCRC = zw.crc.val
 	zw.wr.WriteBitsBE64(blkMagic, 48)
 	zw.wr.WriteBitsBE64(uint64(zw.blkCRC), 32)
 	zw.wr.WriteBitsBE64(0, 1)
+	zw.crc.val = 0
 
 	// Step 1: Burrows-Wheeler transformation.
 	ptr := zw.bwt.Encode(buf)

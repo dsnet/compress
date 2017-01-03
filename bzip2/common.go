@@ -76,26 +76,31 @@ func errWrap(err error, replaceCode int) error {
 var errClosed = errorf(errors.Closed, "")
 
 // crc computes the CRC-32 used by BZip2.
+//
+// The CRC-32 computation in bzip2 treats bytes as having bits in big-endian
+// order. That is, the MSB is read before the LSB. Thus, we can use the
+// standard library version of CRC-32 IEEE with some minor adjustments.
+//
 // The byte array is used as an intermediate buffer to swap the bits of every
 // byte of the input.
-type crc [4096]byte
+type crc struct {
+	val uint32
+	buf [256]byte
+}
 
-// update computes the CRC-32 of appending buf to crc.
-func (c *crc) update(crc uint32, buf []byte) uint32 {
-	// The CRC-32 computation in bzip2 treats bytes as having bits in big-endian
-	// order. That is, the MSB is read before the LSB. Thus, we can use the
-	// standard library version of CRC-32 IEEE with some minor adjustments.
-	crc = internal.ReverseUint32(crc)
+// update computes the CRC-32 of appending buf to c.
+func (c *crc) update(buf []byte) {
+	cval := internal.ReverseUint32(c.val)
 	for len(buf) > 0 {
 		n := len(buf)
-		if n > len(c) {
-			n = len(c)
+		if n > len(c.buf) {
+			n = len(c.buf)
 		}
 		for i, b := range buf[:n] {
-			c[i] = internal.ReverseLUT[b]
+			c.buf[i] = internal.ReverseLUT[b]
 		}
-		crc = crc32.Update(crc, crc32.IEEETable, c[:n])
+		cval = crc32.Update(cval, crc32.IEEETable, c.buf[:n])
 		buf = buf[n:]
 	}
-	return internal.ReverseUint32(crc)
+	c.val = internal.ReverseUint32(cval)
 }
