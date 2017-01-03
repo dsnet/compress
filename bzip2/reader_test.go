@@ -891,11 +891,9 @@ func TestReader(t *testing.T) {
 				t.Errorf("output mismatch:\ngot  %s\nwant %s", got, want)
 			}
 			if rd.InputOffset != v.inIdx {
-				t.Logf("inLen: %d", len(v.input))
 				t.Errorf("input offset mismatch: got %d, want %d", rd.InputOffset, v.inIdx)
 			}
 			if rd.OutputOffset != v.outIdx {
-				t.Logf("outLen: %d", len(v.output))
 				t.Errorf("output offset mismatch: got %d, want %d", rd.OutputOffset, v.outIdx)
 			}
 			if v.errf != "" && !errFuncs[v.errf](err) {
