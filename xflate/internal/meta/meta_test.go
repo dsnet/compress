@@ -99,8 +99,8 @@ func TestRoundTrip(t *testing.T) {
 			}
 
 			output := rb.Bytes()
-			if !bytes.Equal(output, v.input) {
-				t.Errorf("output data mismatch")
+			if got, want, ok := testutil.Compare(output, v.input); !ok {
+				t.Errorf("output data mismatch:\ngot  %s\nwant %s", got, want)
 			}
 		})
 	}
@@ -173,8 +173,8 @@ func TestFuzz(t *testing.T) {
 			t.Fatalf("unexpected error: decodeBlock() = %v", err)
 		}
 
-		if !bytes.Equal(mr.buf, x.buf) {
-			t.Fatalf("mismatching data:\ngot  %x\nwant %x", mr.buf, x.buf)
+		if got, want, ok := testutil.Compare(mr.buf, x.buf); !ok {
+			t.Fatalf("mismatching data:\ngot  %s\nwant %s", got, want)
 		}
 		if mr.final != x.final {
 			t.Fatalf("mismatching final mode: got %d, want %d", mr.final, x.final)
@@ -232,8 +232,8 @@ func TestRandom(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: Read() = %v", err)
 	}
-	if !bytes.Equal(buf, ibuf.Bytes()) {
-		t.Errorf("mismatching output for Read()")
+	if got, want, ok := testutil.Compare(buf, ibuf.Bytes()); !ok {
+		t.Errorf("mismatching output for Read():\ngot  %s\nwant %s", got, want)
 	}
 	if err := mr.Close(); err != nil {
 		t.Errorf("unexpected error: Close() = %v", err)

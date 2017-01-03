@@ -6,9 +6,12 @@
 package testutil
 
 import (
+	"bytes"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"io/ioutil"
+	"strings"
 )
 
 // ResizeData resizes the input. If n < 0, then the original input will be
@@ -66,6 +69,69 @@ func MustDecodeBitGen(s string) []byte {
 		panic(err)
 	}
 	return b
+}
+
+// Compare compares inputs a and b and reports whether they are equal.
+//
+// If they are not equal, it returns two one-line strings that are
+// representative of the differences between the two strings.
+// The output strings will be quoted strings if it seems like that data is text,
+// otherwise, it will use hexadecimal strings.
+func Compare(a, b []byte) (sa, sb string, ok bool) {
+	if ok = bytes.Equal(a, b); ok {
+		return
+	}
+
+	commonPrefix := func(a, b []byte) int {
+		if len(a) > len(b) {
+			a, b = b, a
+		}
+		for i := range a {
+			if a[i] != b[i] {
+				return i
+			}
+		}
+		return len(a)
+	}
+
+	formatter := func(a, b []byte, format string, trimHead, maxLen int) (sa, sb string) {
+		trimHead -= maxLen / 2 // Always provide context of equal bytes
+		if trimHead < 0 {
+			trimHead = 0
+		}
+		if trimHead > (len(a) - maxLen) {
+			trimHead = (len(a) - maxLen)
+		}
+		if trimHead > (len(b) - maxLen) {
+			trimHead = (len(b) - maxLen)
+		}
+
+		var head, atail, btail string
+		if trimHead > 0 {
+			a = a[trimHead:]
+			b = b[trimHead:]
+			head = fmt.Sprintf("(%d bytes)...", trimHead)
+		}
+		if len(a) > maxLen {
+			atail = fmt.Sprintf("...(%d bytes)", len(a)-maxLen)
+			a = a[:maxLen]
+		}
+		if len(b) > maxLen {
+			btail = fmt.Sprintf("...(%d bytes)", len(b)-maxLen)
+			b = b[:maxLen]
+		}
+		sa = fmt.Sprintf("%s"+format+"%s", head, a, atail)
+		sb = fmt.Sprintf("%s"+format+"%s", head, b, btail)
+		return sa, sb
+	}
+
+	const maxLen = 64
+	n := commonPrefix(a, b)
+	sa, sb = formatter(a, b, "%q", n, maxLen) // Favor quoted output, first
+	if s := sa + sb; strings.Count(s, `\u`)+strings.Count(s, `\x`) > maxLen/8 {
+		sa, sb = formatter(a, b, "%x", n, maxLen/2) // Fallback to hex, next
+	}
+	return sa, sb, false
 }
 
 // BuggyReader returns Err after N bytes have been read from R.

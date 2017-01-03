@@ -141,8 +141,8 @@ func TestWriter(t *testing.T) {
 		if err := xw.Close(); err != nil {
 			t.Errorf("test %d (%s), unexpected error: Close() = %v", i, v.desc, err)
 		}
-		if !bytes.Equal(b.Bytes(), v.output) {
-			t.Errorf("test %d (%s), mismatching bytes:\ngot  %x\nwant %x", i, v.desc, b.Bytes(), v.output)
+		if got, want, ok := testutil.Compare(b.Bytes(), v.output); !ok {
+			t.Errorf("test %d (%s), mismatching bytes:\ngot  %s\nwant %s", i, v.desc, got, want)
 		}
 		if xw.OutputOffset != int64(b.Len()) {
 			t.Errorf("test %d (%s), output offset mismatch: got %d, want %d", i, v.desc, xw.OutputOffset, b.Len())
@@ -158,8 +158,8 @@ func TestWriter(t *testing.T) {
 		if err != nil {
 			t.Errorf("test %d (%s), unexpected error: ReadAll() = %v", i, v.desc, err)
 		}
-		if !bytes.Equal(buf, bb.Bytes()) {
-			t.Errorf("test %d (%s), mismatching bytes:\ngot  %q\nwant %q", i, v.desc, buf, bb.Bytes())
+		if got, want, ok := testutil.Compare(buf, bb.Bytes()); !ok {
+			t.Errorf("test %d (%s), mismatching bytes:\ngot  %s\nwant %s", i, v.desc, got, want)
 		}
 		if rd.Len() > 0 {
 			t.Errorf("test %d (%s), not all bytes consumed: %d > 0", i, v.desc, rd.Len())

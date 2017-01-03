@@ -5,7 +5,6 @@
 package testutil
 
 import (
-	"bytes"
 	"testing"
 )
 
@@ -214,8 +213,8 @@ func TestDecodeBitGen(t *testing.T) {
 			}
 			continue
 		}
-		if !bytes.Equal(output, v.output) {
-			t.Errorf("test %d, mismatching output:\ngot  %x\nwant %x", i, output, v.output)
+		if got, want, ok := Compare(output, v.output); !ok {
+			t.Errorf("test %d, mismatching output:\ngot  %s\nwant %s", i, got, want)
 		}
 	}
 }

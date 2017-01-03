@@ -75,8 +75,8 @@ func TestRoundTrip(t *testing.T) {
 			}
 
 			output := rb.Bytes()
-			if !bytes.Equal(output, v.input) {
-				t.Errorf("output data mismatch")
+			if got, want, ok := testutil.Compare(output, v.input); !ok {
+				t.Errorf("output data mismatch:\ngot  %s\nwant %s", got, want)
 			}
 		})
 	}

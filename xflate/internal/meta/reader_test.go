@@ -241,8 +241,8 @@ func TestReader(t *testing.T) {
 		err := mr.decodeBlock()
 		output := mr.buf
 
-		if !bytes.Equal(output, v.output) {
-			t.Errorf("test %d (%s), mismatching data:\ngot  %x\nwant %x", i, v.desc, output, v.output)
+		if got, want, ok := testutil.Compare(output, v.output); !ok {
+			t.Errorf("test %d (%s), mismatching data:\ngot  %s\nwant %s", i, v.desc, got, want)
 		}
 		if int(mr.InputOffset) != len(v.input) && err == nil {
 			t.Errorf("test %d (%s), mismatching offset: got %d, want %d", i, v.desc, mr.InputOffset, len(v.input))

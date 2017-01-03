@@ -295,8 +295,8 @@ func TestReader(t *testing.T) {
 		} else if v.errf == "" && err != nil {
 			t.Errorf("test %d (%s), unexpected error: got %v", i, v.desc, err)
 		}
-		if !bytes.Equal(buf, v.output) && err == nil {
-			t.Errorf("test %d (%s), mismatching output:\ngot  %q\nwant %q", i, v.desc, buf, v.output)
+		if got, want, ok := testutil.Compare(buf, v.output); !ok && err == nil {
+			t.Errorf("test %d (%s), mismatching output:\ngot  %s\nwant %s", i, v.desc, got, want)
 		}
 	}
 }
@@ -492,8 +492,8 @@ func TestReaderSeek(t *testing.T) {
 		if err != nil {
 			t.Fatalf("test %v, unexpected error: ReadAll() = %v", i, err)
 		}
-		if !bytes.Equal(got, want) {
-			t.Fatalf("test %v, mismatching output:\ngot  %q\nwant %q", i, got, want)
+		if got, want, ok := testutil.Compare(got, want); !ok {
+			t.Fatalf("test %v, mismatching output:\ngot  %s\nwant %s", i, got, want)
 		}
 
 		pos = gotPos + int64(len(got))

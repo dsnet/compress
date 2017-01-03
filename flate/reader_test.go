@@ -844,8 +844,8 @@ func TestReader(t *testing.T) {
 				err = cerr
 			}
 
-			if !bytes.Equal(output, v.output) {
-				t.Errorf("output mismatch:\ngot  %x\nwant %x", output, v.output)
+			if got, want, ok := testutil.Compare(output, v.output); !ok {
+				t.Errorf("output mismatch:\ngot  %s\nwant %s", got, want)
 			}
 			if rd.InputOffset != v.inIdx {
 				t.Errorf("input offset mismatch: got %d, want %d", rd.InputOffset, v.inIdx)
@@ -867,8 +867,8 @@ func TestReader(t *testing.T) {
 				if got, want := bool(v.errf == ""), bool(err == nil); got != want {
 					t.Errorf("pass mismatch: got %v, want %v", got, want)
 				}
-				if err == nil && !bytes.Equal(v.output, output) {
-					t.Errorf("output mismatch:\ngot  %x\nwant %x", output, v.output)
+				if got, want, ok := testutil.Compare(output, v.output); !ok && err == nil {
+					t.Errorf("output mismatch:\ngot  %s\nwant %s", got, want)
 				}
 			}
 		})

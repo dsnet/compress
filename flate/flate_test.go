@@ -82,8 +82,8 @@ func TestRoundTrip(t *testing.T) {
 		if err := rd.Close(); err != nil {
 			t.Errorf("test %d, Close() = %v, want nil", i, err)
 		}
-		if !bytes.Equal(buf2.Bytes(), v.data) {
-			t.Errorf("test %d, output data mismatch", i)
+		if got, want, ok := testutil.Compare(buf2.Bytes(), v.data); !ok {
+			t.Errorf("test %d, output data mismatch:\ngot  %s\nwant %s", i, got, want)
 		}
 
 		// Read back the canary byte.
@@ -189,8 +189,8 @@ func TestSync(t *testing.T) {
 					t.Errorf("flushSize: %d, unexpected ReadAtLeast error: %v", n, err)
 				}
 				got := maxBuf[:m]
-				if !bytes.Equal(got, want) {
-					t.Errorf("flushSize: %d, output mismatch:\ngot  %q\nwant %q", n, got, want)
+				if got, want, ok := testutil.Compare(got, want); !ok {
+					t.Errorf("flushSize: %d, output mismatch:\ngot  %s\nwant %s", n, got, want)
 				}
 				if buf.Len() > 0 {
 					t.Errorf("flushSize: %d, unconsumed buffer data: %d bytes", n, buf.Len())
