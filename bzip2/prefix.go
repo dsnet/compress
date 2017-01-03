@@ -85,11 +85,11 @@ func (pr *prefixReader) ReadPrefixCodes(codes []prefix.PrefixCodes, trees []pref
 		if sum == 0 {
 			// Fast path, but only handles complete trees.
 			if err := prefix.GeneratePrefixes(pc); err != nil {
-				errors.Panic(err)
+				errors.Panic(err) // Using complete trees; should never fail
 			}
 		} else {
 			// Slow path, but handles anything.
-			pc = handleDegenerateCodes(pc)
+			pc = handleDegenerateCodes(pc) // Never fails, but may fail later
 			codes[i] = pc
 		}
 		trees[i].Init(pc)
@@ -119,7 +119,7 @@ func (pw *prefixWriter) WriteBitsBE64(v uint64, nb uint) {
 func (pw *prefixWriter) WritePrefixCodes(codes []prefix.PrefixCodes, trees []prefix.Encoder) {
 	for i, pc := range codes {
 		if err := prefix.GeneratePrefixes(pc); err != nil {
-			errors.Panic(err)
+			errors.Panic(err) // Using complete trees; should never fail
 		}
 		trees[i].Init(pc)
 

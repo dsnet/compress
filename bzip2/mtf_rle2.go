@@ -4,9 +4,7 @@
 
 package bzip2
 
-import (
-	"github.com/dsnet/compress/internal/errors"
-)
+import "github.com/dsnet/compress/internal/errors"
 
 // moveToFront implements both the MTF and RLE stages of bzip2 at the same time.
 // Any runs of zeros in the encoded output will be replaced by a sequence of
@@ -35,7 +33,7 @@ type moveToFront struct {
 
 func (mtf *moveToFront) Init(dict []uint8, blkSize int) {
 	if len(dict) > len(mtf.dictBuf) {
-		errors.Panic(errorf(errors.Internal, "alphabet too large"))
+		panicf(errors.Internal, "alphabet too large")
 	}
 	copy(mtf.dictBuf[:], dict)
 	mtf.dictLen = len(dict)
@@ -47,7 +45,7 @@ func (mtf *moveToFront) Encode(vals []byte) (syms []uint16) {
 	syms = mtf.syms[:0]
 
 	if len(vals) > mtf.blkSize {
-		errors.Panic(errorf(errors.Internal, "exceeded block size"))
+		panicf(errors.Internal, "exceeded block size")
 	}
 
 	var lastNum uint32

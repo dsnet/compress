@@ -219,7 +219,7 @@ func (zw *Writer) encodeBlock(buf []byte) {
 func (zw *Writer) encodePrefix(syms []uint16, numSyms int) {
 	numSyms += 2 // Remove 0 symbol, add RUNA, RUNB, and EOB symbols
 	if numSyms < 3 {
-		errors.Panic(errorf(errors.Internal, "unable to encode EOB marker"))
+		panicf(errors.Internal, "unable to encode EOB marker")
 	}
 	syms = append(syms, uint16(numSyms-1)) // EOB marker
 
