@@ -380,7 +380,7 @@ func TestReader(t *testing.T) {
 		output: []byte("Hello, world!"),
 		inIdx:  4147, outIdx: 13,
 	}, {
-		name: "InvalidTreeSels",
+		name: "InvalidTreeSels1",
 		input: db(`>>>
 			"BZh1"
 			> H48:314159265359 H32:8e9a7706 0 H24:3
@@ -392,6 +392,24 @@ func TestReader(t *testing.T) {
 			> H48:177245385090 H32:8e9a7706
 		`),
 		inIdx: 30, outIdx: 0,
+		errf: "IsCorrupted",
+	}, {
+		name: "InvalidTreeSels2",
+		input: db(`>>>
+			"BZh1"
+			> H48:314159265359 H32:8e9a7706 0 H24:3
+			< H16:00d4 H16:1003 H16:0100 H16:9030 H16:0084
+			> D3:6 D15:1 111111 # Select tree6, which is invalid
+			> D5:4 0 0 0 0 0 110 100 0 110 0 0 100
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			> D5:4 0 0 0 0 0 0 0 0 110 0 0 0
+			< 1101 000 100 000 100 0111 010 010 0011 0001 110 0111 110 1111
+			> H48:177245385090 H32:8e9a7706
+		`),
+		inIdx: 31, outIdx: 0,
 		errf: "IsCorrupted",
 	}, {
 		name: "JunkPadding",

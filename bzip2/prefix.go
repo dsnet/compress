@@ -21,21 +21,29 @@ const (
 	numBlockSyms  = 50      // Number of bytes in a block
 )
 
-var (
-	encSel prefix.Encoder
-	decSel prefix.Decoder
-)
-
-func init() {
+// encSel and decSel are used to handle the prefix encoding for tree selectors.
+// The prefix encoding is as follows:
+//
+//	Code         TreeIdx
+//	0        <=> 0
+//	10       <=> 1
+//	110      <=> 2
+//	1110     <=> 3
+//	11110    <=> 4
+//	111110   <=> 5
+//	111111   <=> 6	Invalid tree index, so should fail
+//
+var encSel, decSel = func() (e prefix.Encoder, d prefix.Decoder) {
 	var selCodes [maxNumTrees + 1]prefix.PrefixCode
 	for i := range selCodes {
 		selCodes[i] = prefix.PrefixCode{Sym: uint32(i), Len: uint32(i + 1)}
 	}
 	selCodes[maxNumTrees] = prefix.PrefixCode{Sym: maxNumTrees, Len: maxNumTrees}
 	prefix.GeneratePrefixes(selCodes[:])
-	decSel.Init(selCodes[:])
-	encSel.Init(selCodes[:])
-}
+	e.Init(selCodes[:])
+	d.Init(selCodes[:])
+	return
+}()
 
 type prefixReader struct{ prefix.Reader }
 
