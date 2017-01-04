@@ -23,6 +23,10 @@ import (
 // much of this work is derived by either reverse engineering the original C
 // source code or using secondary sources.
 //
+// Significant amounts of fuzz testing is done to ensure that outputs from
+// this package is properly decoded by the C library. Furthermore, we test that
+// both this package and the C library agree about what inputs are invalid.
+//
 // Compression stack:
 //	Run-length encoding 1     (RLE1)
 //	Burrows-Wheeler transform (BWT)
