@@ -9,6 +9,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/dsnet/compress/internal/testutil"
 )
 
 func TestRunLengthEncoder(t *testing.T) {
@@ -75,10 +77,10 @@ func TestRunLengthEncoder(t *testing.T) {
 		rle := new(runLengthEncoding)
 		rle.Init(make([]byte, v.size))
 		_, err := io.CopyBuffer(rle, struct{ io.Reader }{rd}, buf)
-		output := string(rle.Bytes())
+		output := rle.Bytes()
 
-		if output != v.output {
-			t.Errorf("test %d, output mismatch:\ngot  %q\nwant %q", i, output, v.output)
+		if got, want, ok := testutil.Compare(output, []byte(v.output)); !ok {
+			t.Errorf("test %d, output mismatch:\ngot  %s\nwant %s", i, got, want)
 		}
 		if done := err == rleDone; done != v.done {
 			t.Errorf("test %d, done mismatch: got %v want %v", i, done, v.done)
@@ -149,10 +151,10 @@ func TestRunLengthDecoder(t *testing.T) {
 		rle := new(runLengthEncoding)
 		rle.Init([]byte(v.input))
 		_, err := io.CopyBuffer(struct{ io.Writer }{wr}, rle, buf)
-		output := wr.String()
+		output := wr.Bytes()
 
-		if output != v.output {
-			t.Errorf("test %d, output mismatch:\ngot  %q\nwant %q", i, output, v.output)
+		if got, want, ok := testutil.Compare(output, []byte(v.output)); !ok {
+			t.Errorf("test %d, output mismatch:\ngot  %s\nwant %s", i, got, want)
 		}
 		if fail := err != rleDone; fail != v.fail {
 			t.Errorf("test %d, failure mismatch: got %t, want %t", i, fail, v.fail)
