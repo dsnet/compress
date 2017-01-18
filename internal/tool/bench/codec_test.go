@@ -18,6 +18,18 @@ import (
 	"github.com/dsnet/compress/internal/testutil"
 )
 
+// The unit tests can also be used to quickly test all of the implementations
+// with respect to each other for correctness. The command-line flags can be
+// used to specify any arbitrary corpus of test data to use.
+//
+// Example usage:
+//	$ go test -c
+//	$ ./bench.test \
+//		-paths    $CORPUS_PATH   \
+//		-globs    "*.txt:*.bin"  \
+//		-test.run "//fl/std|cgo" \
+//		-test.v
+
 var level int
 
 func TestMain(m *testing.M) {
