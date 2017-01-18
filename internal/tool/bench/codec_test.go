@@ -7,11 +7,12 @@ package main
 import (
 	"bytes"
 	"flag"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/dsnet/compress/internal/testutil"
@@ -28,26 +29,52 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+type semaphore chan struct{}
+
+func newSemaphore(n int) semaphore { return make(chan struct{}, n) }
+func (s *semaphore) Acquire()      { *s <- struct{}{} }
+func (s *semaphore) Release()      { <-*s }
+
+// Each sub-test is run in a goroutine so that we can have fine control over
+// exactly how many sub-tests are running. When running over a large corpus,
+// this help prevent all the sub-tests from executing at once and OOMing
+// the machine. The semaphores below control the maximum number of concurrent
+// operations that can be running for each dimension.
+//
+// We avoid using t.Parallel since that causes t.Run to return immediately and
+// does not provide the caller with feedback that all sub-operations completed.
+// This causes the next operation to prematurely start, causing an overload.
+var (
+	semaFiles    = newSemaphore(runtime.NumCPU())
+	semaFormats  = newSemaphore(runtime.NumCPU())
+	semaEncoders = newSemaphore(runtime.NumCPU())
+	semaDecoders = newSemaphore(runtime.NumCPU())
+)
+
 // TestCodecs tests that the output of each registered encoder is a valid input
 // for each registered decoder. This test runs in O(n^2) where n is the number
 // of registered codecs. This assumes that the number of test files and
 // compression formats stays relatively constant.
 func TestCodecs(t *testing.T) {
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	for _, fi := range getFiles(paths, globs) {
-		dd := testutil.MustLoadFile(fi.Abs)
-		name := strings.Replace(fi.Rel, string(filepath.Separator), "_", -1)
-		t.Run(fmt.Sprintf("File:%v", name), func(t *testing.T) {
-			t.Parallel()
+		fi := fi
+		name := "File:" + strings.Replace(fi.Rel, string(filepath.Separator), "_", -1)
+		goRun(t, &wg, &semaFiles, name, func(t *testing.T) {
+			dd := testutil.MustLoadFile(fi.Abs)
 			testFormats(t, dd)
 		})
 	}
 }
 
 func testFormats(t *testing.T, dd []byte) {
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	for _, ft := range formats {
 		ft := ft
-		t.Run(fmt.Sprintf("Format:%v", enumToFmt[ft]), func(t *testing.T) {
-			t.Parallel()
+		name := "Format:" + enumToFmt[ft]
+		goRun(t, &wg, &semaFormats, name, func(t *testing.T) {
 			if len(encoders[ft]) == 0 || len(decoders[ft]) == 0 {
 				t.Skip("no codecs available")
 			}
@@ -57,12 +84,12 @@ func testFormats(t *testing.T, dd []byte) {
 }
 
 func testEncoders(t *testing.T, ft Format, dd []byte) {
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	for encName := range encoders[ft] {
 		encName := encName
-		t.Run(fmt.Sprintf("Encoder:%v", encName), func(t *testing.T) {
-			t.Parallel()
-			defer recoverPanic(t)
-
+		name := "Encoder:" + encName
+		goRun(t, &wg, &semaEncoders, name, func(t *testing.T) {
 			be := new(bytes.Buffer)
 			zw := encoders[ft][encName](be, level)
 			if _, err := io.Copy(zw, bytes.NewReader(dd)); err != nil {
@@ -78,12 +105,12 @@ func testEncoders(t *testing.T, ft Format, dd []byte) {
 }
 
 func testDecoders(t *testing.T, ft Format, dd, de []byte) {
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	for decName := range decoders[ft] {
 		decName := decName
-		t.Run(fmt.Sprintf("Decoder:%v", decName), func(t *testing.T) {
-			t.Parallel()
-			defer recoverPanic(t)
-
+		name := "Decoder:" + decName
+		goRun(t, &wg, &semaDecoders, name, func(t *testing.T) {
 			bd := new(bytes.Buffer)
 			zr := decoders[ft][decName](bytes.NewReader(de))
 			if _, err := io.Copy(bd, zr); err != nil {
@@ -97,6 +124,19 @@ func testDecoders(t *testing.T, ft Format, dd, de []byte) {
 			}
 		})
 	}
+}
+
+func goRun(t *testing.T, wg *sync.WaitGroup, sm *semaphore, name string, fn func(t *testing.T)) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		t.Run(name, func(t *testing.T) {
+			sm.Acquire()
+			defer sm.Release()
+			defer recoverPanic(t)
+			fn(t)
+		})
+	}()
 }
 
 func recoverPanic(t *testing.T) {
