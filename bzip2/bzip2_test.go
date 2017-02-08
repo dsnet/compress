@@ -18,14 +18,14 @@ import (
 
 var zcheck = flag.Bool("zcheck", false, "verify test vectors with C bzip2 library")
 
-func cmdCompress(input []byte) ([]byte, error)   { return cmdExec("-z", input) }
-func cmdDecompress(input []byte) ([]byte, error) { return cmdExec("-d", input) }
+func cmdCompress(input []byte) ([]byte, error)   { return cmdExec(input, "-z") }
+func cmdDecompress(input []byte) ([]byte, error) { return cmdExec(input, "-d") }
 
 // cmdExec executes the bzip2 tool, passing the input in as stdin.
 // It returns the stdout and an error.
-func cmdExec(pyc string, input []byte) ([]byte, error) {
+func cmdExec(input []byte, args ...string) ([]byte, error) {
 	var bo, be bytes.Buffer
-	cmd := exec.Command("bzip2", pyc)
+	cmd := exec.Command("bzip2", args...)
 	cmd.Stdin = bytes.NewReader(input)
 	cmd.Stdout = &bo
 	cmd.Stderr = &be
