@@ -49,13 +49,13 @@ func (s *semaphore) Release()      { <-*s }
 
 // Each sub-test is run in a goroutine so that we can have fine control over
 // exactly how many sub-tests are running. When running over a large corpus,
-// this help prevent all the sub-tests from executing at once and OOMing
+// this helps prevent all the sub-tests from executing at once and OOMing
 // the machine. The semaphores below control the maximum number of concurrent
 // operations that can be running for each dimension.
 //
 // We avoid using t.Parallel since that causes t.Run to return immediately and
 // does not provide the caller with feedback that all sub-operations completed.
-// This causes the next operation to prematurely start, causing an overload.
+// This causes the next operation to prematurely start, leading to overloads.
 var (
 	semaFiles    = newSemaphore(runtime.NumCPU())
 	semaFormats  = newSemaphore(runtime.NumCPU())
