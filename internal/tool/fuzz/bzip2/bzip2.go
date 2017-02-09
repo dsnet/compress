@@ -83,6 +83,10 @@ func testDecoders(data []byte, updateCRCs bool) ([]byte, bool) {
 	case gerr == nil && cerr != nil:
 		panic(cerr)
 	default:
+		// Ensure that both gb and cb have the same common prefix.
+		if !bytes.HasPrefix(gb, cb) && !bytes.HasPrefix(cb, gb) {
+			panic("mismatching leading bytes")
+		}
 		return nil, false
 	}
 }
