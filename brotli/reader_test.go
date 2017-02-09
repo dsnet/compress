@@ -19,6 +19,7 @@ import (
 func TestReader(t *testing.T) {
 	db := testutil.MustDecodeBitGen
 	dh := testutil.MustDecodeHex
+	lf := testutil.MustLoadFile
 
 	errFuncs := map[string]func(error) bool{
 		"IsUnexpectedEOF": func(err error) bool { return err == io.ErrUnexpectedEOF },
@@ -35,21 +36,85 @@ func TestReader(t *testing.T) {
 		desc: "empty string (truncated)",
 		errf: "IsUnexpectedEOF",
 	}, {
-		desc:  "empty last block (WBITS: 16)",
+		// Empty last block (WBITS: 16)
+		desc:  "empty.00.br",
 		input: dh("06"),
 		inIdx: 1,
 	}, {
-		desc:  "empty last block (WBITS: 12)",
-		input: dh("c101"),
-		inIdx: 2,
-	}, {
-		desc:  "empty last block (WBITS: 17)",
+		// Empty last block (WBITS: 17)
+		desc:  "empty.01.br",
 		input: dh("8101"),
 		inIdx: 2,
 	}, {
-		desc:  "empty last block (WBITS: 21)",
+		desc:  "empty.02.br",
+		input: dh("a101"),
+		inIdx: 2,
+	}, {
+		desc:  "empty.03.br",
+		input: dh("b101"),
+		inIdx: 2,
+	}, {
+		// Empty last block (WBITS: 12)
+		desc:  "empty.04.br",
+		input: dh("c101"),
+		inIdx: 2,
+	}, {
+		desc:  "empty.05.br",
+		input: dh("d101"),
+		inIdx: 2,
+	}, {
+		desc:  "empty.06.br",
+		input: dh("e101"),
+		inIdx: 2,
+	}, {
+		desc:  "empty.07.br",
+		input: dh("f101"),
+		inIdx: 2,
+	}, {
+		desc:  "empty.08.br",
+		input: dh("33"),
+		inIdx: 1,
+	}, {
+		desc:  "empty.09.br",
+		input: dh("35"),
+		inIdx: 1,
+	}, {
+		desc:  "empty.10.br",
+		input: dh("37"),
+		inIdx: 1,
+	}, {
+		// Empty last block (WBITS: 21)
+		desc:  "empty.11.br",
 		input: dh("39"),
 		inIdx: 1,
+	}, {
+		desc:  "empty.12.br",
+		input: dh("3b"),
+		inIdx: 1,
+	}, {
+		desc:  "empty.13.br",
+		input: dh("3d"),
+		inIdx: 1,
+	}, {
+		desc:  "empty.14.br",
+		input: dh("3f"),
+		inIdx: 1,
+	}, {
+		desc:  "empty.15.br",
+		input: dh("1a"),
+		inIdx: 1,
+	}, {
+		desc:  "empty.16.br",
+		input: dh("81160058"),
+		inIdx: 4,
+	}, {
+		desc:  "empty.17.br",
+		input: db("<<< X:0103 X:06*65535 X:03"),
+		inIdx: 65538,
+	}, {
+		desc:  "empty.18.br",
+		input: db("<<< X:010b00 X:581600*65535 X:5803"),
+		inIdx: 196610,
 	}, {
 		desc:  "empty last block (WBITS: invalid)",
 		input: dh("9101"),
@@ -306,6 +371,138 @@ func TestReader(t *testing.T) {
 		inIdx:  26,
 		outIdx: 27,
 		errf:   "IsCorrupted",
+	}, {
+		desc:   "x.br",
+		input:  dh("0b00805803"),
+		output: db(`<<< "X"`),
+		inIdx:  5,
+		outIdx: 1,
+	}, {
+		desc:   "x.00.br",
+		input:  dh("0000105803"),
+		output: db(`<<< "X"`),
+		inIdx:  5,
+		outIdx: 1,
+	}, {
+		desc:   "x.01.br",
+		input:  dh("2c00580000085803"),
+		output: db(`<<< "X"`),
+		inIdx:  8,
+		outIdx: 1,
+	}, {
+		desc:   "x.02.br",
+		input:  dh("000010580d"),
+		output: db(`<<< "X"`),
+		inIdx:  5,
+		outIdx: 1,
+	}, {
+		desc:   "x.03.br",
+		input:  dh("a1000000008115080400"),
+		output: db(`<<< "X"`),
+		inIdx:  10,
+		outIdx: 1,
+	}, {
+		desc:   "zeros.br",
+		input:  dh("5bffff036002201e0b28f77e00"),
+		output: db("<<< X:00*262144"),
+		inIdx:  13,
+		outIdx: 262144,
+	}, {
+		desc:   "xyzzy.br",
+		input:  dh("0b028058797a7a7903"),
+		output: db(`<<< "Xyzzy"`),
+		inIdx:  9,
+		outIdx: 5,
+	}, {
+		desc:   "10x10y.br",
+		input:  dh("1b130000a4b0b2ea8147028a"),
+		output: db(`<<< "X"*10 "Y"*10`),
+		inIdx:  12,
+		outIdx: 20,
+	}, {
+		desc:   "64x.br",
+		input:  dh("1b3f000024b0e2998012"),
+		output: db(`<<< "X"*64`),
+		inIdx:  10,
+		outIdx: 64,
+	}, {
+		desc:   "backward65536.br",
+		input:  dh("5bff0001400a00ab167bac00484e73ed019203"),
+		output: db(`<<< X:00*256 "X"*65280 X:00*256`),
+		inIdx:  19,
+		outIdx: 65792,
+	}, {
+		desc:   "quickfox.br",
+		input:  dh("0b158054686520717569636b2062726f776e20666f78206a756d7073206f76657220746865206c617a7920646f6703"),
+		output: db(`<<< "The quick brown fox jumps over the lazy dog"`),
+		inIdx:  47,
+		outIdx: 43,
+	}, {
+		desc:   "quickfox_repeated.br",
+		input:  dh("5bffaf02c022795cfb5a8c423bf42555195a9299b135c8199e9e0a7b4b90b93c98c80940f3e6d94de46d651b2787135fa6e930967b3c15d8531c"),
+		output: db(`<<< "The quick brown fox jumps over the lazy dog"*4096`),
+		inIdx:  58,
+		outIdx: 176128,
+	}, {
+		desc:   "ukkonooa.br",
+		input:  lf("testdata/ukkonooa.br"),
+		output: lf("testdata/ukkonooa"),
+		inIdx:  69,
+		outIdx: 119,
+	}, {
+		desc:   "monkey.br",
+		input:  lf("testdata/monkey.br"),
+		output: lf("testdata/monkey"),
+		inIdx:  425,
+		outIdx: 843,
+	}, {
+		desc:   "random_org_10k.bin.br",
+		input:  lf("testdata/random_org_10k.bin.br"),
+		output: lf("testdata/random_org_10k.bin"),
+		inIdx:  10004,
+		outIdx: 10000,
+	}, {
+		desc:   "asyoulik.txt.br",
+		input:  lf("testdata/asyoulik.txt.br"),
+		output: lf("testdata/asyoulik.txt"),
+		inIdx:  45687,
+		outIdx: 125179,
+	}, {
+		desc:   "compressed_file.br",
+		input:  lf("testdata/compressed_file.br"),
+		output: lf("testdata/compressed_file"),
+		inIdx:  50100,
+		outIdx: 50096,
+	}, {
+		desc:   "compressed_repeated.br",
+		input:  lf("testdata/compressed_repeated.br"),
+		output: lf("testdata/compressed_repeated"),
+		inIdx:  50299,
+		outIdx: 144224,
+	}, {
+		desc:   "alice29.txt.br",
+		input:  lf("testdata/alice29.txt.br"),
+		output: lf("testdata/alice29.txt"),
+		inIdx:  50096,
+		outIdx: 152089,
+	}, {
+		desc:   "lcet10.txt.br",
+		input:  lf("testdata/lcet10.txt.br"),
+		output: lf("testdata/lcet10.txt"),
+		inIdx:  124719,
+		outIdx: 426754,
+	}, {
+		desc:   "mapsdatazrh.br",
+		input:  lf("testdata/mapsdatazrh.br"),
+		output: lf("testdata/mapsdatazrh"),
+		inIdx:  161743,
+		outIdx: 285886,
+	}, {
+		desc:   "plrabn12.txt.br",
+		input:  lf("testdata/plrabn12.txt.br"),
+		output: lf("testdata/plrabn12.txt"),
+		inIdx:  174771,
+		outIdx: 481861,
 	}}
 
 	for i, v := range vectors {
@@ -332,80 +529,15 @@ func TestReader(t *testing.T) {
 		} else if v.errf == "" && err != nil {
 			t.Errorf("test %d, unexpected error: got %v", i, err)
 		}
-	}
-}
 
-func TestReaderGolden(t *testing.T) {
-	vectors := []struct {
-		input  string // Input filename
-		output string // Output filename
-	}{
-		{"empty.br", "empty"},
-		{"empty.00.br", "empty"},
-		{"empty.01.br", "empty"},
-		{"empty.02.br", "empty"},
-		{"empty.03.br", "empty"},
-		{"empty.04.br", "empty"},
-		{"empty.05.br", "empty"},
-		{"empty.06.br", "empty"},
-		{"empty.07.br", "empty"},
-		{"empty.08.br", "empty"},
-		{"empty.09.br", "empty"},
-		{"empty.10.br", "empty"},
-		{"empty.11.br", "empty"},
-		{"empty.12.br", "empty"},
-		{"empty.13.br", "empty"},
-		{"empty.14.br", "empty"},
-		{"empty.15.br", "empty"},
-		{"empty.16.br", "empty"},
-		{"empty.17.br", "empty"},
-		{"empty.18.br", "empty"},
-		{"zeros.br", "zeros"},
-		{"x.br", "x"},
-		{"x.00.br", "x"},
-		{"x.01.br", "x"},
-		{"x.02.br", "x"},
-		{"x.03.br", "x"},
-		{"xyzzy.br", "xyzzy"},
-		{"10x10y.br", "10x10y"},
-		{"64x.br", "64x"},
-		{"backward65536.br", "backward65536"},
-		{"quickfox.br", "quickfox"},
-		{"quickfox_repeated.br", "quickfox_repeated"},
-		{"ukkonooa.br", "ukkonooa"},
-		{"monkey.br", "monkey"},
-		{"random_org_10k.bin.br", "random_org_10k.bin"},
-		{"asyoulik.txt.br", "asyoulik.txt"},
-		{"compressed_file.br", "compressed_file"},
-		{"compressed_repeated.br", "compressed_repeated"},
-		{"alice29.txt.br", "alice29.txt"},
-		{"lcet10.txt.br", "lcet10.txt"},
-		{"mapsdatazrh.br", "mapsdatazrh"},
-		{"plrabn12.txt.br", "plrabn12.txt"},
-	}
-
-	for i, v := range vectors {
-		input, err := ioutil.ReadFile("testdata/" + v.input)
-		if err != nil {
-			t.Errorf("test %d: %s\n%v", i, v.input, err)
-			continue
-		}
-		output, err := ioutil.ReadFile("testdata/" + v.output)
-		if err != nil {
-			t.Errorf("test %d: %s\n%v", i, v.output, err)
-			continue
-		}
-
-		rd, err := NewReader(bytes.NewReader(input), nil)
-		if err != nil {
-			t.Errorf("test %d, unexpected NewReader error: %v", i, err)
-		}
-		data, err := ioutil.ReadAll(rd)
-		if err != nil {
-			t.Errorf("test %d, %s\nerror mismatch: got %v, want nil", i, v.input, err)
-		}
-		if string(data) != string(output) {
-			t.Errorf("test %d, %s\noutput mismatch:\ngot  %q\nwant %q", i, v.input, string(data), string(output))
+		if *zcheck {
+			output, err := cmdDecompress(v.input)
+			if got, want := bool(v.errf == ""), bool(err == nil); got != want {
+				t.Errorf("test %d, pass mismatch: got %v, want %v", i, got, err)
+			}
+			if got, want, ok := testutil.Compare(output, v.output); !ok && err == nil {
+				t.Errorf("test %d, output mismatch:\ngot  %s\nwant %s", i, got, want)
+			}
 		}
 	}
 }
