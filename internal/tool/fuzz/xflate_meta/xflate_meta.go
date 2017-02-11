@@ -8,6 +8,7 @@ package xflate_meta
 
 import (
 	"bytes"
+	"compress/flate"
 	"io/ioutil"
 
 	"github.com/dsnet/compress/xflate"
@@ -25,11 +26,40 @@ func Fuzz(data []byte) int {
 }
 
 // decodeMeta attempts to decode the metadata.
+// If successful, it verifies that meta-encoded blocks are DEFLATE blocks.
 func decodeMeta(data []byte) ([]byte, bool) {
 	r := bytes.NewReader(data)
 	mr := xflate.NewMetaReader(r)
 	b, err := ioutil.ReadAll(mr)
-	return b, err == nil
+	if err != nil {
+		return nil, false
+	}
+	pos := int(r.Size()) - r.Len()
+	decompressMeta(data[:pos])
+	return b, true
+}
+
+// decompressMeta attempts to decompress the meta-encoded blocks.
+// It expects decompression to succeed and to output nothing.
+func decompressMeta(data []byte) {
+	// Make a copy and append DEFLATE terminator block.
+	data = append([]byte(nil), data...)
+	data = append(data, []byte{0x01, 0x00, 0x00, 0xff, 0xff}...)
+
+	r := bytes.NewReader(data)
+	for r.Len() > 0 {
+		zr := flate.NewReader(r)
+		b, err := ioutil.ReadAll(zr)
+		if err != nil {
+			panic(err)
+		}
+		if len(b) > 0 {
+			panic("non-zero meta-encoded block")
+		}
+		if err := zr.Close(); err != nil {
+			panic(err)
+		}
+	}
 }
 
 // testRoundTrip encodes the input data and then decodes it, checking that the
