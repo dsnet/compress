@@ -4,9 +4,7 @@
 
 package brotli
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestTransform(t *testing.T) {
 	vectors := []struct {

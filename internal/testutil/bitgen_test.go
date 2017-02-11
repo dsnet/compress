@@ -4,9 +4,7 @@
 
 package testutil
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestDecodeBitGen(t *testing.T) {
 	vectors := []struct {

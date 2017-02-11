@@ -11,9 +11,11 @@
 // avoids LZ77 dictionary matches.
 package main
 
-import "io/ioutil"
-import "math/rand"
-import "unicode/utf8"
+import (
+	"io/ioutil"
+	"math/rand"
+	"unicode/utf8"
+)
 
 const (
 	name = "huffman.txt"

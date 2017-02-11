@@ -4,8 +4,10 @@
 
 package internal
 
-import "encoding/hex"
-import "testing"
+import (
+	"encoding/hex"
+	"testing"
+)
 
 func TestMoveToFront(t *testing.T) {
 	vectors := []struct {

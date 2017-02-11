@@ -4,9 +4,7 @@
 
 package brotli
 
-import (
-	"io"
-)
+import "io"
 
 type writer struct {
 	InputOffset  int64 // Total number of bytes issued to Write

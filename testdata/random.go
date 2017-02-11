@@ -8,8 +8,10 @@
 // tests the worst case compression scenario.
 package main
 
-import "io/ioutil"
-import "math/rand"
+import (
+	"io/ioutil"
+	"math/rand"
+)
 
 const (
 	name = "random.bin"

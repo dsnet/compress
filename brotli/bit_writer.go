@@ -4,9 +4,7 @@
 
 package brotli
 
-import (
-	"io"
-)
+import "io"
 
 type bitWriter struct {
 	wr     io.Writer
