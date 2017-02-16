@@ -905,7 +905,7 @@ func TestReader(t *testing.T) {
 				err = cerr
 			}
 
-			if got, want, ok := testutil.Compare(output, v.output); !ok {
+			if got, want, ok := testutil.BytesCompare(output, v.output); !ok {
 				t.Errorf("output mismatch:\ngot  %s\nwant %s", got, want)
 			}
 			if rd.InputOffset != v.inIdx {
@@ -927,7 +927,7 @@ func TestReader(t *testing.T) {
 				if got, want := bool(v.errf == ""), bool(err == nil); got != want {
 					t.Errorf("pass mismatch: got %v, want %v", got, err)
 				}
-				if got, want, ok := testutil.Compare(output, v.output); !ok && err == nil {
+				if got, want, ok := testutil.BytesCompare(output, v.output); !ok && err == nil {
 					t.Errorf("output mismatch:\ngot  %s\nwant %s", got, want)
 				}
 			}

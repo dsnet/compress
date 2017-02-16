@@ -198,7 +198,7 @@ func TestWriter(t *testing.T) {
 		err := mw.encodeBlock(v.final)
 		output := b.Bytes()
 
-		if got, want, ok := testutil.Compare(output, v.output); !ok {
+		if got, want, ok := testutil.BytesCompare(output, v.output); !ok {
 			t.Errorf("test %d (%s), mismatching data:\ngot  %s\nwant %s", i, v.desc, got, want)
 		}
 		if len(output) != int(mw.OutputOffset) {

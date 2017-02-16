@@ -211,7 +211,7 @@ func TestDecodeBitGen(t *testing.T) {
 			}
 			continue
 		}
-		if got, want, ok := Compare(output, v.output); !ok {
+		if got, want, ok := BytesCompare(output, v.output); !ok {
 			t.Errorf("test %d, mismatching output:\ngot  %s\nwant %s", i, got, want)
 		}
 	}

@@ -105,7 +105,7 @@ func TestRoundTrip(t *testing.T) {
 				if err != nil {
 					t.Errorf("unexpected cmdDecompress error: %v", err)
 				}
-				if got, want, ok := testutil.Compare(zd, v.data); !ok {
+				if got, want, ok := testutil.BytesCompare(zd, v.data); !ok {
 					t.Errorf("output data mismatch:\ngot  %s\nwant %s", got, want)
 				}
 				zc, err := cmdCompress(v.data)
@@ -132,7 +132,7 @@ func TestRoundTrip(t *testing.T) {
 			if err := rd.Close(); err != nil {
 				t.Errorf("Close() = %v, want nil", err)
 			}
-			if got, want, ok := testutil.Compare(buf2.Bytes(), v.data); !ok {
+			if got, want, ok := testutil.BytesCompare(buf2.Bytes(), v.data); !ok {
 				t.Errorf("output data mismatch:\ngot  %s\nwant %s", got, want)
 			}
 		})

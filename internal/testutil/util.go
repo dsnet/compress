@@ -71,13 +71,20 @@ func MustDecodeBitGen(s string) []byte {
 	return b
 }
 
-// Compare compares inputs a and b and reports whether they are equal.
+// BytesCompare compares inputs a and b and reports whether they are equal.
 //
 // If they are not equal, it returns two one-line strings that are
 // representative of the differences between the two strings.
-// The output strings will be quoted strings if it seems like that data is text,
+// The output will be quoted strings if it seems like the data is text,
 // otherwise, it will use hexadecimal strings.
-func Compare(a, b []byte) (sa, sb string, ok bool) {
+//
+// Example usage:
+//
+//	if got, want, ok := testutil.BytesCompare(output, v.output); !ok {
+//		t.Errorf("output mismatch:\ngot  %s\nwant %s", got, want)
+//	}
+//
+func BytesCompare(a, b []byte) (sa, sb string, ok bool) {
 	if ok = bytes.Equal(a, b); ok {
 		return
 	}

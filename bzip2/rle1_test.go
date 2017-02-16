@@ -79,7 +79,7 @@ func TestRunLengthEncoder(t *testing.T) {
 		_, err := io.CopyBuffer(rle, struct{ io.Reader }{rd}, buf)
 		output := rle.Bytes()
 
-		if got, want, ok := testutil.Compare(output, []byte(v.output)); !ok {
+		if got, want, ok := testutil.BytesCompare(output, []byte(v.output)); !ok {
 			t.Errorf("test %d, output mismatch:\ngot  %s\nwant %s", i, got, want)
 		}
 		if done := err == rleDone; done != v.done {
@@ -153,7 +153,7 @@ func TestRunLengthDecoder(t *testing.T) {
 		_, err := io.CopyBuffer(struct{ io.Writer }{wr}, rle, buf)
 		output := wr.Bytes()
 
-		if got, want, ok := testutil.Compare(output, []byte(v.output)); !ok {
+		if got, want, ok := testutil.BytesCompare(output, []byte(v.output)); !ok {
 			t.Errorf("test %d, output mismatch:\ngot  %s\nwant %s", i, got, want)
 		}
 		if fail := err != rleDone; fail != v.fail {

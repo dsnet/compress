@@ -131,7 +131,7 @@ func testDecoders(t *testing.T, ft Format, dd, de []byte) {
 			if err := zr.Close(); err != nil {
 				t.Fatalf("unexpected Close error: %v", err)
 			}
-			if got, want, ok := testutil.Compare(bd.Bytes(), dd); !ok {
+			if got, want, ok := testutil.BytesCompare(bd.Bytes(), dd); !ok {
 				t.Errorf("data mismatch:\ngot  %s\nwant %s", got, want)
 			}
 		})

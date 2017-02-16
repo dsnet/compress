@@ -82,7 +82,7 @@ func TestRoundTrip(t *testing.T) {
 		if err := rd.Close(); err != nil {
 			t.Errorf("test %d, Close() = %v, want nil", i, err)
 		}
-		if got, want, ok := testutil.Compare(buf2.Bytes(), v.data); !ok {
+		if got, want, ok := testutil.BytesCompare(buf2.Bytes(), v.data); !ok {
 			t.Errorf("test %d, output data mismatch:\ngot  %s\nwant %s", i, got, want)
 		}
 
@@ -189,7 +189,7 @@ func TestSync(t *testing.T) {
 					t.Errorf("flushSize: %d, unexpected ReadAtLeast error: %v", n, err)
 				}
 				got := maxBuf[:m]
-				if got, want, ok := testutil.Compare(got, want); !ok {
+				if got, want, ok := testutil.BytesCompare(got, want); !ok {
 					t.Errorf("flushSize: %d, output mismatch:\ngot  %s\nwant %s", n, got, want)
 				}
 				if buf.Len() > 0 {

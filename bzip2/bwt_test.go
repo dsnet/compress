@@ -108,10 +108,10 @@ func TestBurrowsWheelerTransform(t *testing.T) {
 		input := append([]byte(nil), v.output...)
 		bwt.Decode(input, ptr)
 
-		if got, want, ok := testutil.Compare(input, v.input); !ok {
+		if got, want, ok := testutil.BytesCompare(input, v.input); !ok {
 			t.Errorf("test %d, input mismatch:\ngot  %s\nwant %s", i, got, want)
 		}
-		if got, want, ok := testutil.Compare(output, v.output); !ok {
+		if got, want, ok := testutil.BytesCompare(output, v.output); !ok {
 			t.Errorf("test %d, output mismatch:\ngot  %s\nwant %s", i, got, want)
 		}
 		if ptr != v.ptr {
