@@ -8,9 +8,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/dsnet/compress/internal"
 )
@@ -69,13 +69,20 @@ import (
 // A token decorator of "<" (little-endian) or ">" (big-endian) may begin
 // any binary token or decimal token. This will affect the bit-parsing mode
 // for that token only. It will not set the overall global mode. That still
-// needs to be done by standalone "<" and ">" tokens. This decorator has no
-// effect if applied to the literal bytes token.
+// needs to be done by standalone "<" and ">" tokens. This decorator may not
+// applied to the literal bytes token.
 //
 // A token decorator of the pattern "[*][0-9]+" may trail any token. This is
 // a quantifier decorator which indicates that the current token is to be
 // repeated some number of times. It is used to quickly replicate data and
 // allows the format to quickly generate large quantities of data.
+//
+// A sequence of tokens may be grouped together by enclosing them in a
+// pair of "(" and ")" characters. Any standalone "<" or ">" tokens only take
+// effect within the context of that group. A group with a "<" or ">" decorator
+// is equivalent to having that as the first standalone token in the sequence.
+// A repeator decorator on a group causes that group to be executed the
+// specified number of times.
 //
 // If the total bit-stream does not end on a byte-aligned edge, then the stream
 // will automatically be padded up to the nearest byte with 0 bits.
@@ -83,192 +90,267 @@ import (
 // Example BitGen file:
 //	<<< # DEFLATE uses LE bit-packing order
 //
-//	< 0 00 0*5                 # Non-last, raw block, padding
-//	< H16:0004 H16:fffb        # RawSize: 4
-//	X:deadcafe                 # Raw data
+//	( # Raw blocks
+//		< 0 00 0*5                 # Non-last, raw block, padding
+//		< H16:0004 H16:fffb        # RawSize: 4
+//		X:deadcafe                 # Raw data
+//	)*2
 //
-//	< 1 10                     # Last, dynamic block
-//	< D5:1 D5:0 D4:15          # HLit: 258, HDist: 1, HCLen: 19
-//	< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
-//	> 0*256 1*2                # HLits: {256:1, 257:1}
-//	> 0                        # HDists: {}
-//	> 1 0                      # Use invalid HDist code 0
+//	( # Dynamic block
+//		< 1 10                     # Last, dynamic block
+//		< D5:1 D5:0 D4:15          # HLit: 258, HDist: 1, HCLen: 19
+//		< 000*3 001 000*13 001 000 # HCLens: {0:1, 1:1}
+//		> 0*256 1*2                # HLits: {256:1, 257:1}
+//		> 0                        # HDists: {}
+//		> 1 0                      # Use invalid HDist code 0
+//	)
 //
 // Generated output stream (in hexadecimal):
-//	"000400fbffdeadcafe0de0010400000000100000000000000000000000000000" +
-//	"0000000000000000000000000000000000002c"
+//	000400fbffdeadcafe000400fbffdeadcafe0de0010400000000100000000000
+//	0000000000000000000000000000000000000000000000000000002c
 func DecodeBitGen(s string) ([]byte, error) {
-	t := tokenizer{s: s}
-
-	// Check for bit-packing mode.
-	var packMode byte
-	if tok, ok := t.Next().(*orderToken); ok && tok.global {
-		packMode = tok.order
-	} else {
-		return nil, errors.New("testutil: unknown stream bit-packing mode")
+	packMode, toks, err := parse(s)
+	if err != nil {
+		return nil, err
 	}
 
-	// Process every token in the input string.
-	var bw bitBuffer
-	var parseMode byte
-	for tok := t.Next(); tok != nil; tok = t.Next() {
-		switch tok := tok.(type) {
-		case *orderToken:
-			parseMode = tok.order
-			if tok.global {
-				return nil, errors.New("testutil: cannot set stream bit-packing mode again")
-			}
-		case *bitsToken:
-			if tok.length > 64 || tok.value > uint64(1<<tok.length)-1 {
-				return nil, errors.New("testutil: integer overflow on token")
-			}
-			if tok.order == '>' || (tok.order == 0 && parseMode == '>') {
-				tok.value = internal.ReverseUint64N(tok.value, tok.length)
-			}
-			for i := 0; i < tok.repeat; i++ {
-				bw.WriteBits64(tok.value, tok.length)
-			}
-		case *bytesToken:
-			if packMode == '>' {
-				// Bytes tokens should not be affected by the bit-packing
-				// order. Thus, if the order is reversed, we preemptively
-				// reverse the bits knowing that it will reversed back to normal
-				// in the final stage.
-				for i, b := range tok.value {
-					tok.value[i] = internal.ReverseLUT[b]
-				}
-			}
-			tok.value = bytes.Repeat(tok.value, tok.repeat)
-			if _, err := bw.Write(tok.value); err != nil {
-				return nil, err
-			}
-		}
+	bb := bitBuffer{packMode: packMode}
+	if err := bb.Process(toks); err != nil {
+		return nil, err
 	}
-	if t.err != nil {
-		return nil, t.err
-	}
-
-	// Apply packing bit-ordering.
-	buf := bw.Bytes()
-	if packMode == '>' {
-		for i, b := range buf {
-			buf[i] = internal.ReverseLUT[b]
-		}
-	}
-	return buf, nil
+	return bb.Bytes(), nil
 }
 
 type (
-	orderToken struct {
+	token interface {
+		Token()
+	}
+
+	basicToken struct {
+		token
 		order  byte
-		global bool
+		repeat int
+	}
+	orderToken struct {
+		*basicToken
 	}
 	bitsToken struct {
-		order  byte
+		*basicToken
 		value  uint64
 		length uint
-		repeat int
 	}
 	bytesToken struct {
-		value  []byte
-		repeat int
+		*basicToken
+		value []byte
+	}
+	groupToken struct {
+		*basicToken
+		tokens []token
 	}
 )
 
-type tokenizer struct {
-	s   string
-	r   strings.Reader // Reused to avoid allocations
-	err error          // Persistent error
+type parser struct {
+	in  string
+	rd  strings.Reader // For use with Fscanf only
+	err error
 }
 
-func (t *tokenizer) Next() interface{} {
-	if t.err != nil {
-		return nil
-	}
-
-	// Skip past all whitespace and comments.
-	for len(t.s) > 0 {
-		if ch, n := utf8.DecodeRuneInString(t.s); unicode.IsSpace(ch) {
-			t.s = t.s[n:]
-		} else if t.s[0] == '#' {
-			i := strings.IndexByte(t.s, '\n')
-			t.s = t.s[1+(len(t.s)+i)%len(t.s):]
-		} else {
-			break
+func parse(in string) (order byte, toks []token, err error) {
+	p := parser{in: in}
+	defer func() {
+		if ex := recover(); ex != nil {
+			var ok bool
+			if err, ok = ex.(error); ok {
+				if err != io.ErrUnexpectedEOF {
+					err = fmt.Errorf("parse error (offset:%d): %v", len(in)-len(p.in), err)
+				}
+				return
+			}
+			panic(ex)
 		}
-	}
+	}()
 
-	// Handle standalone endianess markers.
-	var s string
-	_, err := fmt.Sscanf(t.s, "%s", &s)
-	if err == nil && (s == "<" || s == "<<<" || s == ">>>" || s == ">") {
-		t.s = t.s[len(s):]
-		return &orderToken{s[0], s == "<<<" || s == ">>>"}
+	// Parse for the bit-packing order.
+	p.parseIgnored()
+	if !strings.HasPrefix(p.in, "<<<") && !strings.HasPrefix(p.in, ">>>") {
+		return 0, nil, errors.New("missing bit-packing order")
 	}
+	order, p.in = p.in[0], p.in[3:]
 
-	// Handle all other data tokens.
-	var token interface{}
-	var order byte
-	var repeat *int
-	if len(t.s) > 0 && (t.s[0] == '<' || t.s[0] == '>') {
-		order = t.s[0]
-		t.s = t.s[1:]
+	// Parse for all other tokens.
+	p.checkDelimiter()
+	toks = p.parseTokens()
+	if len(p.in) > 0 {
+		return 0, nil, errors.New("unmatched group terminator") // Must be ')'
 	}
-	if len(t.s) > 0 {
-		t.r.Reset(t.s)
-		switch t.s[0] {
+	return order, toks, nil
+}
+
+// This returns only when reaching a group terminator or EOF of the input.
+func (p *parser) parseTokens() (toks []token) {
+	for {
+		var btok basicToken
+		var tok token
+		p.parseIgnored()
+		btok.order = p.parseOrder()
+
+		var c byte
+		if len(p.in) > 0 {
+			c = p.in[0]
+		}
+		p.rd.Reset(p.in)
+		switch c {
 		case '0', '1':
-			v := &bitsToken{order: order, repeat: 1}
-			_, t.err = fmt.Fscanf(&t.r, "%b", &v.value)
-			v.length = uint(len(t.s) - t.r.Len())
-			token, repeat = v, &v.repeat
+			v := bitsToken{basicToken: &btok}
+			_, p.err = fmt.Fscanf(&p.rd, "%b", &v.value)
+			v.length = uint(len(p.in) - p.rd.Len())
+			tok = v
 		case 'D':
-			v := &bitsToken{order: order, repeat: 1}
-			_, t.err = fmt.Fscanf(&t.r, "D%d:%d", &v.length, &v.value)
-			token, repeat = v, &v.repeat
+			v := bitsToken{basicToken: &btok}
+			_, p.err = fmt.Fscanf(&p.rd, "D%d:%d", &v.length, &v.value)
+			tok = v
 		case 'H':
-			v := &bitsToken{order: order, repeat: 1}
-			_, t.err = fmt.Fscanf(&t.r, "H%d:%x", &v.length, &v.value)
-			token, repeat = v, &v.repeat
+			v := bitsToken{basicToken: &btok}
+			_, p.err = fmt.Fscanf(&p.rd, "H%d:%x", &v.length, &v.value)
+			tok = v
 		case 'X':
-			v := &bytesToken{repeat: 1}
-			_, t.err = fmt.Fscanf(&t.r, "X:%x", &v.value)
-			token, repeat = v, &v.repeat
+			v := bytesToken{basicToken: &btok}
+			_, p.err = fmt.Fscanf(&p.rd, "X:%x", &v.value)
+			tok = v
 		case '"':
-			v := &bytesToken{repeat: 1}
-			_, t.err = fmt.Fscanf(&t.r, "%q", &v.value)
-			token, repeat = v, &v.repeat
+			v := bytesToken{basicToken: &btok}
+			_, p.err = fmt.Fscanf(&p.rd, "%q", &v.value)
+			tok = v
+		case '(':
+			v := groupToken{basicToken: &btok}
+			p.in = p.in[1:]
+			v.tokens = p.parseTokens() // Returns only when len(p.in) == 0 or p.in == ')'
+			p.checkLength()
+			p.in = p.in[1:]
+			p.rd.Reset(p.in) // Avoid messing up the advancement logic below
+			tok = v
 		}
-		if t.err != nil {
-			return nil
+		p.checkError()
+		p.in = p.in[len(p.in)-p.rd.Len():]
+
+		if _, ok := tok.(bytesToken); ok && btok.order != 0 {
+			p.err = errors.New("order cannot be set on bytes value")
+			p.checkError()
 		}
-		t.s = t.s[len(t.s)-t.r.Len():]
-	}
-	if len(t.s) > 0 && t.s[0] == '*' && token != nil {
-		t.r.Reset(t.s)
-		if _, t.err = fmt.Fscanf(&t.r, "*%d", repeat); t.err != nil {
-			return nil
+		if tok != nil {
+			btok.repeat = p.parseRepeat()
+		} else if btok.order != 0 {
+			tok = orderToken{&btok}
 		}
-		t.s = t.s[len(t.s)-t.r.Len():]
+		p.checkDelimiter()
+		toks = append(toks, tok)
+		if c == ')' || len(p.in) == 0 {
+			return toks
+		}
 	}
-	if ch, n := utf8.DecodeRuneInString(t.s); !unicode.IsSpace(ch) && n > 0 {
-		fmt.Sscanf(t.s, "%s", &s)
-		t.err = fmt.Errorf("testutil: unknown token: %q", s)
-		return nil
-	}
-	return token
 }
 
-// bitBuffer is a simplified implementation of prefix.Writer.
-// This is implemented here to avoid a circular dependency.
+// parseIgnored skips past all preceding whitespace and comments.
+func (p *parser) parseIgnored() {
+	for len(p.in) > 0 && (unicode.IsSpace(rune(p.in[0])) || p.in[0] == '#') {
+		if p.in[0] != '#' {
+			p.in = p.in[1:]
+		} else if i := strings.IndexByte(p.in, '\n'); i >= 0 {
+			p.in = p.in[i:]
+		} else {
+			p.in = ""
+		}
+	}
+}
+
+// parseOrder parses out an optional order value.
+func (p *parser) parseOrder() (order byte) {
+	if len(p.in) > 0 && (p.in[0] == '<' || p.in[0] == '>') {
+		order, p.in = p.in[0], p.in[1:]
+	}
+	return order
+}
+
+// parseOrder parses out an repeater value.
+func (p *parser) parseRepeat() (n int) {
+	if len(p.in) > 0 && p.in[0] == '*' {
+		p.rd.Reset(p.in)
+		_, p.err = fmt.Fscanf(&p.rd, "*%d", &n)
+		p.checkError()
+		p.in = p.in[len(p.in)-p.rd.Len():]
+		return n
+	}
+	return 1
+}
+
+func (p *parser) checkLength() {
+	if len(p.in) == 0 {
+		panic(io.ErrUnexpectedEOF)
+	}
+}
+func (p *parser) checkDelimiter() {
+	if len(p.in) > 0 && !(unicode.IsSpace(rune(p.in[0])) || p.in[0] == '#' || p.in[0] == ')') {
+		panic(fmt.Errorf("unexpected character: %c", p.in[0]))
+	}
+}
+func (p *parser) checkError() {
+	if p.err != nil {
+		panic(p.err)
+	}
+}
+
 type bitBuffer struct {
+	packMode  byte
+	parseMode byte
+
 	b []byte
 	m byte
 }
 
+func (b *bitBuffer) Process(toks []token) error {
+	for _, t := range toks {
+		switch t := t.(type) {
+		case orderToken:
+			b.parseMode = t.order
+		case bitsToken:
+			if t.length > 64 || t.value > uint64(1<<t.length)-1 {
+				return fmt.Errorf("invalid bit value: D%d:%d", t.length, t.value)
+			}
+			if t.order == '>' || (t.order == 0 && b.parseMode == '>') {
+				t.value = internal.ReverseUint64N(t.value, t.length)
+			}
+			for i := 0; i < t.repeat; i++ {
+				b.WriteBits64(t.value, t.length)
+			}
+		case bytesToken:
+			t.value = append([]byte(nil), t.value...) // Make copy
+			if b.packMode == '>' {
+				// Bytes tokens should not be affected by the bit-packing
+				// order. Thus, if the order is reversed, we preemptively
+				// reverse the bits knowing that it will reversed back to normal
+				// in the final stage.
+				for i, b := range t.value {
+					t.value[i] = internal.ReverseLUT[b]
+				}
+			}
+			if _, err := b.Write(bytes.Repeat(t.value, t.repeat)); err != nil {
+				return err
+			}
+		case groupToken:
+			b.parseMode = t.order
+			for i := 0; i < t.repeat; i++ {
+				if err := b.Process(t.tokens); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func (b *bitBuffer) Write(buf []byte) (int, error) {
 	if b.m != 0x00 {
-		return 0, errors.New("testutil: unaligned write")
+		return 0, errors.New("unaligned write")
 	}
 	b.b = append(b.b, buf...)
 	return len(buf), nil
@@ -288,5 +370,11 @@ func (b *bitBuffer) WriteBits64(v uint64, n uint) {
 }
 
 func (b *bitBuffer) Bytes() []byte {
-	return b.b
+	buf := append([]byte(nil), b.b...)
+	if b.packMode == '>' {
+		for i, b := range buf {
+			buf[i] = internal.ReverseLUT[b]
+		}
+	}
+	return buf
 }

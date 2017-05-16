@@ -21,6 +21,12 @@ func TestDecodeBitGen(t *testing.T) {
 		input: `<<<`,
 		valid: true,
 	}, {
+		input: `<<< <`,
+		valid: true,
+	}, {
+		input: `<<< <*5`,
+		valid: false,
+	}, {
 		input:  `<<< < 1011001110001`,
 		output: []byte{0x71, 0x16}, // 0b01110001 0b00010110
 		valid:  true,
@@ -152,8 +158,8 @@ func TestDecodeBitGen(t *testing.T) {
 			  01101 D11:1337
 			< 01101 D11:1337
 			X:abcdef01
-			>X:abcdef01
-			<X:abcdef01
+			> X:abcdef01
+			< X:abcdef01
 		`,
 		output: []byte{
 			0xb6, 0x9c, 0x2d, 0xa7, // 0b10110110 0b10011100 0b00101101 0b10100111
@@ -170,8 +176,8 @@ func TestDecodeBitGen(t *testing.T) {
 			  01101 D11:1337
 			< 01101 D11:1337
 			X:abcdef01
-			>X:abcdef01
-			<X:abcdef01
+			> X:abcdef01
+			< X:abcdef01
 		`,
 		output: []byte{
 			0x6d, 0x39, 0xb4, 0xe5, // 0b01101101 0b00111001 0b10110100 0b11100101
@@ -196,8 +202,29 @@ func TestDecodeBitGen(t *testing.T) {
 		input: `<<< < D12:1337*9999999999999999999999999999999999999999999999`,
 		valid: false,
 	}, {
-		input:  `<<< X:abcd <"The " "quick "*5 "brown \"fox\"\n\n \\njumped" >"" # HA`,
+		input: "<<< <X:abcd",
+		valid: false,
+	}, {
+		input:  `<<< X:abcd < "The " "quick "*5 "brown \"fox\"\n\n \\njumped" > "" # HA`,
 		output: []byte("\xab\xcdThe quick quick quick quick quick brown \"fox\"\n\n \\njumped"),
+		valid:  true,
+	}, {
+		input:  `<<< ((("a")*2 "b")*2 "c")*2`,
+		output: []byte("aabaabcaabaabc"),
+		valid:  true,
+	}, {
+		input: `<<< (((("a")*2 "b")*2 "c")*2)*0 # Nothing`,
+		valid: true,
+	}, {
+		input: `<<< (((()))`,
+		valid: false,
+	}, {
+		input:  `<<< ((<()*5 ("hello")*2 ((<(<)) >)*123) "goodbye" ())*3`,
+		output: []byte("hellohellogoodbyehellohellogoodbyehellohellogoodbye"),
+		valid:  true,
+	}, {
+		input:  `>>> (("hello" <1110101 >D9:381)*2)`,
+		output: []byte("hello\xaf}hello\xaf}"),
 		valid:  true,
 	}}
 
