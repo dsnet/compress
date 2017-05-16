@@ -337,12 +337,16 @@ func (b *bitBuffer) Process(toks []token) error {
 				return err
 			}
 		case groupToken:
-			b.parseMode = t.order
+			saveMode := b.parseMode
+			if t.order != 0 {
+				b.parseMode = t.order
+			}
 			for i := 0; i < t.repeat; i++ {
 				if err := b.Process(t.tokens); err != nil {
 					return err
 				}
 			}
+			b.parseMode = saveMode
 		}
 	}
 	return nil

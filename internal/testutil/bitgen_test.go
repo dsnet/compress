@@ -226,6 +226,14 @@ func TestDecodeBitGen(t *testing.T) {
 		input:  `>>> (("hello" <1110101 >D9:381)*2)`,
 		output: []byte("hello\xaf}hello\xaf}"),
 		valid:  true,
+	}, {
+		input:  `<<< > (1011 <(1011 1011 (< 1011 1011) 1011 (<1011) >(1011) (1011)) 1011)`,
+		output: []byte{0xbd, 0xbb, 0xbb, 0xdb, 0xdb},
+		valid:  true,
+	}, {
+		input:  `<<< >1011 <1011 <1011 <1011 <1011 <1011 <1011 >1011 <1011 >1011`,
+		output: []byte{0xbd, 0xbb, 0xbb, 0xdb, 0xdb},
+		valid:  true,
 	}}
 
 	for i, v := range vectors {
