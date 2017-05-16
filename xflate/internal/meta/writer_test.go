@@ -19,6 +19,7 @@ import (
 // there are many possible representations. Before changing the test vectors to
 // make a test pass, one must verify the new output is correct.
 func TestWriter(t *testing.T) {
+	db := testutil.MustDecodeBitGen
 	dh := testutil.MustDecodeHex
 
 	errFuncs := map[string]func(error) bool{
@@ -31,130 +32,250 @@ func TestWriter(t *testing.T) {
 		final  FinalMode // Input final mode
 		errf   string    // Name of error checking callback
 	}{{
-		desc:   "empty meta block (FinalNil)",
-		input:  dh(""),
-		output: dh("1c408705000000f2ffc7ede0"),
-		final:  FinalNil,
+		desc:  "empty meta block (FinalNil)",
+		input: dh(""),
+		output: db(`<<<
+			< (0 10) (00011 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> (111 <D7:127) (111 <D7:99) 10 (110 <D2:3) 10
+			< 0*3 0 1*3
+		`),
+		final: FinalNil,
 	}, {
-		desc:   "empty meta block (FinalMeta)",
-		input:  dh(""),
-		output: dh("1c408705000000d2ff1fb7e1"),
-		final:  FinalMeta,
+		desc:  "empty meta block (FinalMeta)",
+		input: dh(""),
+		output: db(`<<<
+			< (0 10) (00011 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10 (111 <D7:127) (111 <D7:99) 10 (110 <D2:3)
+			< 0*3 0 1*3
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "input string 'a'",
-		input:  dh("61"),
-		output: dh("340087050000483232eaff4bdb0bf0"),
-		final:  FinalMeta,
+		desc:  "input string 'a'",
+		input: []byte("a"),
+		output: db(`<<<
+			< (0 10) (00110 00000 1000) (011 000 011 001 000 (000 000)*3 010) 0
+			> 10 0 10 0 (110 <D2:0) 10 0 (110 <D2:0) 10*2 (111 <D7:127)
+			  (111 <D7:82) 10 (110 <D2:3) (110 <D2:1)
+			< 0*6 0 1*4
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "input string 'ab'",
-		input:  dh("6162"),
-		output: dh("04008705000048848c22d4ff6fb6f3"),
-		final:  FinalMeta,
+		desc:  "input string 'ab'",
+		input: []byte("ab"),
+		output: db(`<<<
+			< (0 10) (00000 00000 1000) (011 000 011 001 000 (000 000)*3 010) 0
+			> 10 0*2 10 0*3 10 0 (110 <D2:0) 10*2 0*2 10 0*3 10*2 (111 <D7:127)
+			  (111 <D7:77) 10 (110 <D2:3) 10
+			< 0*0 0 1*4
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "input string 'abc'",
-		input:  dh("616263"),
-		output: dh("04c086050020296414a114eaffebda7bfb"),
-		final:  FinalMeta,
+		desc:  "input string 'abc'",
+		input: []byte("abc"),
+		output: db(`<<<
+			< (0 10) (00000 00000 0110) (011 000 011 001 000 (000 000)*2 010) 0
+			> 10 0 10*2 0*3 10 0 (110 <D2:0) 10*2 0*2 10 0*3 10*2 0 10*2 0*3
+			  10*2 (111 <D7:127) (111 <D7:58) 10 (110 <D2:3)*2 (110 <D2:3)
+			< 0*0 0 1*5
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "input string 'Hello, world!' with FinalNil",
-		input:  dh("48656c6c6f2c20776f726c6421"),
-		output: dh("3c8086058090322289422994d25028d951a9341451a114a264747e7b02fc"),
-		final:  FinalNil,
+		desc:  "input string 'Hello, world!' with FinalNil",
+		input: dh("48656c6c6f2c20776f726c6421"),
+		output: db(`<<<
+			< (0 10) (00111 00000 0100) (011 000 011 001 000 (000 000)*1 010) 0
+			> 0*2 10 0 10*2 0 (110 <D2:0) 10 0*2 10 0 10 0 10 0*2 10*2 0*3 10*2
+			  0 10*2 0*3 10*2 0 10*2 0 10 (110 <D2:0) 0 10*2 0*3 10*2 0 10 0
+			  (110 <D2:3) 10 0*2 10*3 0 10*3 0 10 (110 <D2:0) 0 10*2 0*2 10 0*2
+			  10*3 0*3 10*2 0 10*2 0*3 10 0*2 10*2 0 10 0 (110 <D2:0) 10
+			  (111 <D7:124) 10 (110 <D2:3) (110 <D2:2)
+			< 0*7 0 1*6
+		`),
+		final: FinalNil,
 	}, {
-		desc:   "input string 'Hello, world!' with FinalMeta",
-		input:  dh("48656c6c6f2c20776f726c6421"),
-		output: dh("348086058024654412855228a5a150b2a3526928a2422944c9e8fdf602fc"),
-		final:  FinalMeta,
+		desc:  "input string 'Hello, world!' with FinalMeta",
+		input: dh("48656c6c6f2c20776f726c6421"),
+		output: db(`<<<
+			< (0 10) (00110 00000 0100) (011 000 011 001 000 (000 000)*1 010) 0
+			> 10 0 10 0 10*2 0 (110 <D2:0) 10 0*2 10 0 10 0 10 0*2 10*2 0*3 10*2
+			  0 10*2 0*3 10*2 0 10*2 0 10 (110 <D2:0) 0 10*2 0*3 10*2 0 10 0
+			  (110 <D2:3) 10 0*2 10*3 0 10*3 0 10 (110 <D2:0) 0 10*2 0*2 10 0*2
+			  10*3 0*3 10*2 0 10*2 0*3 10 0*2 10*2 0 10 0 (110 <D2:0) 10
+			  (111 <D7:125) 10 (110 <D2:3) (110 <D2:1)
+			< 0*6 0 1*6
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "input string 'Hello, world!' with FinalStream",
-		input:  dh("48656c6c6f2c20776f726c6421"),
-		output: dh("358086058024654412855228a5a150b2a3526928a2422944c9e8fdf602fc"),
-		final:  FinalStream,
+		desc:  "input string 'Hello, world!' with FinalStream",
+		input: dh("48656c6c6f2c20776f726c6421"),
+		output: db(`<<<
+			< (1 10) (00110 00000 0100) (011 000 011 001 000 (000 000)*1 010) 0
+			> 10 0 10 0 10*2 0 (110 <D2:0) 10 0*2 10 0 10 0 10 0*2 10*2 0*3 10*2
+			  0 10*2 0*3 10*2 0 10*2 0 10 (110 <D2:0) 0 10*2 0*3 10*2 0 10 0
+			  (110 <D2:3) 10 0*2 10*3 0 10*3 0 10 (110 <D2:0) 0 10*2 0*2 10 0*2
+			  10*3 0*3 10*2 0 10*2 0*3 10 0*2 10*2 0 10 0 (110 <D2:0) 10
+			  (111 <D7:125) 10 (110 <D2:3) (110 <D2:1)
+			< 0*6 0 1*6
+		`),
+		final: FinalStream,
 	}, {
-		desc:   "input hex-string '00'*4",
-		input:  dh("00000000"),
-		output: dh("3440870500000012faffe026e0"),
-		final:  FinalMeta,
+		desc:  "input hex-string '00'*4",
+		input: dh("00000000"),
+		output: db(`<<<
+			< (0 10) (00110 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10 0*3 10 (111 <D7:127) (111 <D7:96) 10 (110 <D2:2)
+			< 0*6 0 1*3
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "input hex-string '00'*8",
-		input:  dh("0000000000000000"),
-		output: dh("1c40870500000092d1ffff36e1"),
-		final:  FinalMeta,
+		desc:  "input hex-string '00'*8",
+		input: dh("0000000000000000"),
+		output: db(`<<<
+			< (0 10) (00011 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10 0 (110 <D2:0) 10 (111 <D7:127) (111 <D7:95) 10 (110 <D2:2)
+			< 0*3 0 1*3
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "input hex-string '00'*16",
-		input:  dh("00000000000000000000000000000000"),
-		output: dh("1c40870500000092d5fff736e1"),
-		final:  FinalMeta,
+		desc:  "input hex-string '00'*16",
+		input: dh("00000000000000000000000000000000"),
+		output: db(`<<<
+			< (0 10) (00011 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10 0 (110 <D2:1) 10 (111 <D7:127) (111 <D7:94) 10 (110 <D2:2)
+			< 0*3 0 1*3
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "input hex-string 'ff'*4",
-		input:  dh("ffffffff"),
-		output: dh("2c40870500000052f4ffc32de0"),
-		final:  FinalMeta,
+		desc:  "input hex-string 'ff'*4",
+		input: dh("ffffffff"),
+		output: db(`<<<
+			< (0 10) (00101 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10*2 0*2 10 (111 <D7:127) (111 <D7:97) 10 (110 <D2:1)
+			< 0*5 0 1*3
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "input hex-string 'ff'*8",
-		input:  dh("ffffffffffffffff"),
-		output: dh("2440870500000052e8ff835be0"),
-		final:  FinalMeta,
+		desc:  "input hex-string 'ff'*8",
+		input: dh("ffffffffffffffff"),
+		output: db(`<<<
+			< (0 10) (00100 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10*2 0*3 10 (111 <D7:127) (111 <D7:96) 10 (110 <D2:1)
+			< 0*4 0 1*3
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "input hex-string 'ff'*16",
-		input:  dh("ffffffffffffffffffffffffffffffff"),
-		output: dh("0c4087050000005246ffffdbe2"),
-		final:  FinalMeta,
+		desc:  "input hex-string 'ff'*16",
+		input: dh("ffffffffffffffffffffffffffffffff"),
+		output: db(`<<<
+			< (0 10) (00001 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10*2 0 (110 <D2:0) 10 (111 <D7:127) (111 <D7:95) 10 (110 <D2:1)
+			< 0*1 0 1*3
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "the random hex-string '911fe47084a4668b'",
-		input:  dh("911fe47084a4668b"),
-		output: dh("2480860580642444d38acaa890119114a584febfa0bdf7de03fc"),
-		final:  FinalMeta,
+		desc:  "the random hex-string '911fe47084a4668b'",
+		input: dh("911fe47084a4668b"),
+		output: db(`<<<
+			< (0 10) (00100 00000 0100) (011 000 011 001 000 (000 000)*1 010) 0
+			> 10 0 (110 <D2:0) 10 0 10 0*3 10 0*2 10 (110 <D2:2) 0 (110 <D2:1)
+			  10 0*2 10*3 0 (110 <D2:0) 10*3 0*3 10 0 (110 <D2:0) 10 0*2 10 0*2
+			  10 0 10 0 10*2 0*2 10*2 0 10*2 0 10 0*3 10 (111 <D7:127)
+			  (111 <D7:2) 10 (110 <D2:3)*5 (110 <D2:0)
+			< 0*4 0 1*6
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "the random hex-string 'de9fa94cb16f40fc'",
-		input:  dh("de9fa94cb16f40fc"),
-		output: dh("0c808605801492915d94a428a9c88ab6eaff27da7bef5dfc"),
-		final:  FinalMeta,
+		desc:  "the random hex-string 'de9fa94cb16f40fc'",
+		input: dh("de9fa94cb16f40fc"),
+		output: db(`<<<
+			< (0 10) (00001 00000 0100) (011 000 011 001 000 (000 000)*1 010) 0
+			> 10*2 0*3 10 0 10 0 (110 <D2:0) 10 0 (110 <D2:3) 10*2 0*2 10*2 0 10
+			  0 10 0 10*2 0*2 10*2 0 10 0 10*3 0*2 10 0 (110 <D2:1) 10 0*2 10
+			  (110 <D2:3) 0 10*3 (111 <D7:127) (111 <D7:9) 10 (110 <D2:3)*5 10*2
+			< 0*1 0 1*6
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "input hex-string '55'*22",
-		input:  dh("55555555555555555555555555555555555555555555"),
-		output: dh("0540860512a52449922449922449922449922449922449922449922449922449922449922449d237edbdf79efe"),
-		final:  FinalStream,
+		desc:  "input hex-string '55'*22",
+		input: dh("55555555555555555555555555555555555555555555"),
+		output: db(`<<<
+			< (1 10) (00000 00000 0010) (011 000 011 001 000 (000 000)*0 010) 0
+			> 10 0*2 10*2 0 10*2 (0 10)*87 (111 <D7:27) 10 (110 <D2:3)*5 (110 <D2:2)
+			< 0*0 0 1*7
+		`),
+		final: FinalStream,
 	}, {
-		desc:   "input hex-string '55'*23",
-		input:  dh("5555555555555555555555555555555555555555555555"),
-		output: dh("04408605924a499224499224499224499224499224499224499224499224499224499224499224493aa6bdf7defe"),
-		final:  FinalMeta,
+		desc:  "input hex-string '55'*23",
+		input: dh("5555555555555555555555555555555555555555555555"),
+		output: db(`<<<
+			< (0 10) (00000 00000 0010) (011 000 011 001 000 (000 000)*0 010) 0
+			> 10 0 10*3 0 10*2 (0 10)*91 (111 <D7:24) 10 (110 <D2:3)*5
+			< 0*0 0 1*7
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "input hex-string '55'*24",
-		input:  dh("555555555555555555555555555555555555555555555555"),
-		output: dh("3c408605322b4992244992244992244992244992244992244992244992244992244992244992244992f4487bef3d01fe"),
-		final:  FinalNil,
+		desc:  "input hex-string '55'*24",
+		input: dh("555555555555555555555555555555555555555555555555"),
+		output: db(`<<<
+			< (0 10) (00111 00000 0010) (011 000 011 001 000 010)
+			> 0 (110 <D2:2) 10*3 (0 10)*95 (111 <D7:17) 10 (110 <D2:3)*4 (110 <D2:2)
+			< 0*7 0 1*7
+		`),
+		final: FinalNil,
 	}, {
-		desc:   "input hex-string '55'*25",
-		input:  dh("55555555555555555555555555555555555555555555555555"),
-		output: dh("3540860592a824499224499224499224499224499224499224499224499224499224499224499224499224fdd1de7b02fe"),
-		final:  FinalStream,
+		desc:  "input hex-string '55'*25",
+		input: dh("55555555555555555555555555555555555555555555555555"),
+		output: db(`<<<
+			< (1 10) (00110 00000 0010) (011 000 011 001 000 010)
+			> 0 10 0 10 0*2 10*3 (0 10)*99 (111 <D7:15) 10 (110 <D2:3)*3 (110 <D2:2)
+			< 0*6 0 1*7
+		`),
+		final: FinalStream,
 	}, {
-		desc:   "input hex-string '55'*26",
-		input:  dh("5555555555555555555555555555555555555555555555555555"),
-		output: dh("2c40860512a92449922449922449922449922449922449922449922449922449922449922449922449922449d217edbd03fe"),
-		final:  FinalMeta,
+		desc:  "input hex-string '55'*26",
+		input: dh("5555555555555555555555555555555555555555555555555555"),
+		output: db(`<<<
+			< (0 10) (00101 00000 0010) (011 000 011 001 000 010)
+			> 0 10 0*2 10 0 10*3 (0 10)*103 (111 <D7:11) 10 (110 <D2:3)*3 10
+			< 0*5 0 1*7
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "input hex-string '55'*27",
-		input:  dh("555555555555555555555555555555555555555555555555555555"),
-		output: dh("1c40860542a924499224499224499224499224499224499224499224499224499224499224499224499224499224fdd0de03fe"),
-		final:  FinalNil,
+		desc:  "input hex-string '55'*27",
+		input: dh("555555555555555555555555555555555555555555555555555555"),
+		output: db(`<<<
+			< (0 10) (00011 00000 0010) (011 000 011 001 000 010)
+			> 0*3 10*2 0 10*3 (0 10)*107 (111 <D7:7) 10 (110 <D2:3)*2 (110 <D2:0)
+			< 0*3 0 1*7
+		`),
+		final: FinalNil,
 	}, {
-		desc:   "input hex-string '55'*28",
-		input:  dh("55555555555555555555555555555555555555555555555555555555"),
-		output: dh("2d408605121a9224499224499224499224499224499224499224499224499224499224499224499224499224499224e983f604fe"),
-		final:  FinalStream,
+		desc:  "input hex-string '55'*28",
+		input: dh("55555555555555555555555555555555555555555555555555555555"),
+		output: db(`<<<
+			< (1 10) (00101 00000 0010) (011 000 011 001 000 010)
+			> 0 10 0*3 10 (110 <D2:0) (0 10)*111 (111 <D7:3) 10 (110 <D2:3) (110 <D2:2)
+			< 0*5 0 1*7
+		`),
+		final: FinalStream,
 	}, {
-		desc:   "input hex-string '55'*29",
-		input:  dh("5555555555555555555555555555555555555555555555555555555555"),
-		output: dh("2c4086059234244992244992244992244992244992244992244992244992244992244992244992244992244992244992241dd006fe"),
-		final:  FinalMeta,
+		desc:  "input hex-string '55'*29",
+		input: dh("5555555555555555555555555555555555555555555555555555555555"),
+		output: db(`<<<
+			< (0 10) (00101 00000 0010) (011 000 011 001 000 010)
+			> 0 10 0 10 0 10 (110 <D2:0) (0 10)*115 (111 <D7:0) 10 (110 <D2:3)
+			< 0*5 0 1*7
+		`),
+		final: FinalMeta,
 	}, {
-		desc:   "input hex-string '55'*30",
-		input:  dh("555555555555555555555555555555555555555555555555555555555555"),
-		output: dh("34408605325a9224499224499224499224499224499224499224499224499224499224499224499224499224499224499224c96c00fe"),
-		final:  FinalNil,
+		desc:  "input hex-string '55'*30",
+		input: dh("555555555555555555555555555555555555555555555555555555555555"),
+		output: db(`<<<
+			< (0 10) (00110 00000 0010) (011 000 011 001 000 010)
+			> 0 (110 <D2:0) 10 (110 <D2:1) (0 10)*119 0 (110 <D2:2) 10 (110 <D2:0)
+			< 0*6 0 1*7
+		`),
+		final: FinalNil,
 	}, {
 		desc:  "input hex-string '55'*31",
 		input: dh("55555555555555555555555555555555555555555555555555555555555555"),
@@ -166,20 +287,42 @@ func TestWriter(t *testing.T) {
 		final: FinalMeta,
 		errf:  "IsInvalid",
 	}, {
-		desc:   "input hex-string '73de76bebcf69d5fed3fb3cee87bacfd7de876facffedf'",
-		input:  dh("73de76bebcf69d5fed3fb3cee87bacfd7de876facffedf"),
-		output: dh("14808605806888421911a1ac9491c80a6526914d51241495ac8c8a447656438850b2297aa0d72afc"),
-		final:  FinalNil,
+		desc:  "input hex-string '73de76bebcf69d5fed3fb3cee87bacfd7de876facffedf'",
+		input: dh("73de76bebcf69d5fed3fb3cee87bacfd7de876facffedf"),
+		output: db(`<<<
+			< (0 10) (00010 00000 0100) (011 000 011 001 000 (000 000) 010)
+			> 0*2 10 (110 <D2:0) 0 10 0*2 10*2 0*3 10*2 0 (110 <D2:0) 10 0*2 10
+			  0*2 10 0*3 10*2 0 (110 <D2:1) 10 0 10*2 0 (110 <D2:0) 10 0 10 0*2
+			  10 0 (110 <D2:1) 10 0*3 10*2 0 (110 <D2:2) 10 0 10 0 10 0*2 10 0
+			  (110 <D2:3) 0*2 10*2 0*2 10*2 0*2 10 0 10 0*3 10*2 0*2 10*3 0 10 0
+			  (110 <D2:1) 10 0 (110 <D2:0) 10*3 0*2 10 0 10 0*2 10 0 (110 <D2:3)
+			  10 0 (110 <D2:1) 10 (110 <D2:0) 0 10 0*3 10 0*2 10 0*3 10*2 0 10 0
+			  (110 <D2:3) 0*2 10*2 0*2 10 (111 <D7:1) 10 (111 <D7:53) 10*3
+			< 0*2 0 1*6
+		`),
+		final: FinalNil,
 	}, {
 		desc:  "input hex-string '73de76bebcf69d5fed3fb3cee87bacfd7de876facffede'",
 		input: dh("73de76bebcf69d5fed3fb3cee87bacfd7de876facffede"),
 		final: FinalStream,
 		errf:  "IsInvalid",
 	}, {
-		desc:   "input hex-string 'def773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9'",
-		input:  dh("def773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9"),
-		output: dh("3c808605809496919559c80c49240d252be98f9095cc6c6584105995112259654b2f444676dd50a4c85601fc"),
-		final:  FinalMeta,
+		desc:  "input hex-string 'def773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9'",
+		input: dh("def773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9"),
+		output: db(`<<<
+			< (0 10) (00111 00000 0100) (011 000 011 001 000 (000 000) 010)
+			> 0 10*2 0 10 (110 <D2:1) 0 (110 <D2:0) 10 0 (110 <D2:1) 10 0
+			  (110 <D2:2) 10*2 0*3 10 0 (110 <D2:2) 10 0*3 10 0 10 0 10 0*2 10 0
+			  10 0 10 (110 <D2:0) 0 10*2 0 10 0 (110 <D2:1) 10 0 10 0 10
+			  (111 <D7:15) 10 0*3 10 0 (110 <D2:1) 10 0 10 0 (110 <D2:2) 10 0
+			  (110 <D2:3) 0 10*2 0 (110 <D2:0) 10 0*3 10 0*3 10 0*2 10 0
+			  (110 <D2:1) 10*3 0 (110 <D2:0) 10 0*3 10 0*2 10 0 10 0 (110 <D2:1)
+			  10*2 0 (110 <D2:3) 0 10 0 10 (111 <D7:5) 10 0*2 10 0 (110 <D2:0)
+			  10 0 (110 <D2:3) 10*2 (111 <D7:6) 10*2 0*2 10 0 10*2 0*2 10 0
+			  (110 <D2:3) 0 10*3
+			< 0*7 0 1*6
+		`),
+		final: FinalMeta,
 	}, {
 		desc:  "input hex-string 'dff773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9'",
 		input: dh("dff773bfab15d257ffffffbbafdf3fef6e1fefd6e75ffffff6fefcff67d9"),

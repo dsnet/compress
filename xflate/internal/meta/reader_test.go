@@ -21,6 +21,7 @@ import (
 // strings. A third-party decoder should verify that it has the same behavior
 // when processing these input vectors.
 func TestReader(t *testing.T) {
+	db := testutil.MustDecodeBitGen
 	dh := testutil.MustDecodeHex
 
 	errFuncs := map[string]func(error) bool{
@@ -40,200 +41,393 @@ func TestReader(t *testing.T) {
 		output: dh(""),
 		errf:   "IsEOF",
 	}, {
-		desc:   "bad empty meta block (FinalNil, first symbol not symZero)",
-		input:  dh("24408705000000faffe476e0"),
+		desc: "bad empty meta block (FinalNil, first symbol not symZero)",
+		input: db(`<<<
+			< (0 10) (00100 00000 1010) (011 000 011 001 000 (000 000)*4 010)
+			> (111 <D7:127) (111 <D7:100) 10 (110 <D2:3) 10
+			< 0*4 0 1*3
+		`),
 		output: dh(""),
 		errf:   "IsCorrupted",
 	}, {
-		desc:   "empty meta block (FinalNil)",
-		input:  dh("1c408705000000f2ffc7ede0"),
+		desc: "empty meta block (FinalNil)",
+		input: db(`<<<
+			< (0 10) (00011 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> (111 <D7:127) (111 <D7:99) 10 (110 <D2:3) 10
+			< 0*3 0 1*3
+		`),
 		output: dh(""),
 		final:  FinalNil,
 	}, {
-		desc:   "empty meta block (FinalMeta)",
-		input:  dh("1c408705000000d2ff1fb7e1"),
+		desc: "empty meta block (FinalMeta)",
+		input: db(`<<<
+			< (0 10) (00011 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10 (111 <D7:127) (111 <D7:99) 10 (110 <D2:3)
+			< 0*3 0 1*3
+		`),
 		output: dh(""),
 		final:  FinalMeta,
 	}, {
-		desc:   "bad empty meta block, contains the magic value mid way",
-		input:  dh("0580870500000080040004008605ff7f07ca"),
+		desc: "bad empty meta block, contains the magic value mid way",
+		input: db(`<<<
+			< (1 10) (00000 00000 1100) (011 000 011 001 000 (000 000)*5 010) 0
+			> 10 0*14 10 0*13 (110 <D2:0) 0 (110 <D2:1) 0*4 (111 <D7:127)
+			  (111 <D7:59) 0*5 10*2
+			< 0*0 0 1*2
+		`),
 		output: dh(""),
 		errf:   "IsCorrupted",
 	}, {
-		desc:   "meta block containing the string 'a'",
-		input:  dh("1400870500004882a0febfb4bdf0"),
-		output: dh("61"),
+		desc: "meta block containing the string 'a'",
+		input: db(`<<<
+			< (0 10) (00010 00000 1000) (011 000 011 001 000 (000 000)*3 010) 0
+			> 10 0 10 0*4 10 0*4 10*2 (111 <D7:127) (111 <D7:82) 10 (110 <D2:3)
+			  (110 <D2:1)
+			< 0*2 0 1*4
+		`),
+		output: []byte("a"),
 		final:  FinalMeta,
 	}, {
-		desc:   "meta block containing the string 'ab'",
-		input:  dh("1400870500004884a008f5ff9bedf0"),
-		output: dh("6162"),
+		desc: "meta block containing the string 'ab'",
+		input: db(`<<<
+			< (0 10) (00010 00000 1000) (011 000 011 001 000 (000 000)*3 010) 0
+			> 10 0*2 10 0*3 10 0*4 10*2 0*2 10 0*3 10*2 (111 <D7:127)
+			  (111 <D7:77) 10 (110 <D2:3) 10
+			< 0*2 0 1*4
+		`),
+		output: []byte("ab"),
 		final:  FinalMeta,
 	}, {
-		desc:   "meta block containing the string 'abc'",
-		input:  dh("14c0860500202904452885faffbaf6def8"),
-		output: dh("616263"),
+		desc: "meta block containing the string 'abc'",
+		input: db(`<<<
+			< (0 10) (00010 00000 0110) (011 000 011 001 000 (000 000)*2 010) 0
+			> 10 0 10*2 0*3 10 0*4 10*2 0*2 10 0*3 10*2 0 10*2 0*3 10*2
+			  (111 <D7:127) (111 <D7:58) 10 (110 <D2:3) (110 <D2:3) (110 <D2:3)
+			< 0*2 0 1*5
+		`),
+		output: []byte("abc"),
 		final:  FinalMeta,
 	}, {
-		desc:   "meta block containing the string 'Hello, world!'",
-		input:  dh("148086058024059144a1144a692894eca8541a8aa8500a5182de6f2ffc"),
-		output: dh("48656c6c6f2c20776f726c6421"),
+		desc: "meta block containing the string 'Hello, world!'",
+		input: db(`<<<
+			< (0 10) (00010 00000 0100) (011 000 011 001 000 (000 000)*1 010) 0
+			> 10 0 10 0 10*2 0*4 10 0*2 10 0 10 0 10 0*2 10*2 0*3 10*2 0 10*2
+			  0*3 10*2 0 10*2 0 10 (110 <D2:0) 0 10*2 0*3 10*2 0 10 0
+			  (110 <D2:3) 10 0*2 10*3 0 10*3 0 10 (110 <D2:0) 0 10*2 0*2 10 0*2
+			  10*3 0*3 10*2 0 10*2 0*3 10 0*2 10*2 0 10 0*4 10 (111 <D7:125)
+			  10 (110 <D2:3) (110 <D2:1)
+			< 0*2 0 1*6
+		`),
+		output: []byte("Hello, world!"),
 		final:  FinalMeta,
 	}, {
-		desc:   "meta block containing the hex-string '00'*4",
-		input:  dh("3440870500000012faffe026e0"),
+		desc: "meta block containing the hex-string '00'*4",
+		input: db(`<<<
+			< (0 10) (00110 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10 0*3 10 (111 <D7:127) (111 <D7:96) 10 (110 <D2:2)
+			< 0*6 0 1*3
+		`),
 		output: dh("00000000"),
 		final:  FinalMeta,
 	}, {
-		desc:   "meta block containing the hex-string '00'*8",
-		input:  dh("2c40870500000012f4ffbf4de0"),
+		desc: "meta block containing the hex-string '00'*8",
+		input: db(`<<<
+			< (0 10) (00101 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10 0*4 10 (111 <D7:127) (111 <D7:95) 10 (110 <D2:2)
+			< 0*5 0 1*3
+		`),
 		output: dh("0000000000000000"),
 		final:  FinalMeta,
 	}, {
-		desc:   "meta block containing the hex-string '00'*16",
-		input:  dh("2440870500000012e8ff7b9be0"),
+		desc: "meta block containing the hex-string '00'*16",
+		input: db(`<<<
+			< (0 10) (00100 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10 0*5 10 (111 <D7:127) (111 <D7:94) 10 (110 <D2:2)
+			< 0*4 0 1*3
+		`),
 		output: dh("00000000000000000000000000000000"),
 		final:  FinalMeta,
 	}, {
-		desc:   "meta block containing the hex-string 'ff'*4",
-		input:  dh("2c40870500000052f4ffc32de0"),
+		desc: "meta block containing the hex-string 'ff'*4",
+		input: db(`<<<
+			< (0 10) (00101 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10*2 0*2 10 (111 <D7:127) (111 <D7:97) 10 (110 <D2:1)
+			< 0*5 0 1*3
+		`),
 		output: dh("ffffffff"),
 		final:  FinalMeta,
 	}, {
-		desc:   "meta block containing the hex-string 'ff'*8",
-		input:  dh("2440870500000052e8ff835be0"),
+		desc: "meta block containing the hex-string 'ff'*8",
+		input: db(`<<<
+			< (0 10) (00100 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10*2 0*3 10 (111 <D7:127) (111 <D7:96) 10 (110 <D2:1)
+			< 0*4 0 1*3
+		`),
 		output: dh("ffffffffffffffff"),
 		final:  FinalMeta,
 	}, {
-		desc:   "meta block containing the hex-string 'ff'*16",
-		input:  dh("1c40870500000052d0ffffb6e0"),
+		desc: "meta block containing the hex-string 'ff'*16",
+		input: db(`<<<
+			< (0 10) (00011 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10*2 0*4 10 (111 <D7:127) (111 <D7:95) 10 (110 <D2:1)
+			< 0*3 0 1*3
+		`),
 		output: dh("ffffffffffffffffffffffffffffffff"),
 		final:  FinalMeta,
 	}, {
-		desc:   "meta block containing the random hex-string '911fe47084a4668b'",
-		input:  dh("1c808605800409d1045141852022294a09fd7f417befbd07fc"),
+		desc: "meta block containing the random hex-string '911fe47084a4668b'",
+		input: db(`<<<
+			< (0 10) (00011 00000 0100) (011 000 011 001 000 (000 000) 010) 0
+			> 10 0*4 10 0 10 0*3 10 0*2 10 (110 <D2:2) 0*5 10 0*2 10*3 0*4 10*3
+			  0*3 10 0*4 10 0*2 10 0*2 10 0 10 0 10*2 0*2 10*2 0 10*2 0 10 0*3
+			  10 (111 <D7:127) (111 <D7:2) 10 (110 <D2:3)*5 (110 <D2:0)
+			< 0*3 0 1*6
+		`),
 		output: dh("911fe47084a4668b"),
 		final:  FinalMeta,
 	}, {
-		desc:   "meta block containing the random hex-string 'de9fa94cb16f40fc'",
-		input:  dh("24808605801412641725294a2a02d156fdff447befbd0bfc"),
+		desc: "meta block containing the random hex-string 'de9fa94cb16f40fc'",
+		input: db(`<<<
+			< (0 10) (00100 00000 0100) (011 000 011 001 000 (000 000) 010) 0
+			> 10*2 0*3 10 0 10 0*4 10 0 (110 <D2:3) 10*2 0*2 10*2 0 10 0 10 0
+			  10*2 0*2 10*2 0 10 0 10*2 10 0*2 10 0*5 10 0*2 10 (110 <D2:3) 0
+			  10*3 (111 <D7:127) (111 <D7:9) 10 (110 <D2:3)*5 10*2
+			< 0*4 0 1*6
+		`),
 		output: dh("de9fa94cb16f40fc"),
 		final:  FinalMeta,
 	}, {
-		desc:   "empty meta block with a huffLen of 1",
-		input:  dh("34c087050000000020fdff7480"),
+		desc: "empty meta block with a huffLen of 1",
+		input: db(`<<<
+			< (0 10) (00110 00000 1110) (011 000 011 001 000 (000 000)*6 010) 0
+			> 10 (111 <D7:127) (111 <D7:105) 10
+			< 0*6 0 1*1
+		`),
 		output: dh(""),
 		final:  FinalMeta,
 	}, {
-		desc:   "empty meta block with a huffLen of 2",
-		input:  dh("3c80870500000080f47ffd1cc0"),
+		desc: "empty meta block with a huffLen of 2",
+		input: db(`<<<
+			< (0 10) (00111 00000 1100) (011 000 011 001 000 (000 000)*5 010) 0
+			> 10 (111 <D7:127) 10*2 (111 <D7:103) 10
+			< 0*7 0 1*2
+		`),
 		output: dh(""),
 		final:  FinalMeta,
 	}, {
-		desc:   "empty meta block with a huffLen of 3",
-		input:  dh("24408705000000d2ff55f571e0"),
+		desc: "empty meta block with a huffLen of 3",
+		input: db(`<<<
+			< (0 10) (00100 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10 (111 <D7:127) 10*6 (111 <D7:99) 10
+			< 0*4 0 1*3
+		`),
 		output: dh(""),
 		final:  FinalMeta,
 	}, {
-		desc:   "empty meta block with a huffLen of 4",
-		input:  dh("0c008705000048ff575555d5b7f1"),
+		desc: "empty meta block with a huffLen of 4",
+		input: db(`<<<
+			< (0 10) (00001 00000 1000) (011 000 011 001 000 (000 000)*3 010) 0
+			> 10 (111 <D7:127) 10*14 (111 <D7:91) 10
+			< 0*1 0 1*4
+		`),
 		output: dh(""),
 		final:  FinalMeta,
 	}, {
-		desc:   "empty meta block with a huffLen of 5",
-		input:  dh("34c086050020fd5f555555555555555f06f8"),
+		desc: "empty meta block with a huffLen of 5",
+		input: db(`<<<
+			< (0 10) (00110 00000 0110) (011 000 011 001 000 (000 000)*2 010) 0
+			> 10 (111 <D7:127) 10*30 (111 <D7:75) 10
+			< 0*6 0 1*5
+		`),
 		output: dh(""),
 		final:  FinalMeta,
 	}, {
-		desc:   "empty meta block with a huffLen of 6",
-		input:  dh("1c80860580f47f5555555555555555555555555555557d15fc"),
+		desc: "empty meta block with a huffLen of 6",
+		input: db(`<<<
+			< (0 10) (00011 00000 0100) (011 000 011 001 000 (000 000)*1 010) 0
+			> 10 (111 <D7:127) 10*62 (111 <D7:43) 10
+			< 0*3 0 1*6
+		`),
 		output: dh(""),
 		final:  FinalMeta,
 	}, {
-		desc:   "empty meta block with a huffLen of 7",
-		input:  dh("14408605d2eb5555555555555555555555555555555555555555555555555555555555555515fe"),
+		desc: "empty meta block with a huffLen of 7",
+		input: db(`<<<
+			< (0 10) (00010 00000 0010) (011 000 011 001 000 (000 000)*0 010) 0
+			> 10 (111 <D7:117) 10*127
+			< 0*2 0 1*7
+		`),
 		output: dh(""),
 		final:  FinalMeta,
 	}, {
-		desc:   "shortest meta block",
-		input:  dh("1c408705000000f2ffc7ede0"),
+		desc: "shortest meta block",
+		input: db(`<<<
+			< (0 10) (00011 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> (111 <D7:127) (111 <D7:99) 10 (110 <D2:3) 10
+			< 0*3 0 1*3
+		`),
 		output: dh(""),
 	}, {
-		desc:   "longest meta block",
-		input:  dh("04408605c218638c31c618638c31c618638c31c618638c31c618638c31c6185555555555555555555555555555555555555555555555555555555555555555fe"),
+		desc: "longest meta block",
+		input: db(`<<<
+			< (0 10) (00000 00000 0010) (011 000 011 001 000 (000 000)*0 010) 0
+			> 0*2 (110 <D2:0)*42 10*128
+			< 0*0 0 1*7
+		`),
 		output: dh(""),
 	}, {
-		desc:  "meta block truncated short",
-		input: dh("1c8086"),
-		errf:  "IsUnexpectedEOF",
+		desc: "longest decoded meta block",
+		input: db(`<<<
+			< (0 10) (00100 00000 1010) (011 000 011 001 000 (000 000)*4 010) 0
+			> 10*7 (111 <D7:113)*2 10
+			< 0*4 0 1*3
+		`),
+		output: dh("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+		final:  FinalMeta,
 	}, {
-		desc:  "meta block truncated medium-short",
-		input: dh("1c808605"),
-		errf:  "IsUnexpectedEOF",
+		desc: "meta block truncated short",
+		input: db(`<<<
+			< (0 10) (00011 00000 0100) (011 000 011 001 000 (000 000)*1 010) 0
+			> 10 0*4 10 0 10 0*3 10 0*2 10 (110 <D2:2) 0*5 10 0*2 10*3 0*4 10*3
+			  0*3 10 0*4 10 0*2 10 0*2 10 0 10 0 10*2 0*2 10*2 0 10*2 0 10 0*3
+			  10 (111 <D7:127) (111 <D7:2) 10 (110 <D2:3)*5 (110 <D2:0)
+			< 0*3 0 1*6
+		`)[:3],
+		errf: "IsUnexpectedEOF",
 	}, {
-		desc:  "meta block truncated medium-long",
-		input: dh("1c808605800409d10451418520"),
-		errf:  "IsUnexpectedEOF",
+		desc: "meta block truncated medium-short",
+		input: db(`<<<
+			< (0 10) (00011 00000 0100) (011 000 011 001 000 (000 000)*1 010) 0
+			> 10 0*4 10 0 10 0*3 10 0*2 10 (110 <D2:2) 0*5 10 0*2 10*3 0*4 10*3
+			  0*3 10 0*4 10 0*2 10 0*2 10 0 10 0 10*2 0*2 10*2 0 10*2 0 10 0*3
+			  10 (111 <D7:127) (111 <D7:2) 10 (110 <D2:3)*5 (110 <D2:0)
+			< 0*3 0 1*6
+		`)[:4],
+		errf: "IsUnexpectedEOF",
 	}, {
-		desc:  "meta block truncated long",
-		input: dh("1c808605800409d1045141852022294a09fd7f417befbd07"),
-		errf:  "IsUnexpectedEOF",
+		desc: "meta block truncated medium-long",
+		input: db(`<<<
+			< (0 10) (00011 00000 0100) (011 000 011 001 000 (000 000)*1 010) 0
+			> 10 0*4 10 0 10 0*3 10 0*2 10 (110 <D2:2) 0*5 10 0*2 10*3 0*4 10*3
+			  0*3 10 0*4 10 0*2 10 0*2 10 0 10 0 10*2 0*2 10*2 0 10*2 0 10 0*3
+			  10 (111 <D7:127) (111 <D7:2) 10 (110 <D2:3)*5 (110 <D2:0)
+			< 0*3 0 1*6
+		`)[:13],
+		errf: "IsUnexpectedEOF",
+	}, {
+		desc: "meta block truncated long",
+		input: db(`<<<
+			< (0 10) (00011 00000 0100) (011 000 011 001 000 (000 000)*1 010) 0
+			> 10 0*4 10 0 10 0*3 10 0*2 10 (110 <D2:2) 0*5 10 0*2 10*3 0*4 10*3
+			  0*3 10 0*4 10 0*2 10 0*2 10 0 10 0 10*2 0*2 10*2 0 10*2 0 10 0*3
+			  10 (111 <D7:127) (111 <D7:2) 10 (110 <D2:3)*5 (110 <D2:0)
+			< 0*3 0 1*6
+		`)[:24],
+		errf: "IsUnexpectedEOF",
 	}, {
 		desc:  "random junk",
 		input: dh("911fe47084a4668b"),
 		errf:  "IsCorrupted",
 	}, {
-		desc:  "meta block with invalid number of HCLen codes of 6",
-		input: dh("340086050000000020fdff7480"),
-		errf:  "IsCorrupted",
+		desc: "meta block with invalid number of HCLen codes of 6",
+		input: db(`<<<
+			< (0 10) (00110 00000 0000) (011 000 011 001 000 (000 000)*0 000)
+			> 0*34 10 0 10 (111 <D7:127) (111 <D7:105)
+			< 000001 0 100
+		`),
+		errf: "IsCorrupted",
 	}, {
-		desc:  "meta block with invalid HCLen code in the middle",
-		input: dh("34c087051000000020fdff7480"),
-		errf:  "IsCorrupted",
+		desc: "meta block with invalid HCLen code in the middle",
+		input: db(`<<<
+			< (0 10) (00110 00000 1110) (011 000 011 001 000 (000 010) (000 000)*5 010) 0
+			> 10 (111 <D7:127) (111 <D7:105) 10
+			< 000000 0 1
+		`),
+		errf: "IsCorrupted",
 	}, {
-		desc:  "meta block with invalid HCLen code at the end",
-		input: dh("34c087050000000060fdff7480"),
-		errf:  "IsCorrupted",
+		desc: "meta block with invalid HCLen code at the end",
+		input: db(`<<<
+			< (0 10) (00110 00000 1110) (011 000 011 001 000 (000 000)*6 110) 0
+			> 10 (111 <D7:127) (111 <D7:105) 10
+			< 000000 0 1
+		`),
+		errf: "IsCorrupted",
 	}, {
-		desc:  "meta block first symbol being a last repeater",
-		input: dh("34c0870500000000a0d1ff4f0708"),
-		errf:  "IsCorrupted",
+		desc: "meta block first symbol being a last repeater",
+		input: db(`<<<
+			< (0 10) (00100 00000 1110) (011 000 011 001 000 (000 000)*6 010)
+			> (110 <D2:0) 10 (111 <D7:127) (111 <D7:104)
+			< 0000 0 1
+		`),
+		errf: "IsCorrupted",
 	}, {
-		desc:  "meta block with too many symbols",
-		input: dh("34c087050000000020fdff7f80"),
-		errf:  "IsCorrupted",
+		desc: "meta block with too many symbols",
+		input: db(`<<<
+			< (0 10) (00110 00000 1110) (011 000 011 001 000 (000 000)*6 010) 0
+			> 10 (111 <D7:127) (111 <D7:106) 10
+			< 000000 0 1
+		`),
+		errf: "IsCorrupted",
 	}, {
 		desc:  "meta block with too few symbols",
 		input: dh("34c087050000000020fe7f3a40"),
 		errf:  "IsCorrupted",
 	}, {
-		desc:  "meta block with first symbol not a zero",
-		input: dh("34c0870500000000a0fcff7480"),
-		errf:  "IsCorrupted",
+		desc: "meta block with first symbol not a zero",
+		input: db(`<<<
+			< (0 10) (00110 00000 1110) (011 000 011 001 000 (000 000)*6 010) 0
+			> 10 (111 <D7:127) (111 <D7:104) 10
+			< 000000 0 0
+		`),
+		errf: "IsCorrupted",
 	}, {
-		desc:  "meta block with no EOB symbol",
-		input: dh("34c087050000000020fd7f740001"),
-		errf:  "IsCorrupted",
+		desc: "meta block with no EOB symbol",
+		input: db(`<<<
+			< (0 10) (00101 00000 1110) (011 000 011 001 000 (000 000)*6 010) 0
+			> 10 (111 <D7:127) (111 <D7:104) 10 0
+			< 00000 0 1
+		`),
+		errf: "IsCorrupted",
 	}, {
-		desc:  "meta block with FinalStream set, but not FinalMeta",
-		input: dh("35c087050000000020faffe80001"),
-		errf:  "IsCorrupted",
+		desc: "meta block with FinalStream set, but not FinalMeta",
+		input: db(`<<<
+			< (1 10) (00101 00000 1110) (011 000 011 001 000 (000 000)*6 010) 0
+			> 0 10 (111 <D7:127) (111 <D7:104) 10
+			< 00000 0 1
+		`),
+		errf: "IsCorrupted",
 	}, {
-		desc:  "meta block with some padding bits not zero",
-		input: dh("34c087050000000020fdff742001"),
-		errf:  "IsCorrupted",
+		desc: "meta block with some padding bits not zero",
+		input: db(`<<<
+			< (0 10) (00110 00000 1110) (011 000 011 001 000 (000 000)*6 010) 0
+			> 10 (111 <D7:127) (111 <D7:105) 10
+			< 100000 0 1
+		`),
+		errf: "IsCorrupted",
 	}, {
-		desc:  "meta block with the HDist tree not empty",
-		input: dh("34c087050000000020fdff744001"),
-		errf:  "IsCorrupted",
+		desc: "meta block with the HDist tree not empty",
+		input: db(`<<<
+			< (0 10) (00110 00000 1110) (011 000 011 001 000 (000 000)*6 010) 0
+			> 10 (111 <D7:127) (111 <D7:105) 10
+			< 000000 1 1
+		`),
+		errf: "IsCorrupted",
 	}, {
-		desc:  "meta block with extra symbols before EOB",
-		input: dh("34c087050000000020fdff740002"),
-		errf:  "IsCorrupted",
+		desc: "meta block with invalid EOB",
+		input: db(`<<<
+			< (0 10) (00110 00000 1110) (011 000 011 001 000 (000 000)*6 010) 0
+			> 10 (111 <D7:127) (111 <D7:105) 10
+			< 000000 0 0
+		`),
+		errf: "IsCorrupted",
 	}, {
-		desc:  "meta block with wrong number of padding bits",
-		input: dh("2cc087050000000020fdff7440"),
-		errf:  "IsCorrupted",
+		desc: "meta block with wrong number of padding bits",
+		input: db(`<<<
+			< (0 10) (00101 00000 1110) (011 000 011 001 000 (000 000)*6 010) 0
+			> 10 (111 <D7:127) (111 <D7:105) 10
+			< 00000 0 1
+		`),
+		errf: "IsCorrupted",
 	}}
 
 	for i, v := range vectors {
@@ -283,19 +477,95 @@ func TestReaderReset(t *testing.T) {
 	}
 
 	// Test Reader on multiple back-to-back streams.
-	data := testutil.MustDecodeHex("" +
-		"3c408605b22a928c944499112a4925520aa5a4cc108aa834944a45a5cc509486" +
-		"321a66484a524929ab92284499d150667bef00fe2c4086059290524914519919" +
-		"a98c94449919a564146988869911a5a15414959e6aefbdf7de7bef02fe3c4086" +
-		"05b22a8a34145149949432235256a5a82495943233a234144a6928a232a3a844" +
-		"0aa9ccc8282925514885929dd9debb00fe3d408605125a280d45a51495442914" +
-		"52491452492aa23223a31025525625528a4aa1448a4aa9283312855222855454" +
-		"faa0bd01fe2c408605422a421aca0c95d250486546a13494949252928a4a8994" +
-		"42c928a492283384120d338aca48c928a212292aa5a2ecf602fe34408605422a" +
-		"2b524aa2a49486222ad1502a3b2245a514155249948c42144a76149591925144" +
-		"255166a4944449290d4554667b02fe34408605a2226534552a52465351911189" +
-		"4844120a91125191069590128508452175527befbdf7de01fe",
-	)
+	data := testutil.MustDecodeBitGen(`<<<
+		# FinalNil, "The quick brown fox jumped o"
+		< (0 10) (00111 00000 0010) (011 000 011 001 000 010) 0
+		> (110 <D2:1) 10*3 0*2 10 0 10 0 10 0 (110 <D2:0) 10 0 10*2 0 10 0 10
+		  0*2 10*2 0 (110 <D2:2) 10 0*2 10 0*3 10*3 0 10 0 10 0 10*3 0 10 0*2
+		  10 0 10*2 0 10*2 0*3 10*2 0 10*2 0 10 0 10*2 0 (110 <D2:2) 10 0*3 10
+		  0*3 10*2 0*2 10 0*2 10*3 0 10 (110 <D2:0) 0 10*2 0 10*3 0 10*3 0*2
+		  10*3 0 10*2 0 (110 <D2:2) 10 0*3 10*2 0*2 10*2 0 10 (110 <D2:0) 0 10*2
+		  0 (110 <D2:0) 10 (110 <D2:0) 0 (110 <D2:2) 10 0*3 10 0 10 0 10*2 0 10
+		  0 10 0 10*3 0 10 0 10*2 0 10*2 0 (110 <D2:1) 10*3 0 10 0 10 0*2 10*2
+		  0*3 10 0*2 10*2 0 (110 <D2:2) 10 0*2 10 (110 <D2:0) 0 10*2 0
+		  (110 <D2:2) 10 (110 <D2:3) (110 <D2:3) (110 <D2:3) 10
+		< 0*7 0 1*7
+
+		# FinalMeta, "ver the lazy dog."
+		< (0 10) (00101 00000 0010) (011 000 011 001 000 010) 0
+		> 10 0 10 0*3 10 0 10*2 0 10*3 0 10 0 10 0*2 10*2 0*2 10 0*2 10*3 0
+		  (110 <D2:2) 10 0 (110 <D2:0) 10 0 10*3 0 (110 <D2:0) 10 0 10*2 0 10 0
+		  10 0*2 10*2 0 (110 <D2:2) 10 0 (110 <D2:0) 10*2 0 10*2 0 10 0
+		  (110 <D2:0) 10*2 0*2 10 0 10 (110 <D2:0) 0 10 0*2 10 (110 <D2:0) 0
+		  (110 <D2:2) 10 0 (110 <D2:0) 10 0*2 10*2 0 10 (110 <D2:0) 0 10*2 0
+		  10*3 0*2 10*2 0*2 10*3 0 10 (111 <D7:41) 10 (110 <D2:3) (110 <D2:3)
+		  (110 <D2:3) (110 <D2:3) (110 <D2:3) (110 <D2:3) (110 <D2:3)
+		  (110 <D2:3) (110 <D2:3) (110 <D2:3) 10*2
+		< 0*5 0 1*7
+
+		# FinalNil, "Lorem ipsum dolor sit amet, "
+		< (0 10) (00111 00000 0010) (011 000 011 001 000 010) 0
+		> (110 <D2:1) 10*3 0*2 10*2 0*2 10 0 10 (110 <D2:0) 0 10*2 0*2 10 0*2
+		  10*3 0 10 0 10 0*2 10*2 0 10 0 10*2 0 10*2 0 (110 <D2:2) 10 0*2 10 0*2
+		  10 0 10*2 0 (110 <D2:1) 10*3 0 10*2 0*2 10*3 0 10 0 10 0 10*3 0 10 0
+		  10*2 0 10*2 0 (110 <D2:2) 10 0 (110 <D2:0) 10 0*2 10*2 0 10
+		  (110 <D2:0) 0 10*2 0*3 10*2 0 10*2 0 10 (110 <D2:0) 0 10*2 0*2 10 0*2
+		  10*3 0 (110 <D2:2) 10 0*2 10*2 0*2 10*3 0 10 0*2 10 0 10*2 0*3 10 0
+		  10*3 0 (110 <D2:2) 10 0*2 10 0 (110 <D2:0) 10*2 0 10 0 10*2 0 10*2 0
+		  10 0 10 0*2 10*2 0*3 10 0 10*3 0*3 10*2 0 10 0 (110 <D2:3) 10 0
+		  (110 <D2:2) 10 (110 <D2:3) (110 <D2:3) (110 <D2:3) 10*2
+		< 0*7 0 1*7
+
+		# FinalStream, "consectetur adipiscing elit."
+		< (1 10) (00111 00000 0010) (011 000 011 001 000 010) 0
+		> 10 0*3 10 (110 <D2:1) 0*3 10*2 0 10 (110 <D2:0) 0 10*2 0*2 10*3 0 10*2
+		  0 10*2 0*2 10*3 0 10 0 10 0*2 10*2 0 10*2 0*3 10*2 0*3 10 0 10*3 0 10
+		  0 10 0*2 10*2 0*3 10 0 10*3 0 10 0 10 0 10*3 0*2 10 0*2 10*3 0
+		  (110 <D2:2) 10 0*2 10 0 (110 <D2:0) 10*2 0*3 10 0*2 10*2 0 10 0*2 10 0
+		  10*2 0 (110 <D2:1) 10*3 0 10 0*2 10 0 10*2 0 10*2 0*2 10*3 0 10*2 0*3
+		  10*2 0 10 0*2 10 0 10*2 0*2 10*3 0 10*2 0 10*3 0*2 10*2 0 (110 <D2:2)
+		  10 0*2 10 0 10 0*2 10*2 0*3 10*2 0 10*2 0 10 0*2 10 0 10*2 0*3 10 0
+		  10*3 0*2 10*3 0 10 (111 <D7:3) 10 (110 <D2:3) (110 <D2:3)
+		< 0*7 0 1*7
+
+		# FinalNil, "Do not communicate by sharing"
+		< (0 10) (00101 00000 0010) (011 000 011 001 000 010) 0
+		> 0*2 10 0 10*3 0*2 10 0*3 10 0 10 (110 <D2:0) 0 10*2 0 (110 <D2:2) 10
+		  0*3 10*3 0 10*2 0 10 (110 <D2:0) 0 10*2 0*3 10 0 10*3 0 (110 <D2:2)
+		  10 0*2 10*2 0*3 10*2 0 10 (110 <D2:0) 0 10*2 0 10 0 10*2 0 10*2 0 10 0
+		  10*2 0 10*2 0 10 0 10 0 10*3 0*2 10*3 0 10*2 0 10 0*2 10 0 10*2 0 10*2
+		  0*3 10*2 0 10 0 (110 <D2:0) 10*2 0*3 10 0 10*3 0 10 0 10 0*2 10*2 0
+		  (110 <D2:2) 10 0*3 10 0*3 10*2 0 10 0*2 10 (110 <D2:0) 0 (110 <D2:2)
+		  10 0*2 10*2 0*2 10*3 0 (110 <D2:0) 10 0 10*2 0 10 0 (110 <D2:0) 10*2
+		  0*2 10 0*2 10*3 0 10 0*2 10 0 10*2 0*2 10*3 0 10*2 0 10*3 0*2 10*2 0
+		  (110 <D2:3) 10 (110 <D2:3) (110 <D2:1)
+		< 0*5 0 1*7
+
+		# FinalNil, " memory; instead, share memor"
+		< (0 10) (00110 00000 0010) (011 000 011 001 000 010) 0
+		> 0*2 10 0 10*3 0 (110 <D2:1) 10 0*2 10 0 10*2 0 10*2 0 10 0 10 0*2 10*2
+		  0 10 0 10*2 0 10*2 0 10 (110 <D2:0) 0 10*2 0*2 10 0*2 10*3 0 10 0*2 10
+		  (110 <D2:0) 0 10*2 0 10*3 0 (110 <D2:3) 10 0*2 10 0*2 10 0 10*2 0*2
+		  10*3 0 10*2 0 10*2 0*2 10*3 0*3 10 0 10*3 0 10 0 10 0*2 10*2 0 10 0
+		  (110 <D2:0) 10*2 0*3 10 0*2 10*2 0*3 10*2 0 10 0 (110 <D2:3) 10 0*2
+		  10*2 0*2 10*3 0 (110 <D2:0) 10 0 10*2 0 10 0 (110 <D2:0) 10*2 0*2 10
+		  0*2 10*3 0 10 0 10 0*2 10*2 0 (110 <D2:2) 10 0*2 10 0 10*2 0 10*2 0 10
+		  0 10 0*2 10*2 0 10 0 10*2 0 10*2 0 10 (110 <D2:0) 0 10*2 0*2 10 0*2
+		  10*3 0 (110 <D2:2) 10 (110 <D2:3) (110 <D2:2)
+		< 0*6 0 1*7
+
+		# FinalNil, "y by communicating."
+		< (0 10) (00110 00000 0010) (011 000 011 001 000 010) 0
+		> 0 10*3 0*2 10 0 10*2 0 (110 <D2:0) 10 (110 <D2:2) 0 10*3 0 10*3 0*2 10
+		  0 10*2 0 (110 <D2:0) 10 (110 <D2:2) 0 10*2 0*2 10*3 0*2 10 0
+		  (110 <D2:0) 10 0*2 10 0 10 0*2 10 0*2 10 0 10 0*2 10 0*2 10 0 10 0 10
+		  0*3 10*2 0*3 10 0*2 10 0 10*2 0 10 0*2 10 0*2 10*3 0*2 10 0 10
+		  (110 <D2:0) 0*2 10*3 0 10 0*3 10 0 10*2 0 10 0*2 10*2 0*3 10 0*2 10
+		  0*3 10*2 0*2 10*2 0*3 10 0 10*2 (111 <D7:36) 10 (110 <D2:3)
+		  (110 <D2:3) (110 <D2:3) (110 <D2:3) (110 <D2:3) (110 <D2:3)
+		  (110 <D2:3) (110 <D2:3) 10
+		< 0*6 0 1*7
+	`)
 	vectors := []struct {
 		data                   string
 		inOff, outOff, numBlks int64
