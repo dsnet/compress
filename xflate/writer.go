@@ -61,7 +61,7 @@ type WriterConfig struct {
 	// represent the index. A negative value indicates that the Writer will
 	// not automatically flush the index.
 	//
-	// The multiplication of the IndexSize and the size of each record (16 B)
+	// The multiplication of the IndexSize and the size of each record (24 B)
 	// gives an approximation for how much memory the index will occupy.
 	// The multiplication of the IndexSize and the ChunkSize gives an
 	// approximation for how much uncompressed data each index represents.

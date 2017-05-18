@@ -73,7 +73,7 @@ const (
 	// should contain. This value was chosen so that the maximum amount of
 	// memory used for the index is comparable to the memory requirements for
 	// DEFLATE compression itself.
-	DefaultIndexSize = 1 << 12 // 64 KiB
+	DefaultIndexSize = 1 << 12 // 96 KiB
 )
 
 // The FlushMode constants can be passed to Writer.Flush to control the
