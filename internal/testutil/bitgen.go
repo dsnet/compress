@@ -19,14 +19,15 @@ import (
 //
 // The BitGen format allows bit-streams to be generated from a series of tokens
 // describing bits in the resulting string. The format is designed for testing
-// purposes by aiding a human in the manual scripting of compression stream
+// purposes by aiding a human in the manual scripting of a compression stream
 // from individual bit-strings. It is designed to be relatively succinct, but
 // allow the user to have control over the bit-order and also to allow the
 // presence of comments to encode authorial intent.
 //
-// The format consists of a series of tokens separated by unescaped white space
-// of any kind. The '#' character is used for commenting. Thus, any bytes on a
-// given line that appear after the '#' character is ignored.
+// The format consists of a series of tokens delimited by either whitespace,
+// a group marker, or a comment. As a special case, delimiters within a quoted
+// string do not seperate tokens. The '#' character is used for commenting
+// such that any remaining bytes on the given line is ignored.
 //
 // The first valid token must either be a "<<<" (little-endian) or a ">>>"
 // (big-endian). This determines whether the preceding bits in the stream are
@@ -58,24 +59,26 @@ import (
 // A token that is of the pattern "X:[0-9a-fA-F]+" represents literal bytes in
 // hexadecimal format that should be written to the resulting bit-stream.
 // This token is affected by neither the bit-packing nor the bit-parsing modes.
-// However, it may only be used when the bit-stream is already byte-aligned.
+// However, it may only be used when the bit-stream is currently byte-aligned.
 //
 // A token that begins and ends with a '"' represents literal bytes in human
 // readable form. This double-quoted string is parsed in the same way that the
-// Go language parses strings and is the only token that may have spaces in it.
-// This token is affected by neither the bit-packing nor the bit-parsing modes.
-// However, it may only be used when the bit-stream is already byte-aligned.
+// Go language parses strings. Any delimiter tokens within the context of a
+// quoted string have no effect. This token is affected by neither the
+// bit-packing nor the bit-parsing modes. However, it may only be used when the
+// bit-stream is already byte-aligned.
 //
 // A token decorator of "<" (little-endian) or ">" (big-endian) may begin
 // any binary token or decimal token. This will affect the bit-parsing mode
-// for that token only. It will not set the overall global mode. That still
-// needs to be done by standalone "<" and ">" tokens. This decorator may not
+// for that token only. It will not set the overall global mode (that still
+// needs to be done by standalone "<" and ">" tokens). This decorator may not
 // applied to the literal bytes token.
 //
-// A token decorator of the pattern "[*][0-9]+" may trail any token. This is
-// a quantifier decorator which indicates that the current token is to be
-// repeated some number of times. It is used to quickly replicate data and
-// allows the format to quickly generate large quantities of data.
+// A token decorator of the pattern "[*][0-9]+" may trail any token except
+// for standalone "<" or ">" tokens. This is a quantifier decorator which
+// indicates that the current token is to be repeated some number of times.
+// It is used to quickly replicate data and allows the format to quickly
+// generate large quantities of data.
 //
 // A sequence of tokens may be grouped together by enclosing them in a
 // pair of "(" and ")" characters. Any standalone "<" or ">" tokens only take
