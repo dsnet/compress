@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE.md file.
 
-// +build debug gofuzz
+// +build debug,!gofuzz
 
 package internal
 
-const Debug = true
+const (
+	Debug  = true
+	GoFuzz = false
+)

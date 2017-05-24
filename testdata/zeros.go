@@ -16,7 +16,7 @@ const (
 )
 
 func main() {
-	var b = make([]byte, size)
+	b := make([]byte, size)
 	if err := ioutil.WriteFile(name, b[:size], 0664); err != nil {
 		panic(err)
 	}

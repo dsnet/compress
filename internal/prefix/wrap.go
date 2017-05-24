@@ -7,8 +7,6 @@ package prefix
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
-	"os"
 	"strings"
 )
 
@@ -21,14 +19,16 @@ type buffer struct {
 
 type bytesReader struct {
 	*bytes.Reader
-	limRd   io.LimitedReader
-	scratch [512]byte
+	pos int64
+	buf []byte
+	arr [512]byte
 }
 
 type stringReader struct {
 	*strings.Reader
-	limRd   io.LimitedReader
-	scratch [512]byte
+	pos int64
+	buf []byte
+	arr [512]byte
 }
 
 func (r *buffer) Buffered() int {
@@ -37,66 +37,110 @@ func (r *buffer) Buffered() int {
 
 func (r *buffer) Peek(n int) ([]byte, error) {
 	b := r.Bytes()
-	if len(b) >= n {
-		return b[:n], nil
+	if len(b) < n {
+		return b, io.EOF
 	}
-	return b, io.EOF
+	return b[:n], nil
 }
 
 func (r *buffer) Discard(n int) (int, error) {
 	b := r.Next(n)
-	if len(b) == n {
-		return n, nil
+	if len(b) < n {
+		return len(b), io.EOF
 	}
-	return len(b), io.EOF
+	return n, nil
 }
 
 func (r *bytesReader) Buffered() int {
-	if r.Len() > len(r.scratch) {
-		return len(r.scratch)
+	r.update()
+	if r.Len() > len(r.buf) {
+		return len(r.buf)
 	}
 	return r.Len()
 }
 
 func (r *bytesReader) Peek(n int) ([]byte, error) {
-	if n > len(r.scratch) {
+	if n > len(r.arr) {
 		return nil, io.ErrShortBuffer
 	}
-	pos, _ := r.Seek(0, os.SEEK_CUR) // Get current position, never fails
-	cnt, err := r.ReadAt(r.scratch[:n], pos)
-	return r.scratch[:cnt], err
+
+	// Return sub-slice of local buffer if possible.
+	r.update()
+	if len(r.buf) >= n {
+		return r.buf[:n], nil
+	}
+
+	// Fill entire local buffer, and return appropriate sub-slice.
+	cnt, err := r.ReadAt(r.arr[:], r.pos)
+	r.buf = r.arr[:cnt]
+	if cnt < n {
+		return r.arr[:cnt], err
+	}
+	return r.arr[:n], nil
 }
 
 func (r *bytesReader) Discard(n int) (int, error) {
-	r.limRd = io.LimitedReader{R: r, N: int64(n)}
-	n64, err := io.CopyBuffer(ioutil.Discard, &r.limRd, r.scratch[:])
-	if err == nil && n64 < int64(n) {
-		err = io.EOF
+	var err error
+	if n > r.Len() {
+		n, err = r.Len(), io.EOF
 	}
-	return int(n64), err
+	r.Seek(int64(n), io.SeekCurrent)
+	return n, err
+}
+
+// update reslices the internal buffer to be consistent with the read offset.
+func (r *bytesReader) update() {
+	pos, _ := r.Seek(0, io.SeekCurrent)
+	if off := pos - r.pos; off >= 0 && off < int64(len(r.buf)) {
+		r.buf, r.pos = r.buf[off:], pos
+	} else {
+		r.buf, r.pos = nil, pos
+	}
 }
 
 func (r *stringReader) Buffered() int {
-	if r.Len() > len(r.scratch) {
-		return len(r.scratch)
+	r.update()
+	if r.Len() > len(r.buf) {
+		return len(r.buf)
 	}
 	return r.Len()
 }
 
 func (r *stringReader) Peek(n int) ([]byte, error) {
-	if n > len(r.scratch) {
+	if n > len(r.arr) {
 		return nil, io.ErrShortBuffer
 	}
-	pos, _ := r.Seek(0, os.SEEK_CUR) // Get current position, never fails
-	cnt, err := r.ReadAt(r.scratch[:n], pos)
-	return r.scratch[:cnt], err
+
+	// Return sub-slice of local buffer if possible.
+	r.update()
+	if len(r.buf) >= n {
+		return r.buf[:n], nil
+	}
+
+	// Fill entire local buffer, and return appropriate sub-slice.
+	cnt, err := r.ReadAt(r.arr[:], r.pos)
+	r.buf = r.arr[:cnt]
+	if cnt < n {
+		return r.arr[:cnt], err
+	}
+	return r.arr[:n], nil
 }
 
 func (r *stringReader) Discard(n int) (int, error) {
-	r.limRd = io.LimitedReader{R: r, N: int64(n)}
-	n64, err := io.CopyBuffer(ioutil.Discard, &r.limRd, r.scratch[:])
-	if err == nil && n64 < int64(n) {
-		err = io.EOF
+	var err error
+	if n > r.Len() {
+		n, err = r.Len(), io.EOF
 	}
-	return int(n64), err
+	r.Seek(int64(n), io.SeekCurrent)
+	return n, err
+}
+
+// update reslices the internal buffer to be consistent with the read offset.
+func (r *stringReader) update() {
+	pos, _ := r.Seek(0, io.SeekCurrent)
+	if off := pos - r.pos; off >= 0 && off < int64(len(r.buf)) {
+		r.buf, r.pos = r.buf[off:], pos
+	} else {
+		r.buf, r.pos = nil, pos
+	}
 }

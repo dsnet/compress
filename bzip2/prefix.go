@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/dsnet/compress/internal"
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/internal/prefix"
 )
 
@@ -20,21 +21,29 @@ const (
 	numBlockSyms  = 50      // Number of bytes in a block
 )
 
-var (
-	encSel prefix.Encoder
-	decSel prefix.Decoder
-)
-
-func init() {
+// encSel and decSel are used to handle the prefix encoding for tree selectors.
+// The prefix encoding is as follows:
+//
+//	Code         TreeIdx
+//	0        <=> 0
+//	10       <=> 1
+//	110      <=> 2
+//	1110     <=> 3
+//	11110    <=> 4
+//	111110   <=> 5
+//	111111   <=> 6	Invalid tree index, so should fail
+//
+var encSel, decSel = func() (e prefix.Encoder, d prefix.Decoder) {
 	var selCodes [maxNumTrees + 1]prefix.PrefixCode
 	for i := range selCodes {
 		selCodes[i] = prefix.PrefixCode{Sym: uint32(i), Len: uint32(i + 1)}
 	}
 	selCodes[maxNumTrees] = prefix.PrefixCode{Sym: maxNumTrees, Len: maxNumTrees}
 	prefix.GeneratePrefixes(selCodes[:])
-	decSel.Init(selCodes[:])
-	encSel.Init(selCodes[:])
-}
+	e.Init(selCodes[:])
+	d.Init(selCodes[:])
+	return
+}()
 
 type prefixReader struct{ prefix.Reader }
 
@@ -57,10 +66,10 @@ func (pr *prefixReader) ReadPrefixCodes(codes []prefix.PrefixCodes, trees []pref
 	for i, pc := range codes {
 		clen := int(pr.ReadBitsBE64(5))
 		sum := 1 << maxPrefixBits
-		for sym := 0; sym < len(pc); sym++ {
+		for sym := range pc {
 			for {
 				if clen < 1 || clen > maxPrefixBits {
-					panic(ErrCorrupt)
+					panicf(errors.Corrupted, "invalid prefix bit-length: %d", clen)
 				}
 
 				b, ok := pr.TryReadBits(1)
@@ -84,11 +93,11 @@ func (pr *prefixReader) ReadPrefixCodes(codes []prefix.PrefixCodes, trees []pref
 		if sum == 0 {
 			// Fast path, but only handles complete trees.
 			if err := prefix.GeneratePrefixes(pc); err != nil {
-				panic(err)
+				errors.Panic(err) // Using complete trees; should never fail
 			}
 		} else {
 			// Slow path, but handles anything.
-			pc = handleDegenerateCodes(pc)
+			pc = handleDegenerateCodes(pc) // Never fails, but may fail later
 			codes[i] = pc
 		}
 		trees[i].Init(pc)
@@ -118,7 +127,7 @@ func (pw *prefixWriter) WriteBitsBE64(v uint64, nb uint) {
 func (pw *prefixWriter) WritePrefixCodes(codes []prefix.PrefixCodes, trees []prefix.Encoder) {
 	for i, pc := range codes {
 		if err := prefix.GeneratePrefixes(pc); err != nil {
-			panic(err)
+			errors.Panic(err) // Using complete trees; should never fail
 		}
 		trees[i].Init(pc)
 
@@ -226,8 +235,9 @@ func handleDegenerateCodes(codes prefix.PrefixCodes) prefix.PrefixCodes {
 		limits [maxPrefixBits + 2]int32
 		bases  [maxPrefixBits + 2]int32
 		perms  [maxNumSyms]int32
-		minLen uint32 = maxPrefixBits
-		maxLen uint32 = 0
+
+		minLen = uint32(maxPrefixBits)
+		maxLen = uint32(0)
 	)
 
 	const (
@@ -238,7 +248,7 @@ func handleDegenerateCodes(codes prefix.PrefixCodes) prefix.PrefixCodes {
 	)
 
 	// createTables is the BZ2_hbCreateDecodeTables function from the C code.
-	var createTables = func(codes []prefix.PrefixCode) {
+	createTables := func(codes []prefix.PrefixCode) {
 		for _, c := range codes {
 			if c.Len > maxLen {
 				maxLen = c.Len
@@ -276,7 +286,7 @@ func handleDegenerateCodes(codes prefix.PrefixCodes) prefix.PrefixCodes {
 	}
 
 	// getSymbol is the GET_MTF_VAL macro from the C code.
-	var getSymbol = func(c prefix.PrefixCode) (uint32, int) {
+	getSymbol := func(c prefix.PrefixCode) (uint32, int) {
 		v := internal.ReverseUint32(c.Val)
 		n := c.Len
 
@@ -313,7 +323,7 @@ func handleDegenerateCodes(codes prefix.PrefixCodes) prefix.PrefixCodes {
 	// If tree is under-subscribed, the worst-case runtime is O(1<<maxLen).
 	// If tree is over-subscribed, the worst-case runtime is O(maxNumSyms).
 	var pcodesArr [2 * maxNumSyms]prefix.PrefixCode
-	var pcodes = pcodesArr[:maxNumSyms]
+	pcodes := pcodesArr[:maxNumSyms]
 	var exploreCode func(prefix.PrefixCode) bool
 	exploreCode = func(c prefix.PrefixCode) (term bool) {
 		sym, status := getSymbol(c)

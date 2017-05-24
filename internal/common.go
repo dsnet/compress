@@ -8,35 +8,27 @@
 // require that the caller to ensure that strict invariants are kept.
 package internal
 
-// Error is the wrapper type for errors specific to this library.
-type Error struct{ ErrorString string }
-
-func (e Error) Error() string { return "compress: " + e.ErrorString }
-
-var (
-	ErrInvalid error = Error{"invalid operation"}
-)
-
 var (
 	// IdentityLUT returns the input key itself.
-	IdentityLUT [256]byte
+	IdentityLUT = func() (lut [256]byte) {
+		for i := range lut {
+			lut[i] = uint8(i)
+		}
+		return lut
+	}()
 
 	// ReverseLUT returns the input key with its bits reversed.
-	ReverseLUT [256]byte
+	ReverseLUT = func() (lut [256]byte) {
+		for i := range lut {
+			b := uint8(i)
+			b = (b&0xaa)>>1 | (b&0x55)<<1
+			b = (b&0xcc)>>2 | (b&0x33)<<2
+			b = (b&0xf0)>>4 | (b&0x0f)<<4
+			lut[i] = b
+		}
+		return lut
+	}()
 )
-
-func init() {
-	for i := range IdentityLUT {
-		IdentityLUT[i] = uint8(i)
-	}
-	for i := range ReverseLUT {
-		b := uint8(i)
-		b = (b&0xaa)>>1 | (b&0x55)<<1
-		b = (b&0xcc)>>2 | (b&0x33)<<2
-		b = (b&0xf0)>>4 | (b&0x0f)<<4
-		ReverseLUT[i] = b
-	}
-}
 
 // ReverseUint32 reverses all bits of v.
 func ReverseUint32(v uint32) (x uint32) {
@@ -49,7 +41,7 @@ func ReverseUint32(v uint32) (x uint32) {
 
 // ReverseUint32N reverses the lower n bits of v.
 func ReverseUint32N(v uint32, n uint) (x uint32) {
-	return uint32(ReverseUint32(uint32(v << (32 - n))))
+	return ReverseUint32(v << (32 - n))
 }
 
 // ReverseUint64 reverses all bits of v.
@@ -67,7 +59,7 @@ func ReverseUint64(v uint64) (x uint64) {
 
 // ReverseUint64N reverses the lower n bits of v.
 func ReverseUint64N(v uint64, n uint) (x uint64) {
-	return uint64(ReverseUint64(uint64(v << (64 - n))))
+	return ReverseUint64(v << (64 - n))
 }
 
 // MoveToFront is a data structure that allows for more efficient move-to-front

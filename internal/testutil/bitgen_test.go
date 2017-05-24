@@ -4,13 +4,10 @@
 
 package testutil
 
-import (
-	"bytes"
-	"testing"
-)
+import "testing"
 
 func TestDecodeBitGen(t *testing.T) {
-	var vectors = []struct {
+	vectors := []struct {
 		input  string
 		output []byte
 		valid  bool
@@ -23,6 +20,12 @@ func TestDecodeBitGen(t *testing.T) {
 	}, {
 		input: `<<<`,
 		valid: true,
+	}, {
+		input: `<<< <`,
+		valid: true,
+	}, {
+		input: `<<< <*5`,
+		valid: false,
 	}, {
 		input:  `<<< < 1011001110001`,
 		output: []byte{0x71, 0x16}, // 0b01110001 0b00010110
@@ -39,6 +42,9 @@ func TestDecodeBitGen(t *testing.T) {
 		input:  `>>> > 1011001110001`,
 		output: []byte{0xb3, 0x88}, // 0b10110011 0b10001000
 		valid:  true,
+	}, {
+		input: `>>> > 1011001110001 <<<`,
+		valid: false,
 	}, {
 		input: `<<< < 0111 X:`,
 		valid: false,
@@ -152,11 +158,31 @@ func TestDecodeBitGen(t *testing.T) {
 			  01101 D11:1337
 			< 01101 D11:1337
 			X:abcdef01
-			>X:abcdef01
+			> X:abcdef01
+			< X:abcdef01
 		`,
 		output: []byte{
 			0xb6, 0x9c, 0x2d, 0xa7, // 0b10110110 0b10011100 0b00101101 0b10100111
 			0xb6, 0x9c, 0x2d, 0xa7, // 0b10110110 0b10011100 0b00101101 0b10100111
+			0xab, 0xcd, 0xef, 0x01,
+			0xab, 0xcd, 0xef, 0x01,
+			0xab, 0xcd, 0xef, 0x01,
+		},
+		valid: true,
+	}, {
+		input: `>>>
+			< >01101 >D11:1337
+			> <01101 <D11:1337
+			  01101 D11:1337
+			< 01101 D11:1337
+			X:abcdef01
+			> X:abcdef01
+			< X:abcdef01
+		`,
+		output: []byte{
+			0x6d, 0x39, 0xb4, 0xe5, // 0b01101101 0b00111001 0b10110100 0b11100101
+			0x6d, 0x39, 0xb4, 0xe5, // 0b01101101 0b00111001 0b10110100 0b11100101
+			0xab, 0xcd, 0xef, 0x01,
 			0xab, 0xcd, 0xef, 0x01,
 			0xab, 0xcd, 0xef, 0x01,
 		},
@@ -175,6 +201,39 @@ func TestDecodeBitGen(t *testing.T) {
 	}, {
 		input: `<<< < D12:1337*9999999999999999999999999999999999999999999999`,
 		valid: false,
+	}, {
+		input: "<<< <X:abcd",
+		valid: false,
+	}, {
+		input:  `<<< X:abcd < "The " "quick "*5 "brown \"fox\"\n\n \\njumped" > "" # HA`,
+		output: []byte("\xab\xcdThe quick quick quick quick quick brown \"fox\"\n\n \\njumped"),
+		valid:  true,
+	}, {
+		input:  `<<< ((("a")*2 "b")*2 "c")*2`,
+		output: []byte("aabaabcaabaabc"),
+		valid:  true,
+	}, {
+		input: `<<< (((("a")*2 "b")*2 "c")*2)*0 # Nothing`,
+		valid: true,
+	}, {
+		input: `<<< (((()))`,
+		valid: false,
+	}, {
+		input:  `<<< ((<()*5 ("hello")*2 ((<(<)) >)*123) "goodbye" ())*3`,
+		output: []byte("hellohellogoodbyehellohellogoodbyehellohellogoodbye"),
+		valid:  true,
+	}, {
+		input:  `>>> (("hello" <1110101 >D9:381)*2)`,
+		output: []byte("hello\xaf}hello\xaf}"),
+		valid:  true,
+	}, {
+		input:  `<<< > (1011 <(1011 1011 (< 1011 1011) 1011 (<1011) >(1011) (1011)) 1011)`,
+		output: []byte{0xbd, 0xbb, 0xbb, 0xdb, 0xdb},
+		valid:  true,
+	}, {
+		input:  `<<< >1011 <1011 <1011 <1011 <1011 <1011 <1011 >1011 <1011 >1011`,
+		output: []byte{0xbd, 0xbb, 0xbb, 0xdb, 0xdb},
+		valid:  true,
 	}}
 
 	for i, v := range vectors {
@@ -187,8 +246,8 @@ func TestDecodeBitGen(t *testing.T) {
 			}
 			continue
 		}
-		if !bytes.Equal(output, v.output) {
-			t.Errorf("test %d, mismatching output:\ngot  %x\nwant %x", i, output, v.output)
+		if got, want, ok := BytesCompare(output, v.output); !ok {
+			t.Errorf("test %d, mismatching output:\ngot  %s\nwant %s", i, got, want)
 		}
 	}
 }

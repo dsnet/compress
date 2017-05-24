@@ -9,8 +9,10 @@
 // the source data is mostly random, prefix encoding does not benefit as much.
 package main
 
-import "io/ioutil"
-import "math/rand"
+import (
+	"io/ioutil"
+	"math/rand"
+)
 
 const (
 	name = "repeats.bin"
@@ -19,7 +21,7 @@ const (
 
 func main() {
 	var b []byte
-	var r = rand.New(rand.NewSource(0))
+	r := rand.New(rand.NewSource(0))
 
 	randLen := func() (l int) {
 		p := r.Float32()

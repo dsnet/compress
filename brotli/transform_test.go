@@ -7,7 +7,7 @@ package brotli
 import "testing"
 
 func TestTransform(t *testing.T) {
-	var vectors = []struct {
+	vectors := []struct {
 		id     int
 		input  string
 		output string

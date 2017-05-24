@@ -1,6 +1,6 @@
 # Brotli Framing Format
 
-This is a proposal for a framing format for the [Brotli (RFC XXXX)](https://datatracker.ietf.org/doc/draft-alakuijala-brotli/) compressed data format. Unless otherwise stated, all numeric fields use the variable-length integer encoding from the [XZ format, section 1.2.](http://tukaani.org/xz/xz-file-format.txt) The specification below describes the format below in a [BNF](https://en.wikipedia.org/wiki/Backus%E2%80%93Naur_Form)-styled grammar, where the `*` operator indicates zero or more, while the `?` operator means zero or one. The highest level representation for the format is the `BrotliFrame`.
+This is a proposal for a framing format for the [Brotli (RFC 7932)](https://datatracker.ietf.org/doc/draft-alakuijala-brotli/) compressed data format. Unless otherwise stated, all numeric fields use the variable-length integer encoding from the [XZ format, section 1.2.](http://tukaani.org/xz/xz-file-format.txt) The specification below describes the format below in a [BNF](https://en.wikipedia.org/wiki/Backus%E2%80%93Naur_Form)-styled grammar, where the `*` operator indicates zero or more, while the `?` operator means zero or one. The highest level representation for the format is the `BrotliFrame`.
 
 | Symbol                    |      | Expression |
 | ------------------------- | ---- | ---------- |

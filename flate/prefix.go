@@ -7,6 +7,7 @@ package flate
 import (
 	"io"
 
+	"github.com/dsnet/compress/internal/errors"
 	"github.com/dsnet/compress/internal/prefix"
 )
 
@@ -18,34 +19,20 @@ const (
 	maxNumDistSyms = 30
 )
 
-var (
-	// RFC section 3.2.5.
-	lenRanges  prefix.RangeCodes
-	distRanges prefix.RangeCodes
-
-	// RFC section 3.2.6.
-	decLit  prefix.Decoder
-	encLit  prefix.Encoder
-	decDist prefix.Decoder
-	encDist prefix.Encoder
-
-	// RFC section 3.2.7.
-	// Prefix code lengths for code lengths alphabet.
-	clenLens = [maxNumCLenSyms]uint{
-		16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15,
-	}
-)
-
-func init() {
-	// These come from the RFC section 3.2.5.
-	lenRanges = append(prefix.MakeRangeCodes(3, []uint{
+// RFC section 3.2.5.
+var lenRanges = func() prefix.RangeCodes {
+	return append(prefix.MakeRangeCodes(3, []uint{
 		0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,
 	}), prefix.RangeCode{Base: 258, Len: 0})
-	distRanges = prefix.MakeRangeCodes(1, []uint{
+}()
+var distRanges = func() prefix.RangeCodes {
+	return prefix.MakeRangeCodes(1, []uint{
 		0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13,
 	})
+}()
 
-	// These come from the RFC section 3.2.6.
+// RFC section 3.2.6.
+var encLit, decLit = func() (e prefix.Encoder, d prefix.Decoder) {
 	var litCodes [288]prefix.PrefixCode
 	for i := 0; i < 144; i++ {
 		litCodes[i] = prefix.PrefixCode{Sym: uint32(i), Len: 8}
@@ -60,17 +47,25 @@ func init() {
 		litCodes[i] = prefix.PrefixCode{Sym: uint32(i), Len: 8}
 	}
 	prefix.GeneratePrefixes(litCodes[:])
-	decLit.Init(litCodes[:])
-	encLit.Init(litCodes[:])
-
-	// These come from the RFC section 3.2.6.
+	e.Init(litCodes[:])
+	d.Init(litCodes[:])
+	return
+}()
+var encDist, decDist = func() (e prefix.Encoder, d prefix.Decoder) {
 	var distCodes [32]prefix.PrefixCode
 	for i := 0; i < 32; i++ {
 		distCodes[i] = prefix.PrefixCode{Sym: uint32(i), Len: 5}
 	}
 	prefix.GeneratePrefixes(distCodes[:])
-	decDist.Init(distCodes[:])
-	encDist.Init(distCodes[:])
+	e.Init(distCodes[:])
+	d.Init(distCodes[:])
+	return
+}()
+
+// RFC section 3.2.7.
+// Prefix code lengths for code lengths alphabet.
+var clenLens = [maxNumCLenSyms]uint{
+	16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15,
 }
 
 type prefixReader struct {
@@ -90,7 +85,7 @@ func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
 	numDistSyms := pr.ReadBits(5) + 1
 	numCLenSyms := pr.ReadBits(4) + 4
 	if numLitSyms > maxNumLitSyms || numDistSyms > maxNumDistSyms {
-		panic(ErrCorrupt)
+		panicf(errors.Corrupted, "invalid number of prefix symbols")
 	}
 
 	// Read the code-lengths prefix table.
@@ -109,7 +104,7 @@ func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
 	}
 	codeCLens = handleDegenerateCodes(codeCLens, maxNumCLenSyms)
 	if err := prefix.GeneratePrefixes(codeCLens); err != nil {
-		panic(err)
+		errors.Panic(err)
 	}
 	pr.clenTree.Init(codeCLens)
 
@@ -142,7 +137,7 @@ func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
 			switch repSym := clen; repSym {
 			case 16:
 				if sym == 0 {
-					panic(ErrCorrupt)
+					panicf(errors.Corrupted, "invalid first use of repeator code")
 				}
 				clen = clenLast
 				repCnt = 3 + pr.ReadBits(2)
@@ -153,7 +148,7 @@ func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
 				clen = 0
 				repCnt = 11 + pr.ReadBits(7)
 			default:
-				panic(ErrCorrupt)
+				panicf(errors.Corrupted, "invalid code symbol: %d", clen)
 			}
 
 			if clen > 0 {
@@ -164,20 +159,20 @@ func (pr *prefixReader) ReadPrefixCodes(hl, hd *prefix.Decoder) {
 				sym += repCnt
 			}
 			if sym > maxSyms {
-				panic(ErrCorrupt)
+				panicf(errors.Corrupted, "excessive number of code symbols")
 			}
 		}
 	}
 
 	codeLits = handleDegenerateCodes(codeLits, maxNumLitSyms)
 	if err := prefix.GeneratePrefixes(codeLits); err != nil {
-		panic(err)
+		errors.Panic(err)
 	}
 	hl.Init(codeLits)
 
 	codeDists = handleDegenerateCodes(codeDists, maxNumDistSyms)
 	if err := prefix.GeneratePrefixes(codeDists); err != nil {
-		panic(err)
+		errors.Panic(err)
 	}
 	hd.Init(codeDists)
 

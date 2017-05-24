@@ -29,7 +29,7 @@ func MakeRangeCodes(minBase uint, bits []uint) (rc RangeCodes) {
 	return rc
 }
 
-// End reports the inclusive starting range for all ranges.
+// Base reports the inclusive starting range for all ranges.
 func (rcs RangeCodes) Base() uint32 { return rcs[0].Base }
 
 // End reports the non-inclusive ending range for all ranges.

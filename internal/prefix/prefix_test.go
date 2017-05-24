@@ -81,7 +81,7 @@ var (
 )
 
 func TestReader(t *testing.T) {
-	var readers = map[string]func([]byte) io.Reader{
+	readers := map[string]func([]byte) io.Reader{
 		"io.Reader": func(b []byte) io.Reader {
 			return struct{ io.Reader }{bytes.NewReader(b)}
 		},
@@ -101,7 +101,7 @@ func TestReader(t *testing.T) {
 			return struct{ compress.BufferedReader }{bufio.NewReader(bytes.NewReader(b))}
 		},
 	}
-	var endians = map[string]bool{"littleEndian": false, "bigEndian": true}
+	endians := map[string]bool{"littleEndian": false, "bigEndian": true}
 
 	var i int
 	for ne, endian := range endians {
@@ -122,17 +122,7 @@ func TestReader(t *testing.T) {
 
 			r := testutil.NewRand(0)
 		loop:
-			for j := 0; ; j++ {
-				// Stop if we read enough bits.
-				offset := 8*br.Offset - int64(br.numBits)
-				if br.bufRd != nil {
-					discardBits := br.discardBits + int(br.fedBits-br.numBits)
-					offset = 8*br.Offset + int64(discardBits)
-				}
-				if offset > 8*testSize {
-					break
-				}
-
+			for j := 0; br.BitsRead() < 8*testSize; j++ {
 				switch j % 4 {
 				case 0:
 					// Test unaligned Read.
@@ -225,7 +215,7 @@ func TestReader(t *testing.T) {
 }
 
 func TestWriter(t *testing.T) {
-	var endians = map[string]bool{"littleEndian": false, "bigEndian": true}
+	endians := map[string]bool{"littleEndian": false, "bigEndian": true}
 
 	var i int
 	for ne, endian := range endians {
@@ -241,7 +231,7 @@ func TestWriter(t *testing.T) {
 
 		r := testutil.NewRand(0)
 	loop:
-		for j := 0; 8*bw.Offset+int64(8*bw.cntBuf)+int64(bw.numBits) < 8*testSize; j++ {
+		for j := 0; bw.BitsWritten() < 8*testSize; j++ {
 			switch j % 4 {
 			case 0:
 				// Test unaligned Write.
@@ -325,7 +315,7 @@ func TestWriter(t *testing.T) {
 
 func TestGenerate(t *testing.T) {
 	r := testutil.NewRand(0)
-	var makeCodes = func(freqs []uint) PrefixCodes {
+	makeCodes := func(freqs []uint) PrefixCodes {
 		codes := make(PrefixCodes, len(freqs))
 		for i, j := range r.Perm(len(freqs)) {
 			codes[i] = PrefixCode{Sym: uint32(i), Cnt: uint32(freqs[j])}
@@ -334,7 +324,7 @@ func TestGenerate(t *testing.T) {
 		return codes
 	}
 
-	var vectors = []struct {
+	vectors := []struct {
 		maxBits uint // Maximum prefix bit-length (0 to skip GenerateLengths)
 		input   PrefixCodes
 		valid   bool
@@ -415,7 +405,6 @@ func TestGenerate(t *testing.T) {
 		valid: false,
 	}, {
 		// Input symbols are not sorted in ascending order.
-		maxBits: 0,
 		input: []PrefixCode{
 			{Sym: 2, Len: 1},
 			{Sym: 1, Len: 2},
@@ -424,7 +413,6 @@ func TestGenerate(t *testing.T) {
 		valid: false,
 	}, {
 		// Input symbols are not unique.
-		maxBits: 0,
 		input: []PrefixCode{
 			{Sym: 5, Len: 1},
 			{Sym: 5, Len: 1},
@@ -432,14 +420,12 @@ func TestGenerate(t *testing.T) {
 		valid: false,
 	}, {
 		// Invalid small tree.
-		maxBits: 0,
 		input: []PrefixCode{
 			{Sym: 0, Len: 500},
 		},
 		valid: false,
 	}, {
 		// Some bit-length is too short.
-		maxBits: 0,
 		input: []PrefixCode{
 			{Sym: 0, Len: 1},
 			{Sym: 1, Len: 2},
@@ -448,7 +434,6 @@ func TestGenerate(t *testing.T) {
 		valid: false,
 	}, {
 		// Under-subscribed tree.
-		maxBits: 0,
 		input: []PrefixCode{
 			{Sym: 0, Len: 3},
 			{Sym: 1, Len: 4},
@@ -457,13 +442,66 @@ func TestGenerate(t *testing.T) {
 		valid: false,
 	}, {
 		// Over-subscribed tree.
-		maxBits: 0,
 		input: []PrefixCode{
 			{Sym: 0, Len: 1},
 			{Sym: 1, Len: 3},
 			{Sym: 2, Len: 4},
 			{Sym: 3, Len: 3},
 			{Sym: 4, Len: 2},
+		},
+		valid: false,
+	}, {
+		// Over-subscribed tree (golang.org/issues/5915).
+		input: []PrefixCode{
+			{Sym: 0, Len: 4},
+			{Sym: 3, Len: 6},
+			{Sym: 4, Len: 4},
+			{Sym: 5, Len: 3},
+			{Sym: 6, Len: 2},
+			{Sym: 7, Len: 3},
+			{Sym: 8, Len: 3},
+			{Sym: 9, Len: 4},
+			{Sym: 10, Len: 4},
+			{Sym: 11, Len: 5},
+			{Sym: 16, Len: 5},
+			{Sym: 17, Len: 5},
+			{Sym: 18, Len: 6},
+			{Sym: 29, Len: 11},
+			{Sym: 51, Len: 7},
+			{Sym: 52, Len: 8},
+			{Sym: 53, Len: 6},
+			{Sym: 55, Len: 11},
+			{Sym: 57, Len: 8},
+			{Sym: 59, Len: 6},
+			{Sym: 60, Len: 6},
+			{Sym: 61, Len: 10},
+			{Sym: 62, Len: 8},
+		},
+		valid: false,
+	}, {
+		// Over-subscribed tree (golang.org/issues/5962).
+		input: []PrefixCode{
+			{Sym: 0, Len: 4},
+			{Sym: 3, Len: 6},
+			{Sym: 4, Len: 4},
+			{Sym: 5, Len: 3},
+			{Sym: 6, Len: 2},
+			{Sym: 7, Len: 3},
+			{Sym: 8, Len: 3},
+			{Sym: 9, Len: 4},
+			{Sym: 10, Len: 4},
+			{Sym: 11, Len: 5},
+			{Sym: 16, Len: 5},
+			{Sym: 17, Len: 5},
+			{Sym: 18, Len: 6},
+			{Sym: 29, Len: 11},
+		},
+		valid: false,
+	}, {
+		// Under-subscribed tree (golang.org/issues/6255).
+		input: []PrefixCode{
+			{Sym: 0, Len: 11},
+			{Sym: 1, Len: 13},
 		},
 		valid: false,
 	}}
@@ -552,7 +590,7 @@ func TestGenerate(t *testing.T) {
 }
 
 func TestPrefix(t *testing.T) {
-	var makeCodes = func(freqs []uint) PrefixCodes {
+	makeCodes := func(freqs []uint) PrefixCodes {
 		codes := make(PrefixCodes, len(freqs))
 		for i, n := range freqs {
 			codes[i] = PrefixCode{Sym: uint32(i), Cnt: uint32(n)}
@@ -568,7 +606,7 @@ func TestPrefix(t *testing.T) {
 		return codes
 	}
 
-	var vectors = []struct {
+	vectors := []struct {
 		codes PrefixCodes
 	}{{
 		codes: makeCodes([]uint{}),
@@ -612,7 +650,7 @@ func TestPrefix(t *testing.T) {
 		codes: func() (codes PrefixCodes) {
 			codes = PrefixCodes{{Sym: 0, Val: 0, Len: 1}}
 			for i := uint32(0); i < 16; i++ {
-				var code = PrefixCode{Sym: i + 1, Val: i<<1 | 1, Len: 5}
+				code := PrefixCode{Sym: i + 1, Val: i<<1 | 1, Len: 5}
 				codes = append(codes, code)
 			}
 			return codes
@@ -769,7 +807,7 @@ func TestPrefix(t *testing.T) {
 }
 
 func TestRange(t *testing.T) {
-	var vectors = []struct {
+	vectors := []struct {
 		input RangeCodes
 		valid bool
 	}{{
@@ -843,6 +881,44 @@ func TestRange(t *testing.T) {
 			rc := v.input[sym]
 			if offset < rc.Base || offset >= rc.End() {
 				t.Errorf("test %d, symbol not in range: %d not in %d..%d", i, offset, rc.Base, rc.End()-1)
+			}
+		}
+	}
+}
+
+func BenchmarkBitReader(b *testing.B) {
+	var br Reader
+	nbs := []uint{1, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 7, 7, 8, 9, 9, 13, 15}
+	n := 16 * b.N
+	bb := bytes.NewBuffer(make([]byte, n))
+	br.Init(bb, false)
+
+	b.SetBytes(16)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, nb := range nbs {
+			_, ok := br.TryReadBits(nb)
+			if !ok {
+				_ = br.ReadBits(nb)
+			}
+		}
+	}
+}
+
+func BenchmarkBitWriter(b *testing.B) {
+	var bw Writer
+	nbs := []uint{1, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 7, 7, 8, 9, 9, 13, 15}
+	n := 16 * b.N
+	bb := bytes.NewBuffer(make([]byte, 0, n))
+	bw.Init(bb, false)
+
+	b.SetBytes(16)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, nb := range nbs {
+			ok := bw.TryWriteBits(0, nb)
+			if !ok {
+				bw.WriteBits(0, nb)
 			}
 		}
 	}

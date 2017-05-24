@@ -8,8 +8,10 @@
 // tests the worst case compression scenario.
 package main
 
-import "io/ioutil"
-import "math/rand"
+import (
+	"io/ioutil"
+	"math/rand"
+)
 
 const (
 	name = "random.bin"
@@ -18,7 +20,7 @@ const (
 
 func main() {
 	var b []byte
-	var r = rand.New(rand.NewSource(0))
+	r := rand.New(rand.NewSource(0))
 
 	for i := 0; i < size; i++ {
 		b = append(b, byte(r.Int()))

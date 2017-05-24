@@ -5,9 +5,10 @@
 package prefix
 
 import (
+	"encoding/binary"
 	"io"
 
-	"github.com/dsnet/compress/internal"
+	"github.com/dsnet/compress/internal/errors"
 )
 
 // Writer implements a prefix encoder. For performance reasons, Writer will not
@@ -33,6 +34,11 @@ func (pw *Writer) Init(w io.Writer, bigEndian bool) {
 	return
 }
 
+// BitsWritten reports the total number of bits issued to any Write method.
+func (pw *Writer) BitsWritten() int64 {
+	return 8*pw.Offset + 8*int64(pw.cntBuf) + int64(pw.numBits)
+}
+
 // WritePads writes 0-7 bits to the bit buffer to achieve byte-alignment.
 func (pw *Writer) WritePads(v uint) {
 	nb := -pw.numBits & 7
@@ -45,7 +51,7 @@ func (pw *Writer) WritePads(v uint) {
 func (pw *Writer) Write(buf []byte) (cnt int, err error) {
 	if pw.numBits > 0 || pw.cntBuf > 0 {
 		if pw.numBits%8 != 0 {
-			return 0, internal.Error{"non-aligned bit buffer"}
+			return 0, errorf(errors.Invalid, "non-aligned bit buffer")
 		}
 		if _, err := pw.Flush(); err != nil {
 			return 0, err
@@ -81,7 +87,7 @@ func (pw *Writer) TryWriteBits(v, nb uint) bool {
 // WriteBits writes nb bits of v to the underlying writer.
 func (pw *Writer) WriteBits(v, nb uint) {
 	if _, err := pw.PushBits(); err != nil {
-		panic(err)
+		errors.Panic(err)
 	}
 	pw.bufBits |= uint64(v) << pw.numBits
 	pw.numBits += nb
@@ -105,7 +111,7 @@ func (pw *Writer) TryWriteSymbol(sym uint, pe *Encoder) bool {
 // WriteSymbol writes the symbol using the provided prefix Encoder.
 func (pw *Writer) WriteSymbol(sym uint, pe *Encoder) {
 	if _, err := pw.PushBits(); err != nil {
-		panic(err)
+		errors.Panic(err)
 	}
 	chunk := pe.chunks[uint32(sym)&pe.chunkMask]
 	nb := uint(chunk & countMask)
@@ -140,16 +146,21 @@ func (pw *Writer) PushBits() (uint, error) {
 			return 0, err
 		}
 	}
-	nb := pw.numBits
-	for pw.numBits >= 8 {
-		c := byte(pw.bufBits)
-		if pw.bigEndian {
-			c = internal.ReverseLUT[c]
-		}
-		pw.buf[pw.cntBuf] = c
-		pw.cntBuf++
-		pw.bufBits >>= 8
-		pw.numBits -= 8
+
+	u := pw.bufBits
+	if pw.bigEndian {
+		// Swap all the bits within each byte.
+		u = (u&0xaaaaaaaaaaaaaaaa)>>1 | (u&0x5555555555555555)<<1
+		u = (u&0xcccccccccccccccc)>>2 | (u&0x3333333333333333)<<2
+		u = (u&0xf0f0f0f0f0f0f0f0)>>4 | (u&0x0f0f0f0f0f0f0f0f)<<4
 	}
-	return nb - pw.numBits, nil
+	// Starting with Go 1.7, the compiler should use a wide integer
+	// store here if the architecture supports it.
+	binary.LittleEndian.PutUint64(pw.buf[pw.cntBuf:], u)
+
+	nb := pw.numBits / 8 // Number of bytes to copy from bit buffer
+	pw.cntBuf += int(nb)
+	pw.bufBits >>= 8 * nb
+	pw.numBits -= 8 * nb
+	return 8 * nb, nil
 }

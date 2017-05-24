@@ -6,39 +6,41 @@ package bzip2
 
 import (
 	"testing"
+
+	"github.com/dsnet/compress/internal/testutil"
 )
 
 func TestBurrowsWheelerTransform(t *testing.T) {
-	var vectors = []struct {
-		input  string // The input test string
-		output string // Expected output string after BWT (skip if empty)
+	vectors := []struct {
+		input  []byte // The input test string
+		output []byte // Expected output string after BWT
 		ptr    int    // The BWT origin pointer
 	}{{
-		input:  "",
-		output: "",
+		input:  []byte(""),
+		output: []byte(""),
 		ptr:    -1,
 	}, {
-		input:  "Hello, world!",
-		output: ",do!lHrellwo ",
+		input:  []byte("Hello, world!"),
+		output: []byte(",do!lHrellwo "),
 		ptr:    3,
 	}, {
-		input:  "SIX.MIXED.PIXIES.SIFT.SIXTY.PIXIE.DUST.BOXES",
-		output: "TEXYDST.E.IXIXIXXSSMPPS.B..E.S.EUSFXDIIOIIIT",
+		input:  []byte("SIX.MIXED.PIXIES.SIFT.SIXTY.PIXIE.DUST.BOXES"),
+		output: []byte("TEXYDST.E.IXIXIXXSSMPPS.B..E.S.EUSFXDIIOIIIT"),
 		ptr:    29,
 	}, {
-		input:  "0123456789",
-		output: "9012345678",
+		input:  []byte("0123456789"),
+		output: []byte("9012345678"),
 		ptr:    0,
 	}, {
-		input:  "9876543210",
-		output: "1234567890",
+		input:  []byte("9876543210"),
+		output: []byte("1234567890"),
 		ptr:    9,
 	}, {
-		input:  "The quick brown fox jumped over the lazy dog.",
-		output: "kynxederg.l ie hhpv otTu c uwd rfm eb qjoooza",
+		input:  []byte("The quick brown fox jumped over the lazy dog."),
+		output: []byte("kynxederg.l ie hhpv otTu c uwd rfm eb qjoooza"),
 		ptr:    9,
 	}, {
-		input: "Mary had a little lamb, its fleece was white as snow" +
+		input: []byte("" +
 			"Mary had a little lamb, its fleece was white as snow" +
 			"Mary had a little lamb, its fleece was white as snow" +
 			"Mary had a little lamb, its fleece was white as snow" +
@@ -46,8 +48,10 @@ func TestBurrowsWheelerTransform(t *testing.T) {
 			"Mary had a little lamb, its fleece was white as snow" +
 			"Mary had a little lamb, its fleece was white as snow" +
 			"Mary had a little lamb, its fleece was white as snow" +
-			"Nary had a little lamb, its fleece was white as snow",
-		output: "dddddddddeeeeeeeeesssssssssyyyyyyyyy,,,,,,,,,eeeeeee" +
+			"Mary had a little lamb, its fleece was white as snow" +
+			"Nary had a little lamb, its fleece was white as snow"),
+		output: []byte("" +
+			"dddddddddeeeeeeeeesssssssssyyyyyyyyy,,,,,,,,,eeeeeee" +
 			"eeaaaaaaaaassssssssseeeeeeeeesssssssssbbbbbbbbbwwwww" +
 			"wwww         hhhhhhhhhlllllllllNMMMMMMMM         www" +
 			"wwwwwwmmmmmmmmmeeeeeeeeeaaaaaaaaatttttttttlllllllllc" +
@@ -55,43 +59,63 @@ func TestBurrowsWheelerTransform(t *testing.T) {
 			"whhhhhhhhh         lllllllll         tttttttttffffff" +
 			"fff         aaaaaaaaasssssssssnnnnnnnnnaaaaaaaaatttt" +
 			"tttttaaaaaaaaaaaaaaaaaa         iiiiiiiiitttttttttii" +
-			"iiiiiiiiiiiiiiiiooooooooo                  rrrrrrrrr",
+			"iiiiiiiiiiiiiiiiooooooooo                  rrrrrrrrr"),
 		ptr: 99,
 	}, {
-		input: "AGCTTTTCATTCTGACTGCAACGGGCAATATGTCTCTGTGTGGATTAAAAAAAGAGTCTCTGAC" +
+		input: []byte("" +
+			"AGCTTTTCATTCTGACTGCAACGGGCAATATGTCTCTGTGTGGATTAAAAAAAGAGTCTCTGAC" +
 			"AGCAGCTTCTGAACTGGTTACCTGCCGTGAGTAAATTAAAATTTTATTGACTTAGGTCACTAAA" +
 			"TACTTTAACCAATATAGGCATAGCGCACAGACAGATAAAAATTACAGAGTACACAACATCCATG" +
 			"AAACGCATTAGCACCACCATTACCACCACCATCACCACCACCATCACCATTACCATTACCACAG" +
 			"GTAACGGTGCGGGCTGACGCGTACAGGAAACACAGAAAAAAGCCCGCACCTGACAGTGCGGGCT" +
 			"TTTTTTTCGACCAAAGGTAACGAGGTAACAACCATGCGAGTGTTGAAGTTCGGCGGTACATCAG" +
-			"TGGCAAATGCAGAACGTTTTCTGCGGGTTGCCGATATTCTGGAAAGCAATGCCAGGCAGGGGCA",
-		output: "TAGAATAAATGGAGACTCTAATACTCTACTGGAAACAGACCACAAACATACCTGGTCGTAGATT" +
+			"TGGCAAATGCAGAACGTTTTCTGCGGGTTGCCGATATTCTGGAAAGCAATGCCAGGCAGGGGCA"),
+		output: []byte("" +
+			"TAGAATAAATGGAGACTCTAATACTCTACTGGAAACAGACCACAAACATACCTGGTCGTAGATT" +
 			"CCCCCCATCCCTAAGAAACGAGTCCCCACATCATCACCTCGACTGGGCCGAGACTAAGCCCCCA" +
 			"ACTGAACCCCCTTACGAAGGCGGAAGCTCCGCCCTGTAGAAAAGACGAATGCCAACCCCCGTAA" +
 			"AAAAAAGAATAAAAGGCGAATAGCGCAATAGGGGAGCAATTTTCGTACTTATAGAGGAGTGATT" +
 			"ATTCTTTCTAACACGGTGGACACTAGGCTATTTATTTGCGAAGATTTGGAACGGGCCCACAAAC" +
 			"ACTGAGGGACGGATCGATATAGATGCTATCGGTGGGTGGTTTTATAATAAATAAGATATTGGTC" +
-			"TTTCACTCCCCTGCAATCAGGCCGGCAGCGAATAAAAGACTTTGCATAGAGCTTTTACTGTTTC",
+			"TTTCACTCCCCTGCAATCAGGCCGGCAGCGAATAAAAGACTTTGCATAGAGCTTTTACTGTTTC"),
 		ptr: 99,
+	}, {
+		input:  testutil.MustLoadFile("testdata/gauntlet_test3.bin"),
+		output: testutil.MustLoadFile("testdata/gauntlet_test3.bwt"),
+		ptr:    0,
+	}, {
+		input:  testutil.MustLoadFile("testdata/silesia_ooffice.bin"),
+		output: testutil.MustLoadFile("testdata/silesia_ooffice.bwt"),
+		ptr:    461,
+	}, {
+		input:  testutil.MustLoadFile("testdata/silesia_xray.bin"),
+		output: testutil.MustLoadFile("testdata/silesia_xray.bwt"),
+		ptr:    1532,
+	}, {
+		input:  testutil.MustLoadFile("testdata/testfiles_test3.bin"),
+		output: testutil.MustLoadFile("testdata/testfiles_test3.bwt"),
+		ptr:    0,
+	}, {
+		input:  testutil.MustLoadFile("testdata/testfiles_test4.bin"),
+		output: testutil.MustLoadFile("testdata/testfiles_test4.bwt"),
+		ptr:    1026,
 	}}
 
 	bwt := new(burrowsWheelerTransform)
 	for i, v := range vectors {
-		b := []byte(v.input)
-		p := bwt.Encode(b)
-		output := string(b)
-		b = []byte(v.output)
-		bwt.Decode(b, p)
-		input := string(b)
+		output := append([]byte(nil), v.input...)
+		ptr := bwt.Encode(output)
+		input := append([]byte(nil), v.output...)
+		bwt.Decode(input, ptr)
 
-		if input != v.input {
-			t.Errorf("test %d, input mismatch:\ngot  %q\nwant %q", i, input, v.input)
+		if got, want, ok := testutil.BytesCompare(input, v.input); !ok {
+			t.Errorf("test %d, input mismatch:\ngot  %s\nwant %s", i, got, want)
 		}
-		if output != v.output {
-			t.Errorf("test %d, output mismatch:\ngot  %q\nwant %q", i, output, v.output)
+		if got, want, ok := testutil.BytesCompare(output, v.output); !ok {
+			t.Errorf("test %d, output mismatch:\ngot  %s\nwant %s", i, got, want)
 		}
-		if p != v.ptr {
-			t.Errorf("test %d, pointer mismatch: got %d, want %d", i, p, v.ptr)
+		if ptr != v.ptr {
+			t.Errorf("test %d, pointer mismatch: got %d, want %d", i, ptr, v.ptr)
 		}
 	}
 }

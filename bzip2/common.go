@@ -3,18 +3,29 @@
 // license that can be found in the LICENSE.md file.
 
 // Package bzip2 implements the BZip2 compressed data format.
+//
+// Canonical C implementation:
+//	http://bzip.org
+//
+// Unofficial format specification:
+//	https://github.com/dsnet/compress/blob/development/doc/bzip2-format.pdf
 package bzip2
 
 import (
+	"fmt"
 	"hash/crc32"
-	"runtime"
 
 	"github.com/dsnet/compress/internal"
+	"github.com/dsnet/compress/internal/errors"
 )
 
 // There does not exist a formal specification of the BZip2 format. As such,
 // much of this work is derived by either reverse engineering the original C
 // source code or using secondary sources.
+//
+// Significant amounts of fuzz testing is done to ensure that outputs from
+// this package is properly decoded by the C library. Furthermore, we test that
+// both this package and the C library agree about what inputs are invalid.
 //
 // Compression stack:
 //	Run-length encoding 1     (RLE1)
@@ -42,45 +53,58 @@ const (
 	blockSize = 100000
 )
 
-// Error is the wrapper type for errors specific to this library.
-type Error struct{ ErrorString string }
-
-func (e Error) Error() string { return "bzip2: " + e.ErrorString }
-
-var (
-	ErrCorrupt    error = Error{"stream is corrupted"}
-	ErrDeprecated error = Error{"deprecated stream format"}
-	ErrClosed     error = Error{"stream is closed"}
-	errInvalid    error = Error{"stream is invalid"}
-)
-
-func errRecover(err *error) {
-	switch ex := recover().(type) {
-	case nil:
-		// Do nothing.
-	case runtime.Error:
-		panic(ex)
-	case error:
-		*err = ex
-	default:
-		panic(ex)
-	}
+func errorf(c int, f string, a ...interface{}) error {
+	return errors.Error{Code: c, Pkg: "bzip2", Msg: fmt.Sprintf(f, a...)}
 }
 
-// updateCRC returns the result of adding the bytes in buf to the crc.
-func updateCRC(crc uint32, buf []byte) uint32 {
-	// The CRC-32 computation in bzip2 treats bytes as having bits in big-endian
-	// order. That is, the MSB is read before the LSB. Thus, we can use the
-	// standard library version of CRC-32 IEEE with some minor adjustments.
-	crc = internal.ReverseUint32(crc)
-	var arr [4096]byte
-	for len(buf) > 0 {
-		cnt := copy(arr[:], buf)
-		buf = buf[cnt:]
-		for i, b := range arr[:cnt] {
-			arr[i] = internal.ReverseLUT[b]
+func panicf(c int, f string, a ...interface{}) {
+	errors.Panic(errorf(c, f, a...))
+}
+
+// errWrap converts a lower-level errors.Error to be one from this package.
+// The replaceCode passed in will be used to replace the code for any errors
+// with the errors.Invalid code.
+//
+// For the Reader, set this to errors.Corrupted.
+// For the Writer, set this to errors.Internal.
+func errWrap(err error, replaceCode int) error {
+	if cerr, ok := err.(errors.Error); ok {
+		if errors.IsInvalid(cerr) {
+			cerr.Code = replaceCode
 		}
-		crc = crc32.Update(crc, crc32.IEEETable, arr[:cnt])
+		err = errorf(cerr.Code, "%s", cerr.Msg)
 	}
-	return internal.ReverseUint32(crc)
+	return err
+}
+
+var errClosed = errorf(errors.Closed, "")
+
+// crc computes the CRC-32 used by BZip2.
+//
+// The CRC-32 computation in bzip2 treats bytes as having bits in big-endian
+// order. That is, the MSB is read before the LSB. Thus, we can use the
+// standard library version of CRC-32 IEEE with some minor adjustments.
+//
+// The byte array is used as an intermediate buffer to swap the bits of every
+// byte of the input.
+type crc struct {
+	val uint32
+	buf [256]byte
+}
+
+// update computes the CRC-32 of appending buf to c.
+func (c *crc) update(buf []byte) {
+	cval := internal.ReverseUint32(c.val)
+	for len(buf) > 0 {
+		n := len(buf)
+		if n > len(c.buf) {
+			n = len(c.buf)
+		}
+		for i, b := range buf[:n] {
+			c.buf[i] = internal.ReverseLUT[b]
+		}
+		cval = crc32.Update(cval, crc32.IEEETable, c.buf[:n])
+		buf = buf[n:]
+	}
+	c.val = internal.ReverseUint32(cval)
 }

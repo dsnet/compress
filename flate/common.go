@@ -7,9 +7,9 @@
 package flate
 
 import (
-	"runtime"
+	"fmt"
 
-	"github.com/dsnet/compress"
+	"github.com/dsnet/compress/internal/errors"
 )
 
 const (
@@ -17,29 +17,28 @@ const (
 	endBlockSym = 256
 )
 
-// Error is the wrapper type for errors specific to this library.
-type Error struct{ ErrorString string }
-
-func (e Error) Error() string  { return "flate: " + e.ErrorString }
-func (e Error) CompressError() {}
-
-// Error must also satisfy compress.Error interface.
-var _ compress.Error = (*Error)(nil)
-
-var (
-	ErrCorrupt error = Error{"stream is corrupted"}
-	ErrClosed  error = Error{"stream is closed"}
-)
-
-func errRecover(err *error) {
-	switch ex := recover().(type) {
-	case nil:
-		// Do nothing.
-	case runtime.Error:
-		panic(ex)
-	case error:
-		*err = ex
-	default:
-		panic(ex)
-	}
+func errorf(c int, f string, a ...interface{}) error {
+	return errors.Error{Code: c, Pkg: "flate", Msg: fmt.Sprintf(f, a...)}
 }
+
+func panicf(c int, f string, a ...interface{}) {
+	errors.Panic(errorf(c, f, a...))
+}
+
+// errWrap converts a lower-level errors.Error to be one from this package.
+// The replaceCode passed in will be used to replace the code for any errors
+// with the errors.Invalid code.
+//
+// For the Reader, set this to errors.Corrupted.
+// For the Writer, set this to errors.Internal.
+func errWrap(err error, replaceCode int) error {
+	if cerr, ok := err.(errors.Error); ok {
+		if errors.IsInvalid(cerr) {
+			cerr.Code = replaceCode
+		}
+		err = errorf(cerr.Code, "%s", cerr.Msg)
+	}
+	return err
+}
+
+var errClosed = errorf(errors.Closed, "")

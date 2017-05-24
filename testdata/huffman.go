@@ -11,9 +11,11 @@
 // avoids LZ77 dictionary matches.
 package main
 
-import "io/ioutil"
-import "math/rand"
-import "unicode/utf8"
+import (
+	"io/ioutil"
+	"math/rand"
+	"unicode/utf8"
+)
 
 const (
 	name = "huffman.txt"
@@ -28,7 +30,7 @@ const (
 
 func main() {
 	var b []byte
-	var r = rand.New(rand.NewSource(0))
+	r := rand.New(rand.NewSource(0))
 
 	for len(b) < size {
 		n := 16 + r.Intn(64) // Length of substring

@@ -4,15 +4,17 @@
 
 package bzip2
 
-// rleDone is a special "error" to indicate that the RLE buffer is depleted.
-var rleDone error = Error{"done with RLE stage"}
+import "github.com/dsnet/compress/internal/errors"
+
+// rleDone is a special "error" to indicate that the RLE stage is done.
+var rleDone = errorf(errors.Unknown, "RLE1 stage is completed")
 
 // runLengthEncoding implements the first RLE stage of bzip2. Every sequence
 // of 4..255 duplicated bytes is replaced by only the first 4 bytes, and a
 // single byte representing the repeat length. Similar to the C bzip2
 // implementation, the encoder will always terminate repeat sequences with a
 // count (even if it is the end of the buffer), and it will also never produce
-// run lengths of 256..259. The decoder, however, will handle both cases.
+// run lengths of 256..259. The decoder can handle the latter case.
 //
 // For example, if the input was:
 //	input:  "AAAAAAABBBBCCCD"
@@ -71,7 +73,7 @@ func (rle *runLengthEncoding) Read(buf []byte) (int, error) {
 		switch {
 		case rle.lastCnt == -4:
 			if rle.idx >= len(rle.buf) {
-				return i, rleDone
+				return i, errorf(errors.Corrupted, "missing terminating run-length repeater")
 			}
 			rle.lastCnt = int(rle.buf[rle.idx])
 			rle.idx++
