@@ -8,7 +8,7 @@
 //	http://bzip.org
 //
 // Unofficial format specification:
-//	https://github.com/dsnet/compress/blob/development/doc/bzip2-format.pdf
+//	https://github.com/dsnet/compress/blob/master/doc/bzip2-format.pdf
 package bzip2
 
 import (
