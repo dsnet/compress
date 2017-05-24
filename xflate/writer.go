@@ -108,7 +108,7 @@ func NewWriter(wr io.Writer, conf *WriterConfig) (*Writer, error) {
 // a prior call to NewWriter will be preserved.
 //
 // This is used to reduce memory allocations.
-func (xw *Writer) Reset(wr io.Writer) {
+func (xw *Writer) Reset(wr io.Writer) error {
 	*xw = Writer{
 		wr:   wr,
 		mw:   xw.mw,
@@ -129,7 +129,7 @@ func (xw *Writer) Reset(wr io.Writer) {
 		xw.nidx = DefaultIndexSize
 	}
 	xw.idx.Reset()
-	return
+	return nil
 }
 
 // Write writes the compressed form of buf to the underlying io.Writer.

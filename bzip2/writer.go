@@ -60,7 +60,7 @@ func NewWriter(w io.Writer, conf *WriterConfig) (*Writer, error) {
 	return zw, nil
 }
 
-func (zw *Writer) Reset(w io.Writer) {
+func (zw *Writer) Reset(w io.Writer) error {
 	*zw = Writer{
 		wr:    zw.wr,
 		level: zw.level,
@@ -79,7 +79,7 @@ func (zw *Writer) Reset(w io.Writer) {
 		zw.buf = make([]byte, zw.level*blockSize)
 	}
 	zw.rle.Init(zw.buf)
-	return
+	return nil
 }
 
 func (zw *Writer) Write(buf []byte) (int, error) {

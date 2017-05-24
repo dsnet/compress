@@ -48,7 +48,7 @@ func NewReader(r io.Reader, conf *ReaderConfig) (*Reader, error) {
 	return zr, nil
 }
 
-func (zr *Reader) Reset(r io.Reader) {
+func (zr *Reader) Reset(r io.Reader) error {
 	*zr = Reader{
 		rd: zr.rd,
 
@@ -61,7 +61,7 @@ func (zr *Reader) Reset(r io.Reader) {
 		syms:     zr.syms,
 	}
 	zr.rd.Init(r)
-	return
+	return nil
 }
 
 func (zr *Reader) Read(buf []byte) (int, error) {

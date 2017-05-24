@@ -42,7 +42,7 @@ func NewReader(r io.Reader, conf *ReaderConfig) (*Reader, error) {
 	return zr, nil
 }
 
-func (zr *Reader) Reset(r io.Reader) {
+func (zr *Reader) Reset(r io.Reader) error {
 	*zr = Reader{
 		rd:   zr.rd,
 		step: (*Reader).readBlockHeader,
@@ -52,6 +52,7 @@ func (zr *Reader) Reset(r io.Reader) {
 	}
 	zr.rd.Init(r)
 	zr.dict.Init(maxHistSize)
+	return nil
 }
 
 func (zr *Reader) Read(buf []byte) (int, error) {
