@@ -30,14 +30,12 @@ However, in the meanwhile, this library does provide some basic API guarantees. 
 type ReaderConfig struct { ... }
 type Reader struct { ... }
   func NewReader(io.Reader, *ReaderConfig) (*Reader, error) { ... }
-  func (*Reader) Reset(io.Reader) error                     { ... }
   func (*Reader) Read([]byte) (int, error)                  { ... }
   func (*Reader) Close() error                              { ... }
 
 type WriterConfig struct { ... }
 type Writer struct { ... }
   func NewWriter(io.Writer, *WriterConfig) (*Writer, error) { ... }
-  func (*Writer) Reset(io.Writer) error                     { ... }
   func (*Writer) Write([]byte) (int, error)                 { ... }
   func (*Writer) Close() error                              { ... }
 ```
