@@ -80,7 +80,7 @@ import (
 	"unsafe"
 )
 
-type Reader struct {
+type reader struct {
 	r     io.Reader
 	err   error
 	state *C.ZSTD_DStream
@@ -89,14 +89,14 @@ type Reader struct {
 }
 
 func NewReader(r io.Reader) io.ReadCloser {
-	zr := &Reader{r: r, state: C.zsDecCreate()}
+	zr := &reader{r: r, state: C.zsDecCreate()}
 	if zr.state == nil {
 		panic("zstd: could not allocate decoder state")
 	}
 	return zr
 }
 
-func (zr *Reader) Read(buf []byte) (int, error) {
+func (zr *reader) Read(buf []byte) (int, error) {
 	if zr.state == nil {
 		return 0, io.ErrClosedPipe
 	}
@@ -131,7 +131,7 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 	return n, zr.err
 }
 
-func (zr *Reader) Close() error {
+func (zr *reader) Close() error {
 	if zr.state != nil {
 		defer func() {
 			C.zsDecDestroy(zr.state)
@@ -141,7 +141,7 @@ func (zr *Reader) Close() error {
 	return zr.err
 }
 
-type Writer struct {
+type writer struct {
 	w     io.Writer
 	err   error
 	state *C.ZSTD_CStream
@@ -154,18 +154,18 @@ func NewWriter(w io.Writer, level int) io.WriteCloser {
 		panic("zstd: invalid compression level")
 	}
 
-	zw := &Writer{w: w, state: C.zsEncCreate(C.int(level))}
+	zw := &writer{w: w, state: C.zsEncCreate(C.int(level))}
 	if zw.state == nil {
 		panic("zstd: could not allocate encoder state")
 	}
 	return zw
 }
 
-func (zw *Writer) Write(buf []byte) (int, error) {
+func (zw *writer) Write(buf []byte) (int, error) {
 	return zw.write(buf, 0)
 }
 
-func (zw *Writer) write(buf []byte, finish C.int) (int, error) {
+func (zw *writer) write(buf []byte, finish C.int) (int, error) {
 	if zw.state == nil {
 		return 0, io.ErrClosedPipe
 	}
@@ -195,7 +195,7 @@ func (zw *Writer) write(buf []byte, finish C.int) (int, error) {
 	return n, zw.err
 }
 
-func (zw *Writer) Close() error {
+func (zw *writer) Close() error {
 	if zw.state != nil {
 		defer func() {
 			C.zsEncDestroy(zw.state)

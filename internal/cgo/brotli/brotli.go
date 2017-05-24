@@ -70,7 +70,7 @@ import (
 	"unsafe"
 )
 
-type Reader struct {
+type reader struct {
 	r     io.Reader
 	err   error
 	state *C.BrotliDecoderState
@@ -79,14 +79,14 @@ type Reader struct {
 }
 
 func NewReader(r io.Reader) io.ReadCloser {
-	zr := &Reader{r: r, state: C.zbDecCreate()}
+	zr := &reader{r: r, state: C.zbDecCreate()}
 	if zr.state == nil {
 		panic("brotli: could not allocate decoder state")
 	}
 	return zr
 }
 
-func (zr *Reader) Read(buf []byte) (int, error) {
+func (zr *reader) Read(buf []byte) (int, error) {
 	if zr.state == nil {
 		return 0, io.ErrClosedPipe
 	}
@@ -124,7 +124,7 @@ func (zr *Reader) Read(buf []byte) (int, error) {
 	return n, zr.err
 }
 
-func (zr *Reader) Close() error {
+func (zr *reader) Close() error {
 	if zr.state != nil {
 		defer func() {
 			C.zbDecDestroy(zr.state)
@@ -134,7 +134,7 @@ func (zr *Reader) Close() error {
 	return zr.err
 }
 
-type Writer struct {
+type writer struct {
 	w     io.Writer
 	err   error
 	state *C.BrotliEncoderState
@@ -147,18 +147,18 @@ func NewWriter(w io.Writer, level int) io.WriteCloser {
 		panic("brotli: invalid compression level")
 	}
 
-	zw := &Writer{w: w, state: C.zbEncCreate(C.int(level))}
+	zw := &writer{w: w, state: C.zbEncCreate(C.int(level))}
 	if zw.state == nil {
 		panic("brotli: could not allocate encoder state")
 	}
 	return zw
 }
 
-func (zw *Writer) Write(buf []byte) (int, error) {
+func (zw *writer) Write(buf []byte) (int, error) {
 	return zw.write(buf, C.BROTLI_OPERATION_PROCESS)
 }
 
-func (zw *Writer) write(buf []byte, op C.BrotliEncoderOperation) (int, error) {
+func (zw *writer) write(buf []byte, op C.BrotliEncoderOperation) (int, error) {
 	if zw.state == nil {
 		return 0, io.ErrClosedPipe
 	}
@@ -187,7 +187,7 @@ func (zw *Writer) write(buf []byte, op C.BrotliEncoderOperation) (int, error) {
 	return n, zw.err
 }
 
-func (zw *Writer) Close() error {
+func (zw *writer) Close() error {
 	if zw.state != nil {
 		defer func() {
 			C.zbEncDestroy(zw.state)
