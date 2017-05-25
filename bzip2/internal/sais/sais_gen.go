@@ -1,3 +1,42 @@
+// Copyright 2017, Joe Tsai. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE.md file.
+
+// +build ignore
+
+package main
+
+import (
+	"bytes"
+	"go/format"
+	"io/ioutil"
+	"log"
+	"os"
+	"text/template"
+)
+
+func main() {
+	if len(os.Args) != 3 {
+		log.Fatalf("Usage: %s GO_TYPE OUTPUT_FILE", os.Args[0])
+	}
+	typ := os.Args[1]
+	path := os.Args[2]
+
+	b := new(bytes.Buffer)
+	t := template.Must(template.New("source").Parse(source))
+	if err := t.Execute(b, struct{ Type string }{typ}); err != nil {
+		log.Fatalf("Template.Execute error: %v", err)
+	}
+	out, err := format.Source(bytes.TrimSpace(b.Bytes()))
+	if err != nil {
+		log.Fatalf("format.Source error: %v", err)
+	}
+	if err := ioutil.WriteFile(path, out, 0644); err != nil {
+		log.Fatalf("ioutil.WriteFile error: %v", err)
+	}
+}
+
+const source = `
 // Copyright 2015, Joe Tsai. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE.md file.
@@ -31,7 +70,7 @@
 
 package sais
 
-func getCounts_byte(T []byte, C []int, n, k int) {
+func getCounts_{{.Type}}(T []{{.Type}}, C []int, n, k int) {
 	var i int
 	for i = 0; i < k; i++ {
 		C[i] = 0
@@ -41,7 +80,7 @@ func getCounts_byte(T []byte, C []int, n, k int) {
 	}
 }
 
-func getBuckets_byte(C, B []int, k int, end bool) {
+func getBuckets_{{.Type}}(C, B []int, k int, end bool) {
 	var i, sum int
 	if end {
 		for i = 0; i < k; i++ {
@@ -56,15 +95,15 @@ func getBuckets_byte(C, B []int, k int, end bool) {
 	}
 }
 
-func sortLMS1_byte(T []byte, SA, C, B []int, n, k int) {
+func sortLMS1_{{.Type}}(T []{{.Type}}, SA, C, B []int, n, k int) {
 	var b, i, j int
 	var c0, c1 int
 
 	// Compute SAl.
 	if &C[0] == &B[0] {
-		getCounts_byte(T, C, n, k)
+		getCounts_{{.Type}}(T, C, n, k)
 	}
-	getBuckets_byte(C, B, k, false) // Find starts of buckets
+	getBuckets_{{.Type}}(C, B, k, false) // Find starts of buckets
 	j = n - 1
 	c1 = int(T[j])
 	b = B[c1]
@@ -97,9 +136,9 @@ func sortLMS1_byte(T []byte, SA, C, B []int, n, k int) {
 
 	// Compute SAs.
 	if &C[0] == &B[0] {
-		getCounts_byte(T, C, n, k)
+		getCounts_{{.Type}}(T, C, n, k)
 	}
-	getBuckets_byte(C, B, k, true) // Find ends of buckets
+	getBuckets_{{.Type}}(C, B, k, true) // Find ends of buckets
 	c1 = 0
 	b = B[c1]
 	for i = n - 1; i >= 0; i-- {
@@ -121,7 +160,7 @@ func sortLMS1_byte(T []byte, SA, C, B []int, n, k int) {
 	}
 }
 
-func postProcLMS1_byte(T []byte, SA []int, n, m int) int {
+func postProcLMS1_{{.Type}}(T []{{.Type}}, SA []int, n, m int) int {
 	var i, j, p, q, plen, qlen, name int
 	var c0, c1 int
 	var diff bool
@@ -206,12 +245,12 @@ func postProcLMS1_byte(T []byte, SA []int, n, m int) int {
 	return name
 }
 
-func sortLMS2_byte(T []byte, SA, C, B, D []int, n, k int) {
+func sortLMS2_{{.Type}}(T []{{.Type}}, SA, C, B, D []int, n, k int) {
 	var b, i, j, t, d int
 	var c0, c1 int
 
 	// Compute SAl.
-	getBuckets_byte(C, B, k, false) // Find starts of buckets
+	getBuckets_{{.Type}}(C, B, k, false) // Find starts of buckets
 	j = n - 1
 	c1 = int(T[j])
 	b = B[c1]
@@ -272,7 +311,7 @@ func sortLMS2_byte(T []byte, SA, C, B, D []int, n, k int) {
 	}
 
 	// Compute SAs.
-	getBuckets_byte(C, B, k, true) // Find ends of buckets
+	getBuckets_{{.Type}}(C, B, k, true) // Find ends of buckets
 	c1 = 0
 	b = B[c1]
 	for i, d = n-1, d+1; i >= 0; i-- {
@@ -306,7 +345,7 @@ func sortLMS2_byte(T []byte, SA, C, B, D []int, n, k int) {
 	}
 }
 
-func postProcLMS2_byte(SA []int, n, m int) int {
+func postProcLMS2_{{.Type}}(SA []int, n, m int) int {
 	var i, j, d, name int
 
 	// Compact all the sorted LMS substrings into the first m items of SA.
@@ -355,15 +394,15 @@ func postProcLMS2_byte(SA []int, n, m int) int {
 	return name
 }
 
-func induceSA_byte(T []byte, SA, C, B []int, n, k int) {
+func induceSA_{{.Type}}(T []{{.Type}}, SA, C, B []int, n, k int) {
 	var b, i, j int
 	var c0, c1 int
 
 	// Compute SAl.
 	if &C[0] == &B[0] {
-		getCounts_byte(T, C, n, k)
+		getCounts_{{.Type}}(T, C, n, k)
 	}
-	getBuckets_byte(C, B, k, false) // Find starts of buckets
+	getBuckets_{{.Type}}(C, B, k, false) // Find starts of buckets
 	j = n - 1
 	c1 = int(T[j])
 	b = B[c1]
@@ -394,9 +433,9 @@ func induceSA_byte(T []byte, SA, C, B []int, n, k int) {
 
 	// Compute SAs.
 	if &C[0] == &B[0] {
-		getCounts_byte(T, C, n, k)
+		getCounts_{{.Type}}(T, C, n, k)
 	}
-	getBuckets_byte(C, B, k, true) // Find ends of buckets
+	getBuckets_{{.Type}}(C, B, k, true) // Find ends of buckets
 	c1 = 0
 	b = B[c1]
 	for i = n - 1; i >= 0; i-- {
@@ -419,7 +458,7 @@ func induceSA_byte(T []byte, SA, C, B []int, n, k int) {
 	}
 }
 
-func computeSA_byte(T []byte, SA []int, fs, n, k int) {
+func computeSA_{{.Type}}(T []{{.Type}}, SA []int, fs, n, k int) {
 	const (
 		minBucketSize = 512
 		sortLMS2Limit = 0x3fffffff
@@ -473,8 +512,8 @@ func computeSA_byte(T []byte, SA []int, fs, n, k int) {
 
 	// Stage 1: Reduce the problem by at least 1/2.
 	// Sort all the LMS-substrings.
-	getCounts_byte(T, C, n, k)
-	getBuckets_byte(C, B, k, true) // Find ends of buckets
+	getCounts_{{.Type}}(T, C, n, k)
+	getBuckets_{{.Type}}(C, B, k, true) // Find ends of buckets
 	for i = 0; i < n; i++ {
 		SA[i] = 0
 	}
@@ -538,11 +577,11 @@ func computeSA_byte(T []byte, SA []int, fs, n, k int) {
 				D[i] = 0
 				D[i+k] = 0
 			}
-			sortLMS2_byte(T, SA, C, B, D, n, k)
-			name = postProcLMS2_byte(SA, n, m)
+			sortLMS2_{{.Type}}(T, SA, C, B, D, n, k)
+			name = postProcLMS2_{{.Type}}(SA, n, m)
 		} else {
-			sortLMS1_byte(T, SA, C, B, n, k)
-			name = postProcLMS1_byte(T, SA, n, m)
+			sortLMS1_{{.Type}}(T, SA, C, B, n, k)
+			name = postProcLMS1_{{.Type}}(T, SA, n, m)
 		}
 	} else if m == 1 {
 		SA[b] = j + 1
@@ -621,11 +660,11 @@ func computeSA_byte(T []byte, SA []int, fs, n, k int) {
 
 	// Stage 3: Induce the result for the original problem.
 	if flags&8 > 0 {
-		getCounts_byte(T, C, n, k)
+		getCounts_{{.Type}}(T, C, n, k)
 	}
 	// Put all left-most S characters into their buckets.
 	if m > 1 {
-		getBuckets_byte(C, B, k, true) // Find ends of buckets
+		getBuckets_{{.Type}}(C, B, k, true) // Find ends of buckets
 		i = m - 1
 		j = n
 		p = SA[m-1]
@@ -657,5 +696,6 @@ func computeSA_byte(T []byte, SA []int, fs, n, k int) {
 			SA[j] = 0
 		}
 	}
-	induceSA_byte(T, SA, C, B, n, k)
+	induceSA_{{.Type}}(T, SA, C, B, n, k)
 }
+`

@@ -5,14 +5,13 @@
 // Package sais implements a linear time suffix array algorithm.
 package sais
 
+//go:generate go run sais_gen.go byte sais_byte.go
+//go:generate go run sais_gen.go int sais_int.go
+
 // This package ports the C sais implementation by Yuta Mori. The ports are
-// located in sais_byte.go and sais_int.go. Since Go does not support generics,
-// the implementations are copy and pastes of each other with minor changes
-// to the types used.
-//
-// The sais_int.go file can be generated from sais_byte.go with the the
-// following search-and-replace transformation:
-//	s/byte/int/g
+// located in sais_byte.go and sais_int.go, which are identical to each other
+// except for the types. Since Go does not support generics, we use generators to
+// create the two files.
 //
 // References:
 //	https://sites.google.com/site/yuta256/sais
