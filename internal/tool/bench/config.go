@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/dsnet/golib/strconv"
+	"github.com/dsnet/golib/unitconv"
 )
 
 // Section: Format and Test enumerations
@@ -259,7 +259,7 @@ func (ds *varInts) String() string {
 func (ds *varInts) Set(ss string) error {
 	*ds = nil
 	for _, s := range reDelim.Split(ss, -1) {
-		d, err := strconv.ParsePrefix(s, strconv.AutoParse)
+		d, err := unitconv.ParsePrefix(s, unitconv.AutoParse)
 		if err != nil {
 			return err
 		}
@@ -279,7 +279,7 @@ func intName(n int) string {
 		re := regexp.MustCompile("\\.0*e\\+0*")
 		return re.ReplaceAllString(s, "e")
 	default:
-		s := strconv.FormatPrefix(float64(n), strconv.Base1024, 2)
+		s := unitconv.FormatPrefix(float64(n), unitconv.Base1024, 2)
 		return strings.Replace(s, ".00", "", -1)
 	}
 }
