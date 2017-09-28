@@ -15,8 +15,8 @@ package sais
 //
 // References:
 //	https://sites.google.com/site/yuta256/sais
-//	https://ge-nong.googlecode.com/files/Linear%20Time%20Suffix%20Array%20Construction%20Using%20D-Critical%20Substrings.pdf
-//	https://ge-nong.googlecode.com/files/Two%20Efficient%20Algorithms%20for%20Linear%20Time%20Suffix%20Array%20Construction.pdf
+//	https://www.researchgate.net/publication/221313676_Linear_Time_Suffix_Array_Construction_Using_D-Critical_Substrings
+//	https://www.researchgate.net/publication/224176324_Two_Efficient_Algorithms_for_Linear_Time_Suffix_Array_Construction
 
 // ComputeSA computes the suffix array of t and places the result in sa.
 // Both t and sa must be the same length.

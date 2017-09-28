@@ -17,7 +17,7 @@ func init() {
 	RegisterEncoder(FormatLZMA2, "uk",
 		func(w io.Writer, lvl int) io.WriteCloser {
 			// This level conversion logic emulates the conversion found in
-			// LZMA2Options.java from http://git.tukaani.org/xz-java.git.
+			// LZMA2Options.java from https://git.tukaani.org/?p=xz-java.git
 			if lvl < 0 || lvl > 9 {
 				panic("invalid level")
 			}
