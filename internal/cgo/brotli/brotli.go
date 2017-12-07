@@ -8,14 +8,18 @@
 package brotli
 
 /*
-// This relies upon the shared library built from github.com/google/brotli
-// at revision 7e347a7c849db05acad20304f5e9b29071ecec7c.
+// This relies upon the shared library built from github.com/google/brotli.
 //
 // The steps to build and install the shared library is as follows:
-//	mkdir out && cd out && ../configure-cmake && make
-//	make test
-//	make install
+//	curl -L https://github.com/google/brotli/archive/v1.0.2.tar.gz | tar -zxv
+//	cd brotli-1.0.2
+//	mkdir out
+//	cd out
+//	../configure-cmake
+//	make
+//	sudo make install
 
+#cgo LDFLAGS: -lbrotlicommon
 #cgo LDFLAGS: -lbrotlidec
 #cgo LDFLAGS: -lbrotlienc
 

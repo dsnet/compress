@@ -169,13 +169,12 @@ func TestWriter(t *testing.T) {
 
 func TestWriterReset(t *testing.T) {
 	// Test bad Writer config.
-	xw, err := NewWriter(ioutil.Discard, &WriterConfig{Level: -431})
-	if err == nil {
+	if _, err := NewWriter(ioutil.Discard, &WriterConfig{Level: -431}); err == nil {
 		t.Fatalf("unexpected success: NewWriter()")
 	}
 
 	// Test Writer for idempotent Close.
-	xw = new(Writer)
+	xw := new(Writer)
 	xw.Reset(ioutil.Discard)
 	if _, err := xw.Write([]byte("hello, world!")); err != nil {
 		t.Fatalf("unexpected error: Write() = %v", err)

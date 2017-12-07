@@ -8,12 +8,12 @@
 package zstd
 
 /*
-// This relies upon the shared library built from github.com/facebook/zstd
-// at revision 39c105c60589cd58714afa0be3d0e397101993f5.
+// This relies upon the shared library built from github.com/facebook/zstd.
 //
 // The steps to build and install the shared library is as follows:
-//	make install
-//	make test
+//	curl -L https://github.com/facebook/zstd/archive/v1.3.2.tar.gz | tar -zxv
+//	cd zstd-1.3.2
+//	sudo make install
 
 #cgo LDFLAGS: -lzstd
 
