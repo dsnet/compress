@@ -12,18 +12,12 @@ FAIL="\x1b[31mFAIL"
 RESET="\x1b[0m"
 
 echo -e "${BOLD}fmt${RESET}"
-go fmt ./...
-echo
-
-echo -e "${BOLD}build${RESET}"
-go install -v ./...
-RET_BUILD=$?
-echo
+RET_FMT=$(find . -name "*.go" | egrep -v "/(_.*_|\..*|testdata)/" | xargs gofmt -d)
+if [[ ! -z "$RET_FMT" ]]; then echo "$RET_FMT"; echo; fi
 
 echo -e "${BOLD}test${RESET}"
 RET_TEST=$(go test -race ./... | egrep -v "^(ok|[?])\s+")
-if [[ ! -z "$RET_TEST" ]]; then echo "$RET_TEST"; fi
-echo
+if [[ ! -z "$RET_TEST" ]]; then echo "$RET_TEST"; echo; fi
 
 echo -e "${BOLD}staticcheck${RESET}"
 RET_SCHK=$(staticcheck \
@@ -31,15 +25,13 @@ RET_SCHK=$(staticcheck \
 		github.com/dsnet/compress/internal/prefix/*.go:SA4016
 		github.com/dsnet/compress/brotli/*.go:SA4016
 	" ./... 2>&1)
-if [[ ! -z "$RET_SCHK" ]]; then echo "$RET_SCHK"; fi
-echo
+if [[ ! -z "$RET_SCHK" ]]; then echo "$RET_SCHK"; echo; fi
 
 echo -e "${BOLD}vet${RESET}"
 RET_VET=$(go vet ./... 2>&1 |
 	egrep -v "^flate/dict_decoder.go:(.*)WriteByte" |
 	egrep -v "^exit status")
-if [[ ! -z "$RET_VET" ]]; then echo "$RET_VET"; fi
-echo
+if [[ ! -z "$RET_VET" ]]; then echo "$RET_VET"; echo; fi
 
 echo -e "${BOLD}lint${RESET}"
 RET_LINT=$(golint ./... 2>&1 |
@@ -49,10 +41,9 @@ RET_LINT=$(golint ./... 2>&1 |
 	egrep -v "^internal/prefix/prefix.go:(.*)replace symBits(.*) [-]= 1 with symBits(.*)[-]{2}" |
 	egrep -v "^xflate/common.go:(.*)NoCompression should be of the form" |
 	egrep -v "^exit status")
-if [[ ! -z "$RET_LINT" ]]; then echo "$RET_LINT"; fi
-echo
+if [[ ! -z "$RET_LINT" ]]; then echo "$RET_LINT"; echo; fi
 
-if [ $RET_BUILD -ne 0 ] || [ ! -z "$RET_TEST" ] || [[ ! -z "$RET_VET" ]] || [[ ! -z "$RET_SCHK" ]] || [[ ! -z "$RET_LINT" ]]; then
+if [[ ! -z "$RET_FMT" ]] || [ ! -z "$RET_TEST" ] || [[ ! -z "$RET_VET" ]] || [[ ! -z "$RET_SCHK" ]] || [[ ! -z "$RET_LINT" ]] || [[ ! -z "$RET_SPELL" ]]; then
 	echo -e "${FAIL}${RESET}"; exit 1
 else
 	echo -e "${PASS}${RESET}"; exit 0
