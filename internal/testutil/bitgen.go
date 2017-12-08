@@ -26,7 +26,7 @@ import (
 //
 // The format consists of a series of tokens delimited by either whitespace,
 // a group marker, or a comment. As a special case, delimiters within a quoted
-// string do not seperate tokens. The '#' character is used for commenting
+// string do not separate tokens. The '#' character is used for commenting
 // such that any remaining bytes on the given line is ignored.
 //
 // The first valid token must either be a "<<<" (little-endian) or a ">>>"
