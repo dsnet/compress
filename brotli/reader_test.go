@@ -560,7 +560,6 @@ func benchmarkDecode(b *testing.B, testfile string) {
 	}
 
 	nb := int64(len(output))
-	output = nil
 	runtime.GC()
 
 	b.SetBytes(nb)
