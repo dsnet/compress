@@ -8,7 +8,7 @@ if [ $# == 0 ]; then
 	echo "Usage: $0 PKG_PATH TEST_ARGS..."
 	echo ""
 	echo "Runs coverage and performance benchmarks for a given package."
-	echo "The results are stored in the _zprof_ directory"
+	echo "The results are stored in the _zprof_ directory."
 	echo ""
 	echo "Example:"
 	echo "	$0 flate -test.bench=Decode/Twain/Default"
