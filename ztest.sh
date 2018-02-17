@@ -27,12 +27,6 @@ RET_SCHK=$(staticcheck \
 	" ./... 2>&1)
 if [[ ! -z "$RET_SCHK" ]]; then echo "$RET_SCHK"; echo; fi
 
-echo -e "${BOLD}vet${RESET}"
-RET_VET=$(go vet ./... 2>&1 |
-	egrep -v "^flate/dict_decoder.go:(.*)WriteByte" |
-	egrep -v "^exit status")
-if [[ ! -z "$RET_VET" ]]; then echo "$RET_VET"; echo; fi
-
 echo -e "${BOLD}lint${RESET}"
 RET_LINT=$(golint ./... 2>&1 |
 	egrep -v "should have comment(.*)or be unexported" |
@@ -43,7 +37,7 @@ RET_LINT=$(golint ./... 2>&1 |
 	egrep -v "^exit status")
 if [[ ! -z "$RET_LINT" ]]; then echo "$RET_LINT"; echo; fi
 
-if [[ ! -z "$RET_FMT" ]] || [ ! -z "$RET_TEST" ] || [[ ! -z "$RET_VET" ]] || [[ ! -z "$RET_SCHK" ]] || [[ ! -z "$RET_LINT" ]] || [[ ! -z "$RET_SPELL" ]]; then
+if [[ ! -z "$RET_FMT" ]] || [ ! -z "$RET_TEST" ] || [[ ! -z "$RET_SCHK" ]] || [[ ! -z "$RET_LINT" ]]; then
 	echo -e "${FAIL}${RESET}"; exit 1
 else
 	echo -e "${PASS}${RESET}"; exit 0
