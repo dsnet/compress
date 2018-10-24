@@ -9,7 +9,7 @@ before_install:
   - rm -rf zstd-1.3.2
   - sudo ldconfig
 before_script:
-  - go get github.com/golang/lint/golint
+  - go get golang.org/x/lint/golint
   - go get honnef.co/go/tools/cmd/staticcheck
 matrix:
   include:
