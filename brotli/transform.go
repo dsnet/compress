@@ -166,6 +166,7 @@ var transformLUT = []struct {
 // to the transform primitives defined in RFC section 8.
 //
 // The following invariants must be kept:
+//
 //	0 <= id < len(transformLUT)
 //	len(word) <= maxDictLen
 //	len(buf) >= maxWordSize

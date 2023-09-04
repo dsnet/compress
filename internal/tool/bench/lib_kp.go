@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE.md file.
 
+//go:build !no_lib_kp
 // +build !no_lib_kp
 
 package main

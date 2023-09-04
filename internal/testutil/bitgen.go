@@ -91,6 +91,7 @@ import (
 // will automatically be padded up to the nearest byte with 0 bits.
 //
 // Example BitGen file:
+//
 //	<<< # DEFLATE uses LE bit-packing order
 //
 //	( # Raw blocks
@@ -109,6 +110,7 @@ import (
 //	)
 //
 // Generated output stream (in hexadecimal):
+//
 //	000400fbffdeadcafe000400fbffdeadcafe0de0010400000000100000000000
 //	0000000000000000000000000000000000000000000000000000002c
 func DecodeBitGen(s string) ([]byte, error) {

@@ -90,7 +90,6 @@ func (idx *index) AppendIndex(other *index) bool {
 //
 //	// The total uncompressed size of the current block.
 //	rawSize := curr.RawOffset - prev.RawOffset
-//
 func (idx *index) Search(offset int64) int {
 	recs := idx.Records
 	i, imin, imax := -1, 0, len(recs)-1

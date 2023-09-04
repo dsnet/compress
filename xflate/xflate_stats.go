@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE.md file.
 
+//go:build ignore
 // +build ignore
 
 // xflate_stats is used to investigate trade-offs in XFLATE design.
@@ -28,20 +29,20 @@
 // and compressed output size (compSize) of each chunk.
 //
 // In order to reduce the index size, multiple techniques were explored:
-//	* Compressing the index itself using DEFLATE
-//	* Row-oriented vs. column-oriented layout of records; that is, row-oriented
-//	layout has each (rawSize, compSize) tuple laid out one after the other,
-//	while column-oriented has all rawSizes laid out as an array followed by all
-//	compSizes laid out as an array
-//	* Fixed-length vs. variable-length integers; that is, to store size values
-//	as uint64s or to use some variable-length encoding
-//	* Regular encoding vs. Delta encoding; that is, delta encoding encodes each
-//	value as the difference between that value and the previous value
+//   - Compressing the index itself using DEFLATE
+//   - Row-oriented vs. column-oriented layout of records; that is, row-oriented
+//     layout has each (rawSize, compSize) tuple laid out one after the other,
+//     while column-oriented has all rawSizes laid out as an array followed by all
+//     compSizes laid out as an array
+//   - Fixed-length vs. variable-length integers; that is, to store size values
+//     as uint64s or to use some variable-length encoding
+//   - Regular encoding vs. Delta encoding; that is, delta encoding encodes each
+//     value as the difference between that value and the previous value
 //
 // However, some of these techniques do not make sense unless done in
 // conjunction with another technique. For example:
-//	* Row-oriented vs. column-oriented is useless without compression
-//	* Delta encoding does not make sense without variable-length integers
+//   - Row-oriented vs. column-oriented is useless without compression
+//   - Delta encoding does not make sense without variable-length integers
 //
 // For this reason, the following table shows what techniques were used for the
 // given format names listed below:

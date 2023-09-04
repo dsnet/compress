@@ -83,7 +83,6 @@ func MustDecodeBitGen(s string) []byte {
 //	if got, want, ok := testutil.BytesCompare(output, v.output); !ok {
 //		t.Errorf("output mismatch:\ngot  %s\nwant %s", got, want)
 //	}
-//
 func BytesCompare(a, b []byte) (sa, sb string, ok bool) {
 	if ok = bytes.Equal(a, b); ok {
 		return

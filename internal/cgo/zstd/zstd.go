@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE.md file.
 
+//go:build cgo
 // +build cgo
 
 // Package zstd implements the Zstandard compressed data format using C wrappers.

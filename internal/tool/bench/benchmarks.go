@@ -51,6 +51,7 @@ func BenchmarkEncoder(input []byte, enc Encoder, lvl int) testing.BenchmarkResul
 // implementations, files, levels, and sizes.
 //
 // The values returned have the following structure:
+//
 //	results: [len(files)*len(levels)*len(sizes)][len(encs)]Result
 //	names:   [len(files)*len(levels)*len(sizes)]string
 func BenchmarkEncoderSuite(ft Format, encs []string, files []file, levels, sizes []int, tick func()) (results [][]Result, names []string) {
@@ -94,6 +95,7 @@ func BenchmarkDecoder(input []byte, dec Decoder) testing.BenchmarkResult {
 // implementations, files, levels, and sizes.
 //
 // The values returned have the following structure:
+//
 //	results: [len(files)*len(levels)*len(sizes)][len(decs)]Result
 //	names:   [len(files)*len(levels)*len(sizes)]string
 func BenchmarkDecoderSuite(ft Format, decs []string, files []file, levels, sizes []int, ref Encoder, tick func()) (results [][]Result, names []string) {
@@ -123,6 +125,7 @@ func BenchmarkDecoderSuite(ft Format, decs []string, files []file, levels, sizes
 // implementations, files, levels, and sizes.
 //
 // The values returned have the following structure:
+//
 //	results: [len(files)*len(levels)*len(sizes)][len(encs)]Result
 //	names:   [len(files)*len(levels)*len(sizes)]string
 func BenchmarkRatioSuite(ft Format, encs []string, files []file, levels, sizes []int, tick func()) (results [][]Result, names []string) {

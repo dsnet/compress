@@ -34,7 +34,8 @@
 // overhead was about 1% for most workloads.
 //
 // Format specification:
-//  https://github.com/dsnet/compress/blob/master/doc/xflate-format.pdf
+//
+//	https://github.com/dsnet/compress/blob/master/doc/xflate-format.pdf
 package xflate
 
 import (

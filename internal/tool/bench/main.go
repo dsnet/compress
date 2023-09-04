@@ -6,6 +6,7 @@
 // implementations. Individual implementations are referred to as codecs.
 //
 // Example usage:
+//
 //	$ go build
 //	$ ./bench \
 //		-formats fl              \

@@ -27,7 +27,6 @@ var zcheck = flag.Bool("zcheck", false, "verify reader test vectors with C zlib 
 //	>>> import zlib
 //	>>> zlib.decompress(hex_string.decode("hex"), -15) # Negative means raw DEFLATE
 //	'\x11'
-//
 func pyDecompress(input []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	cmd := exec.Command("python", "-c", "import sys, zlib; sys.stdout.write(zlib.decompress(sys.stdin.read(), -15))")
@@ -877,11 +876,11 @@ func TestReader(t *testing.T) {
 
 // TestReaderEarlyEOF tests that Reader returns io.EOF eagerly when possible.
 // There are two situations when it is unable to do so:
-//	* There is an non-last, empty, raw block at the end of the stream.
-//	Flushing semantics dictate that we must return at that point in the stream
-//	prior to knowing whether the end of the stream has been hit or not.
-//	* We previously returned from Read because the internal dictionary was full
-//	and it so happens that there is no more data to read. This is rare.
+//   - There is an non-last, empty, raw block at the end of the stream.
+//     Flushing semantics dictate that we must return at that point in the stream
+//     prior to knowing whether the end of the stream has been hit or not.
+//   - We previously returned from Read because the internal dictionary was full
+//     and it so happens that there is no more data to read. This is rare.
 func TestReaderEarlyEOF(t *testing.T) {
 	const maxSize = 1 << 18
 	const dampRatio = 32 // Higher value means more trials

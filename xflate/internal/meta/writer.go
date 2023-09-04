@@ -134,6 +134,7 @@ func (*Writer) computeHuffLen(zeros, ones int) (huffLen uint, inv bool) {
 // while a negative count of -n means to repeat a '0' bit n times.
 //
 // For example (LSB on left):
+//
 //	01101011 11100011  =>  [-1, +2, -1, +1, -1, +5, -3, +2]
 func (mw *Writer) computeCounts(buf []byte, maxOnes int, final, invert bool) []int {
 	// Stack copy of buf for safe mutations.
